@@ -447,13 +447,14 @@ async function searchNearAddress() {
 
   let html = `<div class="summary">📍 ${geo.name.slice(0,80)} &nbsp;|&nbsp; נמצאו ${vehicles.length} רכבים בטווח ${radius}מ'</div>`;
   for (const v of vehicles) {
-    const line   = v.line_ref || "—";
-    const opId   = String(v.operator_ref || "");
+    const line   = v.siri_route__line_ref || v.line_ref || "—";
+    const opId   = String(v.siri_route__operator_ref || v.operator_ref || "");
     const opName = OPERATORS[opId] || `מפעיל ${opId}`;
     const bearing = bearingDir(v.bearing);
     const spd    = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;` : "";
-    const atStop = v.at_stop ? `🛑 <span style="color:var(--yellow)">עצרתי בתחנה</span>` : "";
-    const dest   = v.destination_ref ? `🎯 ${v.destination_ref} &nbsp;` : "";
+    const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
+    const sched  = v.siri_ride__scheduled_start_time
+      ? `🕐 ${v.siri_ride__scheduled_start_time.slice(11,16)} &nbsp;` : "";
     html += `
     <div class="v-card">
       <div class="v-header">
@@ -461,7 +462,7 @@ async function searchNearAddress() {
         <span class="op-name">${opName}</span>
         <span class="age">${Math.round(v._dist)}מ' ממך &nbsp; ${bearing} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
       </div>
-      <div class="v-row">${dest}${spd}${atStop}</div>
+      <div class="v-row">${vid}${spd}${sched}</div>
     </div>`;
   }
   out.innerHTML = html;
@@ -509,19 +510,19 @@ async function searchLine() {
     const label = dir === "0" ? "כיוון א׳" : dir === "1" ? "כיוון ב׳" : `כיוון ${dir}`;
     html += `<div style="font-size:.85rem;font-weight:600;color:var(--cyan);margin:8px 0 4px">${label} (${vlist.length} רכבים)</div>`;
     for (const v of vlist) {
-      const opName = OPERATORS[String(v.operator_ref||"")] || `מפעיל ${v.operator_ref||""}`;
+      const opName = OPERATORS[String(v.siri_route__operator_ref||v.operator_ref||"")] || `מפעיל ${v.siri_route__operator_ref||v.operator_ref||""}`;
       const dir2   = bearingDir(v.bearing);
       const spd    = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;` : "";
-      const atStop = v.at_stop ? `🛑 <span style="color:var(--yellow)">עצרתי בתחנה ${v.stop_id||""}</span>` : "";
+      const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
       const coord  = v.lat ? `📍 ${(+v.lat).toFixed(5)}, ${(+v.lon).toFixed(5)}` : "";
       html += `
       <div class="v-card">
         <div class="v-header">
-          <span class="line-badge">קו ${v.line_ref || line}</span>
+          <span class="line-badge">קו ${v.siri_route__line_ref || v.line_ref || line}</span>
           <span class="op-name">${opName}</span>
           <span class="age">${dir2} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
         </div>
-        <div class="v-row">${coord} &nbsp; ${spd}${atStop}</div>
+        <div class="v-row">${coord} &nbsp; ${vid}${spd}</div>
       </div>`;
     }
   }
