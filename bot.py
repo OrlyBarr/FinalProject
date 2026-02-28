@@ -136,8 +136,18 @@ class BotHandler(BaseHTTPRequestHandler):
                     headers={"Accept": "application/json", "User-Agent": "TransitBot/1.0"},
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
-                    body = resp.read()
-                self.send_response(200)
+                    body   = resp.read()
+                    status = resp.status
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", len(body))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except urllib.error.HTTPError as e:
+                # Forward the upstream HTTP error transparently
+                body = e.read() or json.dumps({"error": str(e)}).encode()
+                self.send_response(e.code)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", len(body))
                 self.send_header("Access-Control-Allow-Origin", "*")
