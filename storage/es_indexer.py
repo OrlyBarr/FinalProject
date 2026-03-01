@@ -22,8 +22,8 @@ from elasticsearch import Elasticsearch, helpers
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-ES_HOST     = os.getenv("ELASTICSEARCH_HOST", "http://localhost:9200")
-KAFKA_BROKERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+ES_HOST       = os.getenv("ELASTICSEARCH_HOST", "http://elasticsearch:9200")
+KAFKA_BROKERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
 # Map Kafka topic keys → Elasticsearch index names
 TOPIC_INDEX_MAP = {
@@ -152,6 +152,81 @@ def index_all_topics(max_msgs: int = 2000) -> dict:
             log.error(f"Failed to index {topic_key}: {e}")
             results[topic_key] = 0
     return results
+
+
+def index_from_minio(topic_key: str, date_prefix: str = None, max_files: int = 10) -> int:
+    """
+    Read processed JSON files from MinIO and index them into Elasticsearch.
+    Use this to backfill historical data that was stored by the ETL DAG.
+
+    Args:
+        topic_key:   e.g. "bus_positions" reads from raw/bus-positions/
+        date_prefix: e.g. "year=2026/month=03/day=01" to narrow the scan
+        max_files:   max number of JSON files to process per call
+    """
+    import boto3
+    from botocore.client import Config
+
+    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT",  "http://minio:9000")
+    MINIO_ACCESS   = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET   = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    S3_BUCKET      = os.getenv("S3_BUCKET_NAME",   "israel-transit-lake")
+
+    slug_map = {
+        "bus_positions":   "raw/bus-positions",
+        "trip_updates":    "raw/trip-updates",
+        "train_positions": "raw/train-positions",
+        "service_alerts":  "raw/service-alerts",
+        "delay_events":    "raw/delay-events",
+    }
+    prefix     = slug_map.get(topic_key, f"raw/{topic_key}")
+    index_name = TOPIC_INDEX_MAP[topic_key]
+    if date_prefix:
+        prefix = f"{prefix}/{date_prefix}"
+
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=MINIO_ACCESS,
+        aws_secret_access_key=MINIO_SECRET,
+        config=Config(signature_version="s3v4"),
+        region_name="us-east-1",
+    )
+
+    es         = get_es_client()
+    ensure_index(es, index_name)
+    paginator  = s3.get_paginator("list_objects_v2")
+    total_docs = 0
+    files_done = 0
+
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if files_done >= max_files:
+                break
+            key = obj["Key"]
+            if not key.endswith(".json"):
+                continue
+            try:
+                body    = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
+                records = json.loads(body)
+                if isinstance(records, dict):
+                    records = [records]
+                actions = []
+                for doc in records:
+                    doc = _add_geo_point(doc)
+                    doc["_minio_source"] = key
+                    doc["_indexed_at"]   = datetime.now(timezone.utc).isoformat()
+                    actions.append({"_index": index_name, "_source": doc})
+                if actions:
+                    success, _ = helpers.bulk(es, actions, raise_on_error=False)
+                    total_docs += success
+                    log.info(f"MinIO→ES: {key} → {success} docs → {index_name}")
+                files_done += 1
+            except Exception as e:
+                log.error(f"MinIO→ES error on {key}: {e}")
+
+    log.info(f"MinIO→ES done: {files_done} files, {total_docs} docs → {index_name}")
+    return total_docs
 
 
 if __name__ == "__main__":

@@ -15,6 +15,10 @@ from airflow.utils.trigger_rule import TriggerRule
 
 sys.path.append("/opt/airflow")
 
+import os
+os.environ.setdefault("ELASTICSEARCH_HOST",    "http://elasticsearch:9200")
+os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS","kafka:29092")
+
 default_args = {
     "owner":             "transit-team",
     "depends_on_past":   False,
