@@ -52,7 +52,7 @@ GTFS_RT_ALERTS_URL   = os.getenv("GTFS_RT_ALERTS_URL",
 
 # Open Bus Stride - hasadna (ציבורי, REST API)
 OPEN_BUS_API_URL     = os.getenv("OPEN_BUS_API_URL",
-                        "https://open-bus-stride-api.hasadna.org.il/")
+                        "https://open-bus-stride-api.hasadna.org.il")
 
 # רכבת ישראל
 RAIL_API_URL         = os.getenv("RAIL_API_URL",

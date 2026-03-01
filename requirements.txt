@@ -24,4 +24,5 @@ psycopg2-binary==2.9.7
 # See docker-compose.yml for the Airflow service configuration.
 
 # ── Utilities ─────────────────────────────────────────────
-python-dotenv==1.0.0elasticsearch
+python-dotenv==1.0.0
+elasticsearch>=8.0,<9.0
