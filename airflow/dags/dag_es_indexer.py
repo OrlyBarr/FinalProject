@@ -65,6 +65,16 @@ def index_delay_events(**context):
     context["ti"].xcom_push(key="delays_n", value=n)
 
 
+def index_minio_backfill(**context):
+    """Read latest files from MinIO and index into ES (catches any data missed by Kafka consumer)."""
+    from storage.es_indexer import index_from_minio
+    from datetime import datetime
+    today = datetime.utcnow().strftime("year=%Y/month=%m/day=%d")
+    n = index_from_minio("bus_positions", date_prefix=today, max_files=3)
+    print(f"MinIO backfill indexed: {n} docs")
+    context["ti"].xcom_push(key="minio_n", value=n)
+
+
 def log_indexing_summary(**context):
     ti = context["ti"]
     summary = {
@@ -73,6 +83,7 @@ def log_indexing_summary(**context):
         "train_positions": ti.xcom_pull(task_ids="index_train_positions",key="trains_n") or 0,
         "service_alerts":  ti.xcom_pull(task_ids="index_service_alerts", key="alerts_n") or 0,
         "delay_events":    ti.xcom_pull(task_ids="index_delay_events",   key="delays_n") or 0,
+        "minio_backfill":  ti.xcom_pull(task_ids="index_minio_backfill", key="minio_n")  or 0,
     }
     total = sum(summary.values())
     print(f"ES Indexing Summary: {summary} | total={total}")
@@ -93,6 +104,7 @@ with DAG(
     t_trains = PythonOperator(task_id="index_train_positions",python_callable=index_train_positions)
     t_alerts = PythonOperator(task_id="index_service_alerts", python_callable=index_service_alerts)
     t_delays = PythonOperator(task_id="index_delay_events",   python_callable=index_delay_events)
+    t_minio  = PythonOperator(task_id="index_minio_backfill", python_callable=index_minio_backfill)
 
     t_summary = PythonOperator(
         task_id="log_indexing_summary",
@@ -100,4 +112,4 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    [t_bus, t_trips, t_trains, t_alerts, t_delays] >> t_summary
+    [t_bus, t_trips, t_trains, t_alerts, t_delays, t_minio] >> t_summary
