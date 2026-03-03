@@ -57,6 +57,27 @@ class BusPositionsProducer(BaseProducer):
         self.logger.info(f"Fetched {len(records)} bus positions from Hasadna SIRI")
         return records
 
+    def _parse_timestamp(self, raw_ts: str) -> str:
+        """
+        Validate recorded_at_time from the Hasadna SIRI API.
+        The API uses 2037-12-05T23:59:49 (Unix ≈ 2^31, a 32-bit int sentinel)
+        when the vehicle has not reported a real timestamp.
+        Fall back to current UTC time in that case.
+        """
+        now = datetime.now(timezone.utc)
+        if not raw_ts:
+            return now.isoformat()
+        try:
+            dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+            dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            now_naive = now.replace(tzinfo=None)
+            # Any timestamp more than 1 day in the future is a sentinel value
+            if (dt_utc - now_naive).days > 1:
+                return now.isoformat()
+            return raw_ts
+        except Exception:
+            return now.isoformat()
+
     def _normalize(self, item: dict) -> dict:
         """Normalize Hasadna SIRI vehicle location to flat dict."""
         try:
@@ -70,6 +91,7 @@ class BusPositionsProducer(BaseProducer):
 
             operator_ref = str(item.get("siri_routes__operator_ref") or "")
             line_ref     = str(item.get("siri_routes__line_ref") or "")
+            timestamp    = self._parse_timestamp(item.get("recorded_at_time", ""))
 
             return {
                 "vehicle_id":       str(item.get("vehicle_ref") or item.get("id") or ""),
@@ -79,7 +101,7 @@ class BusPositionsProducer(BaseProducer):
                 "operator_id":      operator_ref,
                 "operator_name":    OPERATORS.get(operator_ref, f"operator_{operator_ref}"),
                 "direction_id":     item.get("siri_routes__direction_id"),
-                "start_date":       item.get("recorded_at_time", "")[:10],
+                "start_date":       timestamp[:10],
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
                 "bearing":          item.get("bearing"),
@@ -87,8 +109,7 @@ class BusPositionsProducer(BaseProducer):
                 "current_stop_seq": item.get("current_stop_sequence"),
                 "stop_id":          str(item.get("siri_stop_id") or ""),
                 "current_status":   "in_transit",
-                "timestamp":        item.get("recorded_at_time",
-                                            datetime.now(timezone.utc).isoformat()),
+                "timestamp":        timestamp,
                 "congestion_level": 0,
             }
         except Exception as e:
