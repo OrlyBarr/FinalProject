@@ -4,11 +4,14 @@ Simple REST API bot for Israel Public Transit Monitoring Platform.
 Exposes real-time transit data over HTTP on port 5000.
 
 Endpoints:
-  GET /            - health check
-  GET /status      - system status
-  GET /buses       - latest bus positions from bus_positions.json
-  GET /stops       - bus stops with nearest stop info
-  GET /proxy/rail  - server-side proxy for Israel Railways API (bypasses CORS)
+  GET /health          - health check
+  GET /status          - system status
+  GET /buses           - latest bus positions from bus_positions.json
+  GET /stops           - bus stops with nearest stop info
+  GET /agent           - serve agent_transit.html dashboard
+  GET /geocode         - address → GPS (Nominatim proxy, bypasses CORS)
+  GET /proxy/hasadna   - proxy to Hasadna Open Bus Stride API (bypasses CORS)
+  GET /proxy/rail      - proxy to Israel Railways API (bypasses CORS)
 """
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,19 +22,17 @@ import time
 import subprocess
 import urllib.parse
 import urllib.request
+import urllib.error
 
-BOT_PORT = int(os.getenv("BOT_PORT", 5000))
-
-# Israel Railways station board base URL (proxied server-side to bypass CORS)
+BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 RAIL_BOARD_URL = "https://israelrail.azurewebsites.net/stations/GetStationBoard"
+HASADNA_URL    = "https://open-bus-stride-api.hasadna.org.il"
+NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
+
 
 # ── Background auto-refresh ──────────────────────────────────────────────────
 
 def _refresh_buses_loop(interval_seconds: int = 120) -> None:
-    """
-    Background thread: re-run extractdata.py every `interval_seconds`
-    so /buses and /stops always serve fresh data.
-    """
     project_dir = os.path.dirname(os.path.abspath(__file__))
     script      = os.path.join(project_dir, "extractdata.py")
     python_bin  = os.path.join(project_dir, "venv", "bin", "python3")
@@ -43,28 +44,28 @@ def _refresh_buses_loop(interval_seconds: int = 120) -> None:
         try:
             result = subprocess.run(
                 [python_bin, script],
-                cwd=project_dir,
-                timeout=60,
-                capture_output=True,
-                text=True,
+                cwd=project_dir, timeout=60,
+                capture_output=True, text=True,
             )
             if result.returncode == 0:
                 print("[BOT-refresh] buses_with_nearest_stops.json refreshed")
             else:
-                print(f"[BOT-refresh] extractdata.py exited {result.returncode}: {result.stderr[:200]}")
+                print(f"[BOT-refresh] extractdata.py error: {result.stderr[:200]}")
         except subprocess.TimeoutExpired:
-            print("[BOT-refresh] extractdata.py timed out (>60s) — skipping")
+            print("[BOT-refresh] extractdata.py timed out — skipping")
         except Exception as e:
-            print(f"[BOT-refresh] Unexpected error: {e}")
+            print(f"[BOT-refresh] error: {e}")
 
 
 def load_json(filename):
-    path = os.path.join(os.path.dirname(__file__), filename)
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
+
+# ── HTTP Handler ──────────────────────────────────────────────────────────────
 
 class BotHandler(BaseHTTPRequestHandler):
 
@@ -93,16 +94,58 @@ class BotHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_json({"error": "HTML file not found"}, status=404)
 
+    def _proxy(self, target_url):
+        """Generic server-side proxy — forwards request, adds CORS headers."""
+        try:
+            req = urllib.request.Request(
+                target_url,
+                headers={
+                    "Accept":     "application/json",
+                    "User-Agent": "IsraelTransitBot/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body   = resp.read()
+                status = resp.status
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", len(body))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        except urllib.error.HTTPError as e:
+            body = e.read() or json.dumps({"error": str(e)}).encode()
+            self.send_response(e.code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", len(body))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            self.send_json({"error": f"proxy error: {e}"}, status=502)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.end_headers()
+
     def do_GET(self):
-        if self.path == "/health":
+        parsed = urllib.parse.urlparse(self.path)
+        path   = parsed.path
+        qs     = urllib.parse.parse_qs(parsed.query)
+
+        # ── health ───────────────────────────────────────────────────────────
+        if path == "/health":
             self.send_json({"status": "ok", "service": "Israel Transit Bot", "port": BOT_PORT})
 
-        elif self.path == "/" or self.path == "/agent":
-            # Serve the transit agent dashboard
-            html_path = os.path.join(os.path.dirname(__file__), "agent_transit.html")
+        # ── dashboard ────────────────────────────────────────────────────────
+        elif path in ("/", "/agent"):
+            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_transit.html")
             self.send_html(html_path)
 
-        elif self.path == "/status":
+        # ── status ───────────────────────────────────────────────────────────
+        elif path == "/status":
             self.send_json({
                 "status": "running",
                 "service": "Israel Public Transit Monitoring Platform",
@@ -116,72 +159,86 @@ class BotHandler(BaseHTTPRequestHandler):
                 }
             })
 
-        elif self.path == "/buses":
-            # Return array directly (expected by agent_transit.html)
+        # ── buses ────────────────────────────────────────────────────────────
+        elif path == "/buses":
             data = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
             self.send_json(data[:100])
 
-        elif self.path == "/stops":
+        # ── stops ────────────────────────────────────────────────────────────
+        elif path == "/stops":
             data = load_json("buses_with_nearest_stops.json")
             self.send_json(data[:100])
 
-        elif self.path.startswith("/proxy/rail"):
-            # Server-side proxy for Israeli Railways API — avoids browser CORS
-            parsed  = urllib.parse.urlparse(self.path)
-            params  = parsed.query  # forward query string as-is
-            target  = f"{RAIL_BOARD_URL}?{params}" if params else RAIL_BOARD_URL
+        # ── geocode proxy → Nominatim ─────────────────────────────────────────
+        elif path == "/geocode":
+            address = urllib.parse.unquote_plus((qs.get("q") or [""])[0]).strip()
+            if not address:
+                self.send_json({"error": "נדרש ?q=כתובת"}, status=400)
+                return
+            q = address if ("ישראל" in address or "israel" in address.lower()) else address + ", Israel"
+            target = NOMINATIM_URL + "?" + urllib.parse.urlencode({
+                "q": q, "format": "json", "limit": 1,
+                "countrycodes": "il", "accept-language": "he",
+            })
             try:
                 req = urllib.request.Request(
                     target,
-                    headers={"Accept": "application/json", "User-Agent": "TransitBot/1.0"},
+                    headers={"User-Agent": "IsraelTransitBot/1.0 (transit-project)"},
                 )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    body   = resp.read()
-                    status = resp.status
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", len(body))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
-            except urllib.error.HTTPError as e:
-                # Forward the upstream HTTP error transparently
-                body = e.read() or json.dumps({"error": str(e)}).encode()
-                self.send_response(e.code)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", len(body))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    results = json.loads(resp.read())
+                if not results:
+                    self.send_json({"error": f"כתובת לא נמצאה: {address}"}, status=404)
+                    return
+                r = results[0]
+                self.send_json({
+                    "lat":          float(r["lat"]),
+                    "lon":          float(r["lon"]),
+                    "display_name": r.get("display_name", address),
+                })
             except Exception as e:
-                self.send_json({"error": f"proxy error: {e}"}, status=502)
+                self.send_json({"error": f"geocoding error: {e}"}, status=500)
+
+        # ── Hasadna Open Bus Stride proxy ─────────────────────────────────────
+        # GET /proxy/hasadna/gtfs_stops/list?...
+        # GET /proxy/hasadna/gtfs_stop_times/list?...
+        # GET /proxy/hasadna/siri_vehicle_locations/list?...
+        elif path.startswith("/proxy/hasadna/"):
+            api_path = path[len("/proxy/hasadna"):]   # e.g. /gtfs_stops/list
+            target   = HASADNA_URL + api_path
+            if parsed.query:
+                target += "?" + parsed.query
+            self._proxy(target)
+
+        # ── Israel Railways proxy ─────────────────────────────────────────────
+        elif path.startswith("/proxy/rail"):
+            params = parsed.query
+            target = f"{RAIL_BOARD_URL}?{params}" if params else RAIL_BOARD_URL
+            self._proxy(target)
 
         else:
             self.send_json({"error": "Not found", "path": self.path}, status=404)
 
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.end_headers()
 
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    # Start background bus data refresh every 2 minutes
-    refresh_thread = threading.Thread(
-        target=_refresh_buses_loop, args=(120,), daemon=True, name="bus-refresh"
-    )
-    refresh_thread.start()
+    threading.Thread(
+        target=_refresh_buses_loop, args=(120,),
+        daemon=True, name="bus-refresh"
+    ).start()
     print("🔄 Background bus refresh started (every 2 min)")
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
-    print(f"🤖 Transit Bot API running on http://0.0.0.0:{BOT_PORT}")
-    print(f"   GET /agent      → Agent Transit Dashboard (HTML)")
-    print(f"   GET /health     → health check (JSON)")
-    print(f"   GET /status     → system status & service URLs")
-    print(f"   GET /buses      → latest bus positions (array)")
-    print(f"   GET /stops      → buses with nearest stops (array)")
-    print(f"   GET /proxy/rail → Israel Railways API proxy (bypasses CORS)")
+    print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
+    print(f"   /agent                    → Agent Transit Dashboard")
+    print(f"   /health                   → health check")
+    print(f"   /status                   → system status")
+    print(f"   /buses                    → bus positions")
+    print(f"   /stops                    → buses + nearest stops")
+    print(f"   /geocode?q=כתובת         → address → GPS (Nominatim proxy)")
+    print(f"   /proxy/hasadna/<path>?... → Hasadna Open Bus API proxy")
+    print(f"   /proxy/rail?...           → Israel Railways API proxy")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
