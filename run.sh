@@ -364,7 +364,7 @@ nohup python3 bot.py > /tmp/transit_bot.log 2>&1 &
 BOT_PID=$!
 sleep 2
 
-# בדיקה שהבוט עלה
+# Verify the bot started
 if curl -sf "http://localhost:${BOT_PORT}/health" > /dev/null 2>&1; then
   success "Bot API is running! PID=${BOT_PID}"
   success "Address: http://localhost:${BOT_PORT}"
@@ -373,7 +373,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-#  סיום — סיכום וקישורים
+#  Done — Summary and links
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${GREEN}"
