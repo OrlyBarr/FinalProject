@@ -1,35 +1,35 @@
 #!/bin/bash
 # ================================================================
 #  🚌  Israel Public Transit - Real-Time Monitoring Platform
-#  run.sh — קובץ הרצה ראשי
-#  הרץ אותו פעם אחת: bash run.sh
-#  הוא ידאג לכל השאר אוטומטית.
+#  run.sh — Main startup script
+#  Run once: bash run.sh
+#  It will handle everything else automatically.
 # ================================================================
 
 set -e  # Stop on first error
 
-# ── צבעים לפלט ────────────────────────────────────────────────
+# ── Output colors ─────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-# ── פונקציות עזר ──────────────────────────────────────────────
+# ── Helper functions ──────────────────────────────────────────
 log()     { echo -e "${BOLD}${BLUE}[$(date '+%H:%M:%S')]${NC} $1"; }
 success() { echo -e "${GREEN}✅ $1${NC}"; }
 warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
 error()   { echo -e "${RED}❌ $1${NC}"; exit 1; }
-step()    { echo -e "\n${BOLD}${CYAN}━━━  שלב $1  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
+step()    { echo -e "\n${BOLD}${CYAN}━━━  Step $1  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 wait_for_service() {
   local name=$1 url=$2 max=$3
-  log "ממתין ל-$name להיות מוכן..."
+  log "Waiting for $name to be ready..."
   for i in $(seq 1 $max); do
     if curl -sf "$url" > /dev/null 2>&1; then
-      success "$name מוכן!"
+      success "$name is ready!"
       return 0
     fi
     echo -n "."
     sleep 3
   done
-  error "$name לא נענה תוך $(($max * 3)) שניות"
+  error "$name did not respond within $(($max * 3)) seconds"
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -39,73 +39,73 @@ clear
 echo -e "${BOLD}${BLUE}"
 echo "  ╔══════════════════════════════════════════════════════╗"
 echo "  ║    🚌  Israel Public Transit Monitoring Platform     ║"
-echo "  ║         מערכת ניטור תחבורה ציבורית בזמן אמת        ║"
+echo "  ║           Real-Time Public Transit Monitoring          ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 0: בדיקות מקדימות
+#  Step 0: Pre-flight checks
 # ─────────────────────────────────────────────────────────────
-step "0 — בדיקות מקדימות"
+step "0 — Pre-flight checks"
 
 # Docker
 if ! command -v docker &> /dev/null; then
-  error "Docker לא מותקן. הורד מ: https://docs.docker.com/get-docker/"
+  error "Docker is not installed. Download from: https://docs.docker.com/get-docker/"
 fi
-success "Docker מותקן: $(docker --version)"
+success "Docker installed: $(docker --version)"
 
 # Docker Compose
 if ! command -v docker compose &> /dev/null; then
-  error "Docker Compose לא נמצא."
+  error "Docker Compose not found."
 fi
-success "Docker Compose מותקן: $(docker compose version --short)"
+success "Docker Compose installed: $(docker compose version --short)"
 
 # Python 3
 if ! command -v python3 &> /dev/null; then
-  error "Python3 לא מותקן"
+  error "Python3 is not installed"
 fi
 success "Python: $(python3 --version)"
 
 # .env
 if [ ! -f ".env" ]; then
   if [ -f ".env.example" ]; then
-    warn ".env לא נמצא — מעתיק מ-.env.example"
+    warn ".env not found — copying from .env.example"
     cp .env.example .env
     echo ""
-    echo -e "${YELLOW}${BOLD}  ⚠️  חשוב: ערוך את קובץ .env לפני המשך!${NC}"
-    echo -e "  פתח: ${CYAN}nano .env${NC} או ${CYAN}code .env${NC}"
-    echo -e "  מלא את הסיסמאות ומפתחות ה-API."
+    echo -e "${YELLOW}${BOLD}  ⚠️  Important: Edit the .env file before continuing!${NC}"
+    echo -e "  Open: ${CYAN}nano .env${NC} or ${CYAN}code .env${NC}"
+    echo -e "  Fill in passwords and API keys."
     echo ""
-    read -p "  האם כבר מילאת את .env? (y/n): " confirm
+    read -p "  Have you already filled in .env? (y/n): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-      warn "פתח .env ומלא את הפרטים, ואז הרץ מחדש."
+      warn "Open .env, fill in the details, then re-run."
       exit 0
     fi
   else
-    error "לא נמצא .env ולא .env.example"
+    error ".env and .env.example not found"
   fi
 fi
-success "קובץ .env נמצא"
+success ".env file found"
 
-# בדיקה שהמשתנים הקריטיים קיימים (מינימום לפיתוח מקומי)
+# Check that critical variables exist (minimum for local development)
 source .env 2>/dev/null || true
 if [ -z "$USE_MINIO" ]; then
-  warn "USE_MINIO לא מוגדר — מגדיר כ-true לפיתוח מקומי"
+  warn "USE_MINIO not set — defaulting to true for local development"
   echo "USE_MINIO=true" >> .env
 fi
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 1: התקנת Python Dependencies
+#  Step 1: Install Python dependencies
 # ─────────────────────────────────────────────────────────────
-step "1 — התקנת ספריות Python"
+step "1 — Installing Python libraries"
 
 if [ ! -d "venv" ]; then
-  log "יוצר סביבת Python וירטואלית..."
+  log "Creating Python virtual environment..."
   python3 -m venv venv
-  success "סביבה וירטואלית נוצרה"
+  success "Virtual environment created"
 fi
 
-log "מפעיל סביבה וירטואלית ומתקין ספריות..."
+log "Activating virtual environment and installing libraries..."
 source venv/bin/activate
 
 # Upgrade pip quietly
@@ -114,76 +114,76 @@ pip install --upgrade pip -q
 # Install only if a key package is missing (avoids slow re-resolution on every run)
 if ! python3 -c "import kafka, pandas, boto3, dotenv, geopy; from google.transit import gtfs_realtime_pb2" 2>/dev/null; then
   pip install -r requirements.txt -q
-  success "כל הספריות הותקנו"
+  success "All libraries installed"
 else
-  success "כל הספריות כבר מותקנות — מדלג"
+  success "All libraries already installed — skipping"
 fi
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 2: הרמת Docker Services
+#  Step 2: Start Docker services
 # ─────────────────────────────────────────────────────────────
-step "2 — הרמת שירותי Docker"
+step "2 — Starting Docker services"
 
-log "מוריד images נדרשים (עשוי לקחת כמה דקות בפעם הראשונה)..."
+log "Pulling required images (may take a few minutes the first time)..."
 docker compose pull --quiet 2>/dev/null || true
 
-log "מנקה קונטיינרים ישנים שעלולים לגרום קונפליקט..."
+log "Removing old containers that may cause conflicts..."
 docker compose down --remove-orphans 2>/dev/null || true
 
 # Force-remove only STOPPED/EXITED containers with conflicting names (skip running ones)
 for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
   STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
   if [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
-    warn "מסיר קונטיינר עצור: $container"
+    warn "Removing stopped container: $container"
     docker rm -f "$container" 2>/dev/null || true
   elif [ "$STATUS" = "running" ]; then
-    log "קונטיינר $container כבר רץ — ממשיך"
+    log "Container $container already running — continuing"
   fi
 done
 
-log "מפעיל את כל השירותים..."
+log "Starting all services..."
 docker compose up -d 2>&1 || {
-  warn "docker compose up יצא עם שגיאה — בודק מצב קונטיינרים..."
+  warn "docker compose up exited with an error — checking container states..."
   # Start any containers that are still in 'created' state
   for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
     if [ "$STATUS" = "created" ]; then
-      log "מפעיל ידנית: $container"
+      log "Starting manually: $container"
       docker start "$container" 2>/dev/null || true
     fi
   done
 }
 
-success "כל הקונטיינרים הועלו"
+success "All containers started"
 echo ""
 docker compose ps
 echo ""
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 3: המתנה לשירותים קריטיים
+#  Step 3: Wait for critical services
 # ─────────────────────────────────────────────────────────────
-step "3 — המתנה לשירותים להיות מוכנים"
+step "3 — Waiting for services to be ready"
 
 wait_for_service "Kafka UI"  "http://localhost:8080"        30
 wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 20
-log "ממתין ל-Airflow לאתחל את מסד הנתונים (עשוי לקחת 2-3 דקות)..."
+log "Waiting for Airflow to initialize its database (may take 2-3 minutes)..."
 sleep 30
 wait_for_service "Airflow"   "http://localhost:8081/health"  120
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 4: יצירת Kafka Topics
+#  Step 4: Create Kafka Topics
 # ─────────────────────────────────────────────────────────────
-step "4 — יצירת Kafka Topics"
+step "4 — Creating Kafka Topics"
 
-log "ממתין ל-Kafka broker להיות מוכן..."
+log "Waiting for Kafka broker to be ready..."
 sleep 5
 
-# בודק אם topics כבר קיימים
+# Check if topics already exist
 EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
 
 for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "pipeline-errors"; do
   if echo "$EXISTING" | grep -q "^${topic}$"; then
-    warn "Topic '${topic}' כבר קיים — מדלג"
+    warn "Topic '${topic}' already exists — skipping"
   else
     docker exec kafka kafka-topics \
       --create --if-not-exists \
@@ -191,37 +191,37 @@ for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "
       --partitions 4 \
       --replication-factor 1 \
       --topic "$topic" 2>/dev/null
-    success "Topic נוצר: $topic"
+    success "Topic created: $topic"
   fi
 done
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 5: אתחול Airflow
+#  Step 5: Initialize Airflow
 # ─────────────────────────────────────────────────────────────
-step "5 — אתחול Apache Airflow"
+step "5 — Initializing Apache Airflow"
 
-log "מאתחל מסד נתוני Airflow..."
+log "Initializing Airflow database..."
 docker compose exec -T airflow-webserver airflow db init 2>/dev/null || \
 docker compose exec -T airflow-webserver airflow db migrate 2>/dev/null || \
-warn "Airflow DB כבר מאותחל"
+warn "Airflow DB already initialized"
 
-log "יוצר משתמש admin ל-Airflow..."
+log "Creating Airflow admin user..."
 docker compose exec -T airflow-webserver airflow users create \
   --username admin \
   --password admin \
   --firstname Admin \
   --lastname User \
   --role Admin \
-  --email admin@transit.il 2>/dev/null || warn "משתמש admin כבר קיים"
+  --email admin@transit.il 2>/dev/null || warn "Admin user already exists"
 
-success "Airflow מוכן"
+success "Airflow is ready"
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 6: אתחול MinIO Bucket
+#  Step 6: Initialize MinIO Bucket
 # ─────────────────────────────────────────────────────────────
-step "6 — אתחול MinIO (Data Lake מקומי)"
+step "6 — Initializing MinIO (local Data Lake)"
 
-log "יוצר bucket לנתוני תחבורה..."
+log "Creating bucket for transit data..."
 python3 - <<'EOF'
 import sys
 sys.path.insert(0, '.')
@@ -238,29 +238,29 @@ try:
     bucket = 'israel-transit-lake'
     try:
         client.head_bucket(Bucket=bucket)
-        print(f'⚠️  Bucket {bucket} כבר קיים')
+        print(f'⚠️  Bucket {bucket} already exists')
     except ClientError:
         client.create_bucket(Bucket=bucket)
-        print(f'✅ Bucket נוצר: {bucket}')
-    # יצירת prefix folders
+        print(f'✅ Bucket created: {bucket}')
+    # Create prefix folders
     for prefix in ['raw/bus-positions/', 'raw/train-positions/',
                    'raw/trip-updates/', 'raw/service-alerts/',
                    'processed/delay-events/']:
         client.put_object(Bucket=bucket, Key=prefix, Body=b'')
-    print('✅ כל ה-prefixes נוצרו')
+    print('✅ All prefixes created')
 except Exception as e:
     print(f'⚠️  MinIO: {e}')
 EOF
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 7: אתחול Redshift Schema (או PostgreSQL מקומי)
+#  Step 7: Initialize Redshift Schema (or local PostgreSQL)
 # ─────────────────────────────────────────────────────────────
-step "7 — אתחול Data Warehouse Schema"
+step "7 — Initializing Data Warehouse Schema"
 
 source .env 2>/dev/null || true
 
 if [ -n "$REDSHIFT_HOST" ] && [ "$REDSHIFT_HOST" != "your-cluster.region.redshift.amazonaws.com" ]; then
-  log "מאתחל Redshift schema..."
+  log "Initializing Redshift schema..."
   python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 try:
@@ -268,48 +268,48 @@ try:
     rw = RedshiftWriter()
     rw.create_schema()
     rw.close()
-    print('✅ Redshift schema נוצר בהצלחה')
+    print('✅ Redshift schema created successfully')
 except Exception as e:
     print(f'⚠️  Redshift: {e}')
 EOF
 else
-  warn "REDSHIFT_HOST לא מוגדר — מדלג (ניתן להגדיר מאוחר יותר ב-.env)"
+  warn "REDSHIFT_HOST not set — skipping (can be configured later in .env)"
 fi
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 8: הפעלת DAGs ב-Airflow
+#  Step 8: Enable Airflow DAGs
 # ─────────────────────────────────────────────────────────────
-step "8 — הפעלת Airflow DAGs"
+step "8 — Enabling Airflow DAGs"
 
-sleep 5  # ממתין לסנכרון DAG files
+sleep 5  # Wait for DAG files to sync
 
 for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
-    success "DAG מופעל: $dag" || \
-    warn "לא ניתן להפעיל $dag (ייתכן שעדיין לא נטען)"
+    success "DAG enabled: $dag" || \
+    warn "Could not enable $dag (may not be loaded yet)"
 done
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 9: הרצת בדיקת GTFS-RT ראשונה
+#  Step 9: Initial GTFS-RT connectivity check
 # ─────────────────────────────────────────────────────────────
-step "9 — בדיקת חיבור ל-GTFS-RT (נתוני תחבורה אמיתיים)"
+step "9 — Testing GTFS-RT connection (live transit data)"
 
-log "מנסה לשלוף נתונים מ-MOT GTFS-RT..."
+log "Fetching data from MOT GTFS-RT..."
 python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import requests
 
 feeds = {
-    'VehiclePositions (מיקומי אוטובוסים)': 'https://gtfs.mot.gov.il/gtfsfiles/VehiclePositions.pb',
-    'TripUpdates (איחורים)':               'https://gtfs.mot.gov.il/gtfsfiles/TripUpdates.pb',
-    'ServiceAlerts (התראות)':             'https://gtfs.mot.gov.il/gtfsfiles/ServiceAlerts.pb',
+    'VehiclePositions (bus locations)': 'https://gtfs.mot.gov.il/gtfsfiles/VehiclePositions.pb',
+    'TripUpdates (delays)':             'https://gtfs.mot.gov.il/gtfsfiles/TripUpdates.pb',
+    'ServiceAlerts (alerts)':           'https://gtfs.mot.gov.il/gtfsfiles/ServiceAlerts.pb',
 }
 for name, url in feeds.items():
     try:
         r = requests.head(url, timeout=5)
         if r.status_code == 200:
-            print(f'✅ {name}: זמין')
+            print(f'✅ {name}: available')
         else:
             print(f'⚠️  {name}: HTTP {r.status_code}')
     except Exception as e:
@@ -319,17 +319,17 @@ for name, url in feeds.items():
 try:
     r = requests.get('https://israelrail.azurewebsites.net/stations/GetStationBoard',
                      params={'stationId':'2300','date':'2025-01-01','hour':10}, timeout=5)
-    print(f'✅ Israel Railways API: זמין (HTTP {r.status_code})')
+    print(f'✅ Israel Railways API: available (HTTP {r.status_code})')
 except Exception as e:
     print(f'⚠️  Israel Railways API: {e}')
 EOF
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 10: הרצת Producer ראשוני (אחד לדוגמה)
+#  Step 10: Run initial Producer (sample test)
 # ─────────────────────────────────────────────────────────────
-step "10 — הרצת Producer ראשון לבדיקה"
+step "10 — Running first Producer test"
 
-log "מריץ Bus Positions Producer לדגימה ראשונה..."
+log "Running Bus Positions Producer for initial sample..."
 python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import os; os.environ.setdefault('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
@@ -338,27 +338,27 @@ try:
     p = BusPositionsProducer()
     p.run_once()
     p.close()
-    print(f'✅ Producer הצליח: {p.stats["sent"]} הודעות נשלחו ל-Kafka')
+    print(f'✅ Producer succeeded: {p.stats["sent"]} messages sent to Kafka')
 except Exception as e:
-    print(f'⚠️  Producer (לא קריטי): {e}')
+    print(f'⚠️  Producer (non-critical): {e}')
 EOF
 
 # ─────────────────────────────────────────────────────────────
-#  שלב 11: הפעלת Bot API (פורט 5000)
+#  Step 11: Start Bot API (port 5000)
 # ─────────────────────────────────────────────────────────────
-step "11 — הפעלת Transit Bot API (פורט 5000)"
+step "11 — Starting Transit Bot API (port 5000)"
 
 BOT_PORT=5000
 
-# בדיקה אם הפורט כבר תפוס
+# Check if port is already in use
 if lsof -i :${BOT_PORT} -t > /dev/null 2>&1; then
   EXISTING_PID=$(lsof -i :${BOT_PORT} -t)
-  warn "פורט ${BOT_PORT} כבר בשימוש (PID: ${EXISTING_PID}) — מפסיק תהליך ישן..."
+  warn "Port ${BOT_PORT} already in use (PID: ${EXISTING_PID}) — stopping old process..."
   kill -9 "$EXISTING_PID" 2>/dev/null || true
   sleep 1
 fi
 
-log "מפעיל Bot API על פורט ${BOT_PORT}..."
+log "Starting Bot API on port ${BOT_PORT}..."
 source venv/bin/activate
 nohup python3 bot.py > /tmp/transit_bot.log 2>&1 &
 BOT_PID=$!
@@ -366,10 +366,10 @@ sleep 2
 
 # בדיקה שהבוט עלה
 if curl -sf "http://localhost:${BOT_PORT}/health" > /dev/null 2>&1; then
-  success "Bot API פעיל! PID=${BOT_PID}"
-  success "כתובת: http://localhost:${BOT_PORT}"
+  success "Bot API is running! PID=${BOT_PID}"
+  success "Address: http://localhost:${BOT_PORT}"
 else
-  warn "Bot API לא ענה — בדוק לוגים: tail /tmp/transit_bot.log"
+  warn "Bot API did not respond — check logs: tail /tmp/transit_bot.log"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -378,27 +378,27 @@ fi
 echo ""
 echo -e "${BOLD}${GREEN}"
 echo "  ╔══════════════════════════════════════════════════════╗"
-echo "  ║           🎉  המערכת פעילה בהצלחה!                  ║"
+echo "  ║              🎉  System is up and running!           ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-echo -e "${BOLD}  🔗  כתובות גישה:${NC}"
+echo -e "${BOLD}  🔗  Access URLs:${NC}"
 echo -e "  ${CYAN}Airflow UI${NC}     →  http://localhost:8081  (admin / admin)"
 echo -e "  ${CYAN}Kafka UI${NC}       →  http://localhost:8080"
 echo -e "  ${CYAN}MinIO Console${NC}  →  http://localhost:9001  (minioadmin / minioadmin123)"
 echo -e "  ${CYAN}Kibana${NC}         →  http://localhost:5601"
 echo -e "  ${CYAN}Bot API${NC}        →  http://localhost:5000  (GET /buses /stops /status)"
 echo ""
-echo -e "${BOLD}  📋  פקודות שימושיות:${NC}"
-echo -e "  ${YELLOW}עצירה:${NC}           docker compose down"
-echo -e "  ${YELLOW}לוגים:${NC}           docker compose logs -f kafka"
-echo -e "  ${YELLOW}מצב שירותים:${NC}     docker compose ps"
-echo -e "  ${YELLOW}Producer ידני:${NC}   source venv/bin/activate && python3 producers/bus_positions_producer.py"
+echo -e "${BOLD}  📋  Useful commands:${NC}"
+echo -e "  ${YELLOW}Stop:${NC}              docker compose down"
+echo -e "  ${YELLOW}Logs:${NC}              docker compose logs -f kafka"
+echo -e "  ${YELLOW}Service status:${NC}    docker compose ps"
+echo -e "  ${YELLOW}Manual producer:${NC}   source venv/bin/activate && python3 producers/bus_positions_producer.py"
 echo ""
-echo -e "${BOLD}  🚌  הפרויקט מורכב מ:${NC}"
-echo -e "  • ${GREEN}4 Producers${NC} שולפים נתונים מ-GTFS-RT ורכבת ישראל"
-echo -e "  • ${GREEN}6 Kafka Topics${NC} לסטרימינג בזמן אמת"
-echo -e "  • ${GREEN}3 Airflow DAGs${NC} לתזמון ETL"
-echo -e "  • ${GREEN}MinIO S3${NC} לאחסון (Data Lake)"
-echo -e "  • ${GREEN}Redshift${NC} למחסן נתונים (Data Warehouse)"
+echo -e "${BOLD}  🚌  Project components:${NC}"
+echo -e "  • ${GREEN}4 Producers${NC} fetching data from GTFS-RT and Israel Railways"
+echo -e "  • ${GREEN}6 Kafka Topics${NC} for real-time streaming"
+echo -e "  • ${GREEN}3 Airflow DAGs${NC} for ETL scheduling"
+echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
+echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
 echo ""

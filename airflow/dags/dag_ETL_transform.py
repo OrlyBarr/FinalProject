@@ -79,7 +79,7 @@ def consume_bus_positions(**context):
     n = _consume_topic(
         "bus_positions", "bus-etl-group",
         BusPositionTransformer,
-        "raw/bus-positions",
+        "processed/bus-positions",
         "transit.fact_bus_positions",
         max_msgs=2000,
     )
@@ -92,7 +92,7 @@ def consume_trip_updates(**context):
     n = _consume_topic(
         "trip_updates", "trips-etl-group",
         TripUpdateTransformer,
-        "raw/trip-updates",
+        "processed/trip-updates",
         "transit.fact_trip_updates",
         max_msgs=3000,
     )
@@ -105,7 +105,7 @@ def consume_train_positions(**context):
     n = _consume_topic(
         "train_positions", "trains-etl-group",
         TrainPositionTransformer,
-        "raw/train-positions",
+        "processed/train-positions",
         "transit.fact_train_positions",
     )
     print(f"Train positions processed: {n}")
@@ -129,7 +129,7 @@ def consume_service_alerts(**context):
         consumer_timeout_ms=5000,    # 5s max wait
     )
     transformer     = ServiceAlertTransformer()
-    s3_writer       = S3Writer(prefix="raw/service-alerts")
+    s3_writer       = S3Writer(prefix="processed/service-alerts")
 
     records = []
     for msg in consumer:
