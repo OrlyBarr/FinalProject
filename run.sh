@@ -109,11 +109,11 @@ log "Activating virtual environment and installing libraries..."
 source venv/bin/activate
 
 # Upgrade pip quietly
-pip install --upgrade pip -q
+venv/bin/python3 -m pip install --upgrade pip -q
 
 # Install only if a key package is missing (avoids slow re-resolution on every run)
-if ! python3 -c "import kafka, pandas, boto3, dotenv, geopy; from google.transit import gtfs_realtime_pb2" 2>/dev/null; then
-  pip install -r requirements.txt -q
+if ! venv/bin/python3 -c "import kafka, pandas, boto3, dotenv, geopy; from google.transit import gtfs_realtime_pb2" 2>/dev/null; then
+  venv/bin/python3 -m pip install -r requirements.txt -q
   success "All libraries installed"
 else
   success "All libraries already installed — skipping"
@@ -167,6 +167,21 @@ docker compose up -d 2>&1 || {
     fi
   done
 }
+
+# Recover from Kafka/Zookeeper cluster ID mismatch by resetting only their data volumes.
+KAFKA_STATUS=$(docker inspect --format '{{.State.Status}}' "kafka" 2>/dev/null || echo "")
+if [ "$KAFKA_STATUS" = "exited" ] && docker logs kafka 2>&1 | grep -q "InconsistentClusterIdException"; then
+  warn "Kafka cluster ID mismatch detected. Resetting Kafka and Zookeeper data volumes..."
+  docker compose down --remove-orphans 2>/dev/null || true
+
+  for vol in $(docker volume ls --format '{{.Name}}' | grep -E '(^|_)kafka_data$|(^|_)zookeeper_data$' || true); do
+    warn "Removing volume: $vol"
+    docker volume rm "$vol" 2>/dev/null || true
+  done
+
+  log "Recreating containers after Kafka reset..."
+  docker compose up -d
+fi
 
 success "All containers started"
 echo ""
@@ -236,7 +251,7 @@ success "Airflow is ready"
 step "6 — Initializing MinIO (local Data Lake)"
 
 log "Creating bucket for transit data..."
-python3 - <<'EOF'
+venv/bin/python3 - <<'EOF'
 import sys
 sys.path.insert(0, '.')
 try:
@@ -286,7 +301,7 @@ set -a; source .env 2>/dev/null || true; set +a
 
 if [ -n "$REDSHIFT_HOST" ] && [ "$REDSHIFT_HOST" != "your-cluster.region.redshift.amazonaws.com" ]; then
   log "Initializing Redshift schema..."
-  python3 - <<'EOF'
+  venv/bin/python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 try:
     from warehouse.redshift_writer import RedshiftWriter
@@ -321,7 +336,7 @@ done
 step "9 — Testing GTFS-RT connection (live transit data)"
 
 log "Fetching data from MOT GTFS-RT..."
-python3 - <<'EOF'
+venv/bin/python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import requests
 
@@ -376,7 +391,7 @@ EOF
 step "10 — Running first Producer test"
 
 log "Running Bus Positions Producer for initial sample..."
-python3 - <<'EOF'
+venv/bin/python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import os; os.environ.setdefault('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
 try:
