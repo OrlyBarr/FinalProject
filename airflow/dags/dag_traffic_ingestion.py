@@ -29,7 +29,7 @@ def run_traffic_producer(**context):
     try:
         records = producer.fetch_data()
         if records:
-            producer.publish_batch(records)
+            producer.send_batch(records)
         print(f"✅ Traffic: {len(records)} segments published to Kafka")
         context["ti"].xcom_push(key="segments_n", value=len(records))
     finally:

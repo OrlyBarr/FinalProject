@@ -8,11 +8,11 @@
 
 set -e  # Stop on first error
 
-# ── Output colors ─────────────────────────────────────────────
+# ── Output colors ────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-# ── Helper functions ──────────────────────────────────────────
+# ── Helper functions ──────────────────────────────────────────────
 log()     { echo -e "${BOLD}${BLUE}[$(date '+%H:%M:%S')]${NC} $1"; }
 success() { echo -e "${GREEN}✅ $1${NC}"; }
 warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
@@ -39,7 +39,7 @@ clear
 echo -e "${BOLD}${BLUE}"
 echo "  ╔══════════════════════════════════════════════════════╗"
 echo "  ║    🚌  Israel Public Transit Monitoring Platform     ║"
-echo "  ║           Real-Time Public Transit Monitoring          ║"
+echo "  ║         Real-Time Public Transit Monitoring System       ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -77,7 +77,7 @@ if [ ! -f ".env" ]; then
     echo -e "  Fill in passwords and API keys."
     echo ""
     read -p "  Have you already filled in .env? (y/n): " confirm
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    if [[  "$confirm" != "y" && "$confirm" != "Y" ]]; then
       warn "Open .env, fill in the details, then re-run."
       exit 0
     fi
@@ -88,7 +88,7 @@ fi
 success ".env file found"
 
 # Check that critical variables exist (minimum for local development)
-source .env 2>/dev/null || true
+set -a; source .env 2>/dev/null || true; set +a
 if [ -z "$USE_MINIO" ]; then
   warn "USE_MINIO not set — defaulting to true for local development"
   echo "USE_MINIO=true" >> .env
@@ -181,7 +181,7 @@ sleep 5
 # Check if topics already exist
 EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
 
-for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "pipeline-errors"; do
+for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors"; do
   if echo "$EXISTING" | grep -q "^${topic}$"; then
     warn "Topic '${topic}' already exists — skipping"
   else
@@ -242,12 +242,23 @@ try:
     except ClientError:
         client.create_bucket(Bucket=bucket)
         print(f'✅ Bucket created: {bucket}')
-    # Create prefix folders
-    for prefix in ['raw/bus-positions/', 'raw/train-positions/',
-                   'raw/trip-updates/', 'raw/service-alerts/',
-                   'processed/delay-events/']:
+    # Create prefix folders — raw + processed for each data type
+    prefixes = [
+        'raw/bus-positions/',
+        'raw/train-positions/',
+        'raw/trip-updates/',
+        'raw/service-alerts/',
+        'raw/traffic-data/',
+        'processed/bus-positions/',
+        'processed/train-positions/',
+        'processed/trip-updates/',
+        'processed/service-alerts/',
+        'processed/traffic-data/',
+        'processed/delay-events/',
+    ]
+    for prefix in prefixes:
         client.put_object(Bucket=bucket, Key=prefix, Body=b'')
-    print('✅ All prefixes created')
+    print(f'✅ {len(prefixes)} prefixes created in MinIO')
 except Exception as e:
     print(f'⚠️  MinIO: {e}')
 EOF
@@ -257,7 +268,7 @@ EOF
 # ─────────────────────────────────────────────────────────────
 step "7 — Initializing Data Warehouse Schema"
 
-source .env 2>/dev/null || true
+set -a; source .env 2>/dev/null || true; set +a
 
 if [ -n "$REDSHIFT_HOST" ] && [ "$REDSHIFT_HOST" != "your-cluster.region.redshift.amazonaws.com" ]; then
   log "Initializing Redshift schema..."
@@ -283,7 +294,7 @@ step "8 — Enabling Airflow DAGs"
 
 sleep 5  # Wait for DAG files to sync
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
@@ -315,17 +326,32 @@ for name, url in feeds.items():
     except Exception as e:
         print(f'❌ {name}: {e}')
 
-# Israel Railways
+# HERE Traffic API
+import os
+here_key = os.getenv('HERE_API_KEY', '')
+if here_key:
+    try:
+        r = requests.get(
+            'https://data.traffic.hereapi.com/v7/flow',
+            params={'apiKey': here_key, 'in': 'bbox:34.7,32.0,35.0,32.2'},
+            timeout=5
+        )
+        print(f'✅ HERE Traffic API: available (HTTP {r.status_code})')
+    except Exception as e:
+        print(f'⚠️  HERE Traffic API: {e}')
+else:
+    print('⚠️  HERE_API_KEY not set in .env — traffic data will not be collected')
+
+# Open Bus Stride (Hasadna)
 try:
-    r = requests.get('https://israelrail.azurewebsites.net/stations/GetStationBoard',
-                     params={'stationId':'2300','date':'2025-01-01','hour':10}, timeout=5)
-    print(f'✅ Israel Railways API: available (HTTP {r.status_code})')
+    r = requests.get('https://open-bus-stride-api.hasadna.org.il/gtfs_stops/list?limit=1', timeout=5)
+    print(f'✅ Open Bus Stride API: available (HTTP {r.status_code})')
 except Exception as e:
-    print(f'⚠️  Israel Railways API: {e}')
+    print(f'⚠️  Open Bus Stride API: {e}')
 EOF
 
 # ─────────────────────────────────────────────────────────────
-#  Step 10: Run initial Producer (sample test)
+#  Step 10: Run initial Producer test
 # ─────────────────────────────────────────────────────────────
 step "10 — Running first Producer test"
 
@@ -378,7 +404,7 @@ fi
 echo ""
 echo -e "${BOLD}${GREEN}"
 echo "  ╔══════════════════════════════════════════════════════╗"
-echo "  ║              🎉  System is up and running!           ║"
+echo "  ║           🎉  System is up and running!              ║"
 echo "  ╚══════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 

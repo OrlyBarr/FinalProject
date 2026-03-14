@@ -9,7 +9,7 @@ HERE Traffic Flow API v7:
   Returns traffic flow segments with current speed vs free-flow speed.
 
 Coverage: Israel bounding box (29.4–33.4 lat, 34.2–35.9 lon)
-  Split into 9 tiles (3x3 grid) to cover the whole country.
+  Split into 11 sub-degree tiles (HERE API enforces max 1° per bbox side).
 """
 
 import requests
@@ -20,19 +20,30 @@ from config.settings import HERE_API_KEY, KAFKA_TOPICS
 from producers.base_producer import BaseProducer
 
 
-# Israel bounding box split into 3x3 grid tiles
-# Each tile is ~150km x ~120km — manageable for HERE API
+# Israel bounding box split into sub-degree tiles
+# HERE Traffic API v7 enforces a max of 1 degree per bbox side.
+# Each tile is kept to ≤0.9° lat and ≤0.9° lon.
 ISRAEL_TILES = [
-    # (name,         lat_min, lat_max, lon_min, lon_max)
-    ("north",        32.5,    33.4,    34.8,    35.9),
-    ("north_east",   32.5,    33.4,    35.0,    35.9),
-    ("center_north", 31.8,    32.5,    34.7,    35.4),
-    ("tel_aviv",     31.9,    32.3,    34.7,    34.95),
-    ("center",       31.5,    32.2,    34.8,    35.5),
-    ("jerusalem",    31.6,    31.95,   34.9,    35.35),
-    ("south_west",   30.5,    31.6,    34.4,    35.0),
-    ("south_center", 30.0,    31.0,    34.5,    35.2),
-    ("eilat",        29.4,    30.0,    34.9,    35.1),
+    # (name,            lat_min, lat_max, lon_min, lon_max)
+    # Northern Israel (split into west/east — original 1.1° lon span fixed)
+    ("north_w",         32.5,    33.4,    34.8,    35.35),
+    ("north_e",         32.5,    33.4,    35.35,   35.9),
+    # Central-north corridor
+    ("center_north",    31.8,    32.5,    34.7,    35.4),
+    # Greater Tel Aviv
+    ("tel_aviv",        31.9,    32.3,    34.7,    34.95),
+    # Central Israel
+    ("center",          31.5,    32.2,    34.8,    35.5),
+    # Jerusalem area
+    ("jerusalem",       31.6,    31.95,   34.9,    35.35),
+    # Southern-west (split into north/south halves — original 1.1° lat span fixed)
+    ("south_west_n",    31.05,   31.6,    34.4,    35.0),
+    ("south_west_s",    30.5,    31.05,   34.4,    35.0),
+    # South-central (split to keep lat ≤0.5°)
+    ("south_center_n",  30.5,    31.0,    34.5,    35.2),
+    ("south_center_s",  30.0,    30.5,    34.5,    35.2),
+    # Eilat / southern tip
+    ("eilat",           29.4,    30.0,    34.9,    35.1),
 ]
 
 # HERE congestion level mapping

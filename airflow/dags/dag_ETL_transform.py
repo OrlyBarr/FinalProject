@@ -23,7 +23,16 @@ default_args = {
 
 
 def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: str, redshift_table: str, max_msgs: int = 1000):
-    """Generic consume → transform → load function."""
+    """
+    Generic consume → raw S3 → transform → processed S3 + Redshift.
+
+    Flow:
+      1. קרא מ-Kafka
+      2. שמור raw records ל-S3 raw/
+      3. עבד (transform)
+      4. שמור processed records ל-S3 processed/
+      5. טען ל-Redshift (אם מוגדר)
+    """
     from kafka import KafkaConsumer
     from config.settings import KAFKA_TOPICS
     from storage.s3_writer import S3Writer
@@ -36,15 +45,23 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="earliest",
         enable_auto_commit=False,
-        consumer_timeout_ms=5000,    # 5s max wait — keeps tasks within 30s schedule
+        consumer_timeout_ms=5000,
         max_poll_records=500,
     )
 
-    transformer     = transformer_cls()
-    s3_writer       = S3Writer(prefix=s3_prefix)
+    transformer      = transformer_cls()
 
-    records  = []
-    count    = 0
+    # raw prefix: raw/bus-positions, raw/train-positions וכו'
+    raw_prefix       = s3_prefix.replace("processed/", "raw/")
+    s3_raw           = S3Writer(prefix=raw_prefix)
+
+    # processed prefix: processed/bus-positions וכו'
+    processed_prefix = s3_prefix if s3_prefix.startswith("processed/") else s3_prefix.replace("raw/", "processed/")
+    s3_processed     = S3Writer(prefix=processed_prefix)
+
+    raw_records        = []
+    processed_records  = []
+    count              = 0
 
     for msg in consumer:
         if count >= max_msgs:
@@ -52,26 +69,45 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
         raw = msg.value.get("data", {})
         if not raw:
             continue
+
+        # שמור את ה-raw record כמו שהגיע (עם metadata)
+        raw_record = dict(raw)
+        raw_record["_fetched_at"]  = msg.value.get("fetched_at")
+        raw_record["_source"]      = msg.value.get("source")
+        raw_record["_kafka_offset"] = msg.offset
+        raw_records.append(raw_record)
+
+        # עבד ל-processed
         try:
             transformed = transformer.transform(raw)
             transformed["ingested_at"] = msg.value.get("fetched_at")
-            records.append(transformed)
-            count += 1
+            processed_records.append(transformed)
         except Exception as e:
-            print(f"Transform error: {e}")
+            print(f"Transform error on record {count}: {e}")
+
+        count += 1
 
     consumer.commit()
     consumer.close()
 
-    if records:
-        s3_writer.write_batch(records)
-        if os.getenv("REDSHIFT_HOST"):   # skip Redshift when not configured
+    # כתוב raw → S3 raw/
+    if raw_records:
+        s3_raw.write_batch(raw_records)
+        print(f"Raw: {len(raw_records)} records → s3://{raw_prefix}")
+
+    # כתוב processed → S3 processed/
+    if processed_records:
+        s3_processed.write_batch(processed_records)
+        print(f"Processed: {len(processed_records)} records → s3://{processed_prefix}")
+
+        # טען ל-Redshift אם מוגדר
+        if os.getenv("REDSHIFT_HOST"):
             from warehouse.redshift_writer import RedshiftWriter
             redshift_writer = RedshiftWriter()
-            redshift_writer.bulk_insert(redshift_table, records)
+            redshift_writer.bulk_insert(redshift_table, processed_records)
             redshift_writer.close()
 
-    return len(records)
+    return len(processed_records)
 
 
 def consume_bus_positions(**context):
@@ -221,6 +257,9 @@ def detect_and_publish_delay_events(**context):
 
 def consume_traffic(**context):
     from etl.traffic_transformer import TrafficTransformer
+    # s3_prefix="processed/traffic-data" →
+    #   raw will be written to:       raw/traffic-data/
+    #   processed will be written to: processed/traffic-data/
     n = _consume_topic(
         "traffic_data", "traffic-etl-group",
         TrafficTransformer,
