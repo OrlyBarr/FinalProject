@@ -9,7 +9,7 @@ HERE Traffic Flow API v7:
   Returns traffic flow segments with current speed vs free-flow speed.
 
 Coverage: Israel bounding box (29.4–33.4 lat, 34.2–35.9 lon)
-  Split into 11 sub-degree tiles (HERE API enforces max 1° per bbox side).
+  Split into 9 tiles (3x3 grid) to cover the whole country.
 """
 
 import requests
@@ -20,30 +20,22 @@ from config.settings import HERE_API_KEY, KAFKA_TOPICS
 from producers.base_producer import BaseProducer
 
 
-# Israel bounding box split into sub-degree tiles
-# HERE Traffic API v7 enforces a max of 1 degree per bbox side.
-# Each tile is kept to ≤0.9° lat and ≤0.9° lon.
+# Israel bounding box split into tiles — Israeli territory only (excludes Jordan, Lebanon, Syria)
+# Eastern border: 35.55 (west of Sea of Galilee) — excludes Jordan
+# Northern border: 33.3 — excludes Lebanon/Syria
 ISRAEL_TILES = [
-    # (name,            lat_min, lat_max, lon_min, lon_max)
-    # Northern Israel (split into west/east — original 1.1° lon span fixed)
-    ("north_w",         32.5,    33.4,    34.8,    35.35),
-    ("north_e",         32.5,    33.4,    35.35,   35.9),
-    # Central-north corridor
-    ("center_north",    31.8,    32.5,    34.7,    35.4),
-    # Greater Tel Aviv
-    ("tel_aviv",        31.9,    32.3,    34.7,    34.95),
-    # Central Israel
-    ("center",          31.5,    32.2,    34.8,    35.5),
-    # Jerusalem area
-    ("jerusalem",       31.6,    31.95,   34.9,    35.35),
-    # Southern-west (split into north/south halves — original 1.1° lat span fixed)
-    ("south_west_n",    31.05,   31.6,    34.4,    35.0),
-    ("south_west_s",    30.5,    31.05,   34.4,    35.0),
-    # South-central (split to keep lat ≤0.5°)
-    ("south_center_n",  30.5,    31.0,    34.5,    35.2),
-    ("south_center_s",  30.0,    30.5,    34.5,    35.2),
-    # Eilat / southern tip
-    ("eilat",           29.4,    30.0,    34.9,    35.1),
+    # (name,          lat_min, lat_max, lon_min, lon_max)
+    ("galil_west",    32.7,    33.3,    34.9,    35.3),   # Western Galilee
+    ("galil_east",    32.7,    33.3,    35.3,    35.55),  # Eastern Galilee + Sea of Galilee
+    ("haifa",         32.5,    32.9,    34.9,    35.15),  # Haifa and Krayot
+    ("shomron",       32.1,    32.5,    34.9,    35.35),  # Samaria + Jezreel Valley
+    ("tel_aviv",      31.9,    32.2,    34.7,    34.95),  # Greater Tel Aviv (Gush Dan)
+    ("center",        31.7,    32.1,    34.8,    35.1),   # Central Israel
+    ("jerusalem",     31.6,    31.95,   34.9,    35.35),  # Jerusalem
+    ("south_west",    30.8,    31.6,    34.4,    34.9),   # Shephelah + Northern Negev
+    ("beer_sheva",    30.5,    31.0,    34.5,    35.1),   # Beer Sheva
+    ("negev",         29.5,    30.5,    34.6,    35.2),   # Southern Negev
+    ("eilat",         29.4,    29.8,    34.9,    35.05),  # Eilat
 ]
 
 # HERE congestion level mapping
@@ -93,6 +85,7 @@ class TrafficProducer(BaseProducer):
                     "apiKey":      self.api_key,
                     "in":          f"bbox:{bbox}",
                     "locationReferencing": "shape",
+                    "lang":        "en-US",  # road names in English
                 },
                 headers=self.headers,
                 timeout=20,
