@@ -14,11 +14,12 @@ load_dotenv()
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 KAFKA_TOPICS = {
-    "bus_positions":  "bus-positions",    # מיקומי אוטובוסים בזמן אמת
-    "train_positions": "train-positions", # מיקומי רכבות
-    "trip_updates":   "trip-updates",     # עדכוני נסיעה (איחורים)
-    "service_alerts": "service-alerts",   # התראות שירות
-    "delay_events":   "delay-events",     # אירועי איחור מחושבים
+    "bus_positions":  "bus-positions",    # real-time bus locations
+    "train_positions": "train-positions", # train locations
+    "trip_updates":   "trip-updates",     # trip updates (delays)
+    "service_alerts": "service-alerts",   # service alerts
+    "delay_events":   "delay-events",     # computed delay events
+    "traffic_data":   "traffic-data",     # HERE traffic congestion data
     "errors":         "pipeline-errors",
 }
 
@@ -42,7 +43,7 @@ KAFKA_CONSUMER_CONFIG = {
 # DATA SOURCES - Israel Transit APIs
 # ─────────────────────────────────────────
 
-# משרד התחבורה - GTFS Realtime (ציבורי, ללא מפתח)
+# Ministry of Transport - GTFS Realtime (public, no API key required)
 GTFS_RT_BUS_URL      = os.getenv("GTFS_RT_BUS_URL",
                         "https://gtfs.mot.gov.il/gtfsfiles/TripUpdates.pb")
 GTFS_RT_VEHICLE_URL  = os.getenv("GTFS_RT_VEHICLE_URL",
@@ -50,13 +51,21 @@ GTFS_RT_VEHICLE_URL  = os.getenv("GTFS_RT_VEHICLE_URL",
 GTFS_RT_ALERTS_URL   = os.getenv("GTFS_RT_ALERTS_URL",
                         "https://gtfs.mot.gov.il/gtfsfiles/ServiceAlerts.pb")
 
-# Open Bus Stride - hasadna (ציבורי, REST API)
+# HERE Traffic API
+HERE_API_KEY         = os.getenv("HERE_API_KEY", "")
+
+# Open Bus Stride - hasadna (public, REST API)
 OPEN_BUS_API_URL     = os.getenv("OPEN_BUS_API_URL",
                         "https://open-bus-stride-api.hasadna.org.il")
 
-# רכבת ישראל
-RAIL_API_URL         = os.getenv("RAIL_API_URL",
-                        "https://israelrail.azurewebsites.net/stations/GetStationBoard")
+# Israel Railways
+# Israel Railways — both official APIs are unavailable:
+# israelrail.azurewebsites.net — hijacked
+# www.rail.co.il/apiinfo — blocked by Cloudflare
+# Train data is available via Open Bus Stride with operator_ref=2
+RAIL_API_URL         = os.getenv("RAIL_API_URL", "")   # disabled
+RAIL_API_URL_ALT     = os.getenv("RAIL_API_URL_ALT",
+                        "https://www.rail.co.il/apiinfo/api/Train/GetRouteTrainByStation")
 
 MOT_API_KEY          = os.getenv("MOT_API_KEY", "")
 
@@ -69,11 +78,12 @@ AWS_REGION            = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 S3_BUCKET             = os.getenv("S3_BUCKET_NAME", "israel-transit-lake")
 
 S3_PREFIXES = {
-    "bus_positions":   "raw/bus-positions",
-    "train_positions": "raw/train-positions",
-    "trip_updates":    "raw/trip-updates",
-    "service_alerts":  "raw/service-alerts",
+    "bus_positions":   "processed/bus-positions",
+    "train_positions": "processed/train-positions",
+    "trip_updates":    "processed/trip-updates",
+    "service_alerts":  "processed/service-alerts",
     "delay_events":    "processed/delay-events",
+    "traffic_data":    "processed/traffic-data",
 }
 
 USE_MINIO        = os.getenv("USE_MINIO", "false").lower() == "true"
@@ -97,42 +107,43 @@ REDSHIFT_SCHEMA = "transit"
 # ISRAEL TRANSIT CONSTANTS
 # ─────────────────────────────────────────
 
-# מפעילי תחבורה - operator IDs in GTFS Israel
+# Transit operators - operator IDs in GTFS Israel
 OPERATORS = {
-    "dan":        "3",    # דן
-    "egged":      "5",    # אגד
-    "metropoline": "14",  # מטרופולין
-    "kavim":      "21",   # קווים
-    "nateev_express": "25",  # נתיב אקספרס
-    "rail":       "2",    # רכבת ישראל
+    "dan":        "3",    # Dan
+    "egged":      "5",    # Egged
+    "metropoline": "14",  # Metropoline
+    "kavim":      "21",   # Kavim
+    "nateev_express": "25",  # Nateev Express
+    "rail":       "2",    # Israel Railways
 }
 
-# תחנות רכבת מרכזיות
+# Major train stations
 MAJOR_TRAIN_STATIONS = {
-    "2300":  "תל אביב - מרכז",
-    "2820":  "תל אביב - השלום",
-    "3400":  "ירושלים - יצחק נבון",
-    "3600":  "חיפה - מרכז השמיר",
-    "4600":  "באר שבע - מרכז",
-    "3100":  "נתניה",
-    "5000":  "הרצליה",
-    "5010":  "רעננה ב",
-    "700":   "חדרה מערב",
-    "1220":  "נהריה",
+    "2300":  "Tel Aviv - Center",
+    "2820":  "Tel Aviv - HaShalom",
+    "3400":  "Jerusalem - Yitzhak Navon",
+    "3600":  "Haifa - Center HaShmira",
+    "4600":  "Beer Sheva - Center",
+    "3100":  "Netanya",
+    "5000":  "Herzliya",
+    "5010":  "Raanana B",
+    "700":   "Hadera West",
+    "1220":  "Nahariya",
 }
 
-# סף איחור (בשניות) להגדרת "מאחר"
-DELAY_THRESHOLD_SECONDS = 180    # 3 דקות
-SEVERE_DELAY_SECONDS    = 600    # 10 דקות
+# Delay threshold (in seconds) to classify as "delayed"
+DELAY_THRESHOLD_SECONDS = 180    # 3 minutes
+SEVERE_DELAY_SECONDS    = 600    # 10 minutes
 
 # ─────────────────────────────────────────
 # INGESTION INTERVALS (seconds)
 # ─────────────────────────────────────────
 FETCH_INTERVALS = {
-    "bus_positions":  30,   # כל 30 שניות
-    "train_positions": 30,  # כל 30 שניות
-    "trip_updates":   60,   # כל דקה
-    "service_alerts": 120,  # כל 2 דקות
+    "bus_positions":  30,   # every 30 seconds
+    "train_positions": 30,  # every 30 seconds
+    "trip_updates":   60,   # every minute
+    "service_alerts": 120,  # every 2 minutes
+    "traffic_data":   300,  # every 5 minutes
 }
 
 # ─────────────────────────────────────────

@@ -219,6 +219,19 @@ def detect_and_publish_delay_events(**context):
     context["ti"].xcom_push(key="delay_events_n", value=len(severe_delays))
 
 
+def consume_traffic(**context):
+    from etl.traffic_transformer import TrafficTransformer
+    n = _consume_topic(
+        "traffic_data", "traffic-etl-group",
+        TrafficTransformer,
+        "processed/traffic-data",
+        "transit.fact_traffic_flow",
+        max_msgs=5000,
+    )
+    print(f"Traffic segments processed: {n}")
+    context["ti"].xcom_push(key="traffic_n", value=n)
+
+
 def log_etl_summary(**context):
     ti = context["ti"]
     summary = {
@@ -226,6 +239,7 @@ def log_etl_summary(**context):
         "trip_updates":    ti.xcom_pull(task_ids="consume_trip_updates",   key="trips_n")  or 0,
         "train_positions": ti.xcom_pull(task_ids="consume_train_positions",key="trains_n") or 0,
         "service_alerts":  ti.xcom_pull(task_ids="consume_service_alerts", key="alerts_n") or 0,
+        "traffic_flow":    ti.xcom_pull(task_ids="consume_traffic",        key="traffic_n") or 0,
         "delay_events":    ti.xcom_pull(task_ids="detect_delay_events",    key="delay_events_n") or 0,
     }
     total = sum(summary.values())
@@ -245,6 +259,7 @@ with DAG(
     tags=["etl", "transform", "transit"],
 ) as dag:
 
+    t_traffic = PythonOperator(task_id="consume_traffic",          python_callable=consume_traffic)
     t_bus    = PythonOperator(task_id="consume_bus_positions",   python_callable=consume_bus_positions)
     t_trips  = PythonOperator(task_id="consume_trip_updates",    python_callable=consume_trip_updates)
     t_trains = PythonOperator(task_id="consume_train_positions", python_callable=consume_train_positions)
@@ -262,4 +277,4 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    [t_bus, t_trips, t_trains, t_alerts] >> t_delays >> t_summary
+    [t_bus, t_trips, t_trains, t_alerts, t_traffic] >> t_delays >> t_summary
