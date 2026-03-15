@@ -38,4 +38,8 @@ build/
 # Logs
 *.log
 logs/
+<<<<<<< HEAD
 >>>>>>> 4cd6561 (fix: use venv python/pip, add .gitignore, fix kafka recovery)
+=======
+buses_with_nearest_stops.json
+>>>>>>> b54eebb (align to remote server)
