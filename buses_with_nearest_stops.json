@@ -1,5 +1,1083 @@
 [
   {
+    "vehicle_id":"7593773673",
+    "trip_id":"3371871564",
+    "route_id":"2146734",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593769926",
+    "trip_id":"3371871564",
+    "route_id":"2146733",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593766150",
+    "trip_id":"3371871564",
+    "route_id":"2146732",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593762640",
+    "trip_id":"3371871564",
+    "route_id":"2146731",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593759097",
+    "trip_id":"3371871564",
+    "route_id":"2146730",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593755506",
+    "trip_id":"3371871564",
+    "route_id":"2146729",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593751861",
+    "trip_id":"3371871564",
+    "route_id":"2146728",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593748184",
+    "trip_id":"3371871564",
+    "route_id":"2146727",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593744543",
+    "trip_id":"3371871564",
+    "route_id":"2146726",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593740870",
+    "trip_id":"3371871564",
+    "route_id":"2146725",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593737160",
+    "trip_id":"3371871564",
+    "route_id":"2146724",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593733413",
+    "trip_id":"3371871564",
+    "route_id":"2146723",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593729654",
+    "trip_id":"3371871564",
+    "route_id":"2146722",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593725993",
+    "trip_id":"3371871564",
+    "route_id":"2146721",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593722306",
+    "trip_id":"3371871564",
+    "route_id":"2146720",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593718611",
+    "trip_id":"3371871564",
+    "route_id":"2146719",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593714887",
+    "trip_id":"3371871564",
+    "route_id":"2146718",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593711139",
+    "trip_id":"3371871564",
+    "route_id":"2146717",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593707473",
+    "trip_id":"3371871564",
+    "route_id":"2146716",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593703756",
+    "trip_id":"3371871564",
+    "route_id":"2146715",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593700011",
+    "trip_id":"3371871564",
+    "route_id":"2146714",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593696248",
+    "trip_id":"3371871564",
+    "route_id":"2146713",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593692442",
+    "trip_id":"3371871564",
+    "route_id":"2146712",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593688712",
+    "trip_id":"3371871564",
+    "route_id":"2146711",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593684956",
+    "trip_id":"3371871564",
+    "route_id":"2146710",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593681164",
+    "trip_id":"3371871564",
+    "route_id":"2146709",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593677347",
+    "trip_id":"3371871564",
+    "route_id":"2146708",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593673510",
+    "trip_id":"3371871564",
+    "route_id":"2146707",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593669816",
+    "trip_id":"3371871564",
+    "route_id":"2146706",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593666138",
+    "trip_id":"3371871564",
+    "route_id":"2146705",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593662433",
+    "trip_id":"3371871564",
+    "route_id":"2146704",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593658721",
+    "trip_id":"3371871564",
+    "route_id":"2146703",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593655361",
+    "trip_id":"3371871564",
+    "route_id":"2146702",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593652068",
+    "trip_id":"3371871564",
+    "route_id":"2146701",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593648759",
+    "trip_id":"3371871564",
+    "route_id":"2146700",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593645407",
+    "trip_id":"3371871564",
+    "route_id":"2146699",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593642005",
+    "trip_id":"3371871564",
+    "route_id":"2146698",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593638597",
+    "trip_id":"3371871564",
+    "route_id":"2146697",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593635195",
+    "trip_id":"3371871564",
+    "route_id":"2146696",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593631749",
+    "trip_id":"3371871564",
+    "route_id":"2146695",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593628292",
+    "trip_id":"3371871564",
+    "route_id":"2146694",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593624808",
+    "trip_id":"3371871564",
+    "route_id":"2146693",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593621352",
+    "trip_id":"3371871564",
+    "route_id":"2146692",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593617929",
+    "trip_id":"3371871564",
+    "route_id":"2146691",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593614513",
+    "trip_id":"3371871564",
+    "route_id":"2146690",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593611091",
+    "trip_id":"3371871564",
+    "route_id":"2146689",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593607648",
+    "trip_id":"3371871564",
+    "route_id":"2146688",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593604263",
+    "trip_id":"3371871564",
+    "route_id":"2146687",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593600892",
+    "trip_id":"3371871564",
+    "route_id":"2146686",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593597493",
+    "trip_id":"3371871564",
+    "route_id":"2146685",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593594078",
+    "trip_id":"3371871564",
+    "route_id":"2146684",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593590638",
+    "trip_id":"3371871564",
+    "route_id":"2146683",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593587271",
+    "trip_id":"3371871564",
+    "route_id":"2146682",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593583938",
+    "trip_id":"3371871564",
+    "route_id":"2146681",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593580592",
+    "trip_id":"3371871564",
+    "route_id":"2146680",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593577221",
+    "trip_id":"3371871564",
+    "route_id":"2146679",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593573823",
+    "trip_id":"3371871564",
+    "route_id":"2146678",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593570522",
+    "trip_id":"3371871564",
+    "route_id":"2146677",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593567234",
+    "trip_id":"3371871564",
+    "route_id":"2146676",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593563930",
+    "trip_id":"3371871564",
+    "route_id":"2146675",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593559837",
+    "trip_id":"3371871564",
+    "route_id":"2146674",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593555705",
+    "trip_id":"3371871564",
+    "route_id":"2146673",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593551857",
+    "trip_id":"3371871564",
+    "route_id":"2146672",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593547967",
+    "trip_id":"3371871564",
+    "route_id":"2146671",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593544036",
+    "trip_id":"3371871564",
+    "route_id":"2146670",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593540054",
+    "trip_id":"3371871564",
+    "route_id":"2146669",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593536027",
+    "trip_id":"3371871564",
+    "route_id":"2146668",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593532044",
+    "trip_id":"3371871564",
+    "route_id":"2146667",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593528036",
+    "trip_id":"3371871564",
+    "route_id":"2146666",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593523988",
+    "trip_id":"3371871564",
+    "route_id":"2146665",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593519890",
+    "trip_id":"3371871564",
+    "route_id":"2146664",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593515766",
+    "trip_id":"3371871564",
+    "route_id":"2146663",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593511800",
+    "trip_id":"3371871564",
+    "route_id":"2146662",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593507804",
+    "trip_id":"3371871564",
+    "route_id":"2146661",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593503760",
+    "trip_id":"3371871564",
+    "route_id":"2146660",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593499678",
+    "trip_id":"3371871564",
+    "route_id":"2146659",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
+    "vehicle_id":"7593495554",
+    "trip_id":"3371871564",
+    "route_id":"2146658",
+    "lat":32.113063,
+    "lon":34.843994,
+    "bearing":78,
+    "velocity":0,
+    "timestamp":"2038-01-14T17:22:21+00:00",
+    "source":"hasadna-siri",
+    "nearest_stop_id":"STOP_10016",
+    "nearest_stop_name":"פלורנטין",
+    "distance_to_stop_m":5247.6199262501
+  },
+  {
     "vehicle_id":"7545089997",
     "trip_id":"3354288019",
     "route_id":"2130334",
@@ -9,9 +1087,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545085289",
@@ -23,9 +1101,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545080544",
@@ -37,9 +1115,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545075767",
@@ -51,9 +1129,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545070940",
@@ -65,9 +1143,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545066221",
@@ -79,9 +1157,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545061486",
@@ -93,9 +1171,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545056715",
@@ -107,9 +1185,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545051929",
@@ -121,9 +1199,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545047116",
@@ -135,9 +1213,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545042421",
@@ -149,9 +1227,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545037727",
@@ -163,9 +1241,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545032976",
@@ -177,9 +1255,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545028197",
@@ -191,9 +1269,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545023448",
@@ -205,9 +1283,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545018768",
@@ -219,9 +1297,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545014087",
@@ -233,9 +1311,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545009375",
@@ -247,9 +1325,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7545004638",
@@ -261,9 +1339,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544999976",
@@ -275,9 +1353,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544995492",
@@ -289,9 +1367,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544990997",
@@ -303,9 +1381,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544986456",
@@ -317,9 +1395,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544981876",
@@ -331,9 +1409,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544977302",
@@ -345,9 +1423,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544972756",
@@ -359,9 +1437,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544968183",
@@ -373,9 +1451,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544963582",
@@ -387,9 +1465,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544958974",
@@ -401,9 +1479,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544954387",
@@ -415,9 +1493,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544949928",
@@ -429,9 +1507,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544945457",
@@ -443,9 +1521,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544940943",
@@ -457,9 +1535,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544936389",
@@ -471,9 +1549,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544931864",
@@ -485,9 +1563,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544927470",
@@ -499,9 +1577,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544923063",
@@ -513,9 +1591,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544918631",
@@ -527,9 +1605,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544914161",
@@ -541,9 +1619,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544909697",
@@ -555,9 +1633,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544905284",
@@ -569,9 +1647,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544900860",
@@ -583,9 +1661,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544896397",
@@ -597,9 +1675,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544891890",
@@ -611,9 +1689,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544887675",
@@ -625,9 +1703,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544883514",
@@ -639,9 +1717,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544879370",
@@ -653,9 +1731,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544875217",
@@ -667,9 +1745,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544871056",
@@ -681,9 +1759,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544867314",
@@ -695,9 +1773,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544863589",
@@ -709,9 +1787,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544859850",
@@ -723,9 +1801,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544856077",
@@ -737,9 +1815,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544852268",
@@ -751,9 +1829,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544848501",
@@ -765,9 +1843,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544844716",
@@ -779,9 +1857,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544840918",
@@ -793,9 +1871,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544837106",
@@ -807,9 +1885,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544833283",
@@ -821,9 +1899,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544828633",
@@ -835,9 +1913,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544823837",
@@ -849,9 +1927,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544819021",
@@ -863,9 +1941,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544814182",
@@ -877,9 +1955,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544809285",
@@ -891,9 +1969,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544804522",
@@ -905,9 +1983,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544799745",
@@ -919,9 +1997,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544794946",
@@ -933,9 +2011,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544790090",
@@ -947,9 +2025,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544785134",
@@ -961,9 +2039,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544780290",
@@ -975,9 +2053,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544775420",
@@ -989,9 +2067,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544770527",
@@ -1003,9 +2081,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544765573",
@@ -1017,9 +2095,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544760548",
@@ -1031,9 +2109,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544755625",
@@ -1045,9 +2123,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544750703",
@@ -1059,9 +2137,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"7544745768",
@@ -1073,9 +2151,9 @@
     "velocity":0,
     "timestamp":"2037-12-15T19:40:42+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":67186.4283460627
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":69052.2295253208
   },
   {
     "vehicle_id":"6076162281",
@@ -1087,9 +2165,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076160255",
@@ -1101,9 +2179,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076158208",
@@ -1115,9 +2193,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076156133",
@@ -1129,9 +2207,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076154067",
@@ -1143,9 +2221,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076151994",
@@ -1157,9 +2235,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076149892",
@@ -1171,9 +2249,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076147769",
@@ -1185,9 +2263,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076145644",
@@ -1199,9 +2277,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076143604",
@@ -1213,9 +2291,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076141566",
@@ -1227,9 +2305,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076139534",
@@ -1241,9 +2319,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076137493",
@@ -1255,9 +2333,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076135469",
@@ -1269,9 +2347,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076133732",
@@ -1283,9 +2361,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076131970",
@@ -1297,9 +2375,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076130211",
@@ -1311,9 +2389,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076128434",
@@ -1325,9 +2403,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076126631",
@@ -1339,9 +2417,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076124815",
@@ -1353,9 +2431,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076122974",
@@ -1367,9 +2445,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076121091",
@@ -1381,9 +2459,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076119191",
@@ -1395,9 +2473,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076117265",
@@ -1409,9 +2487,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076115335",
@@ -1423,9 +2501,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076113388",
@@ -1437,9 +2515,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076111418",
@@ -1451,9 +2529,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076109424",
@@ -1465,9 +2543,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076107412",
@@ -1479,9 +2557,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076105434",
@@ -1493,9 +2571,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076103401",
@@ -1507,9 +2585,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076101309",
@@ -1521,9 +2599,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076099175",
@@ -1535,9 +2613,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076097007",
@@ -1549,9 +2627,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076094864",
@@ -1563,9 +2641,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076092652",
@@ -1577,9 +2655,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076090146",
@@ -1591,9 +2669,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076087594",
@@ -1605,9 +2683,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076085013",
@@ -1619,9 +2697,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076082441",
@@ -1633,9 +2711,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076079852",
@@ -1647,9 +2725,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076077247",
@@ -1661,9 +2739,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076074625",
@@ -1675,9 +2753,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076071977",
@@ -1689,9 +2767,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076069472",
@@ -1703,9 +2781,9 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   },
   {
     "vehicle_id":"6076066939",
@@ -1717,1086 +2795,8 @@
     "velocity":0,
     "timestamp":"2037-12-05T23:59:49+00:00",
     "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":56614.4624116711
-  },
-  {
-    "vehicle_id":"7535532285",
-    "trip_id":"3351056549",
-    "route_id":"2124613",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535529075",
-    "trip_id":"3351056549",
-    "route_id":"2124612",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535525842",
-    "trip_id":"3351056549",
-    "route_id":"2124611",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535522586",
-    "trip_id":"3351056549",
-    "route_id":"2124610",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535519293",
-    "trip_id":"3351056549",
-    "route_id":"2124609",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535515972",
-    "trip_id":"3351056549",
-    "route_id":"2124608",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535512758",
-    "trip_id":"3351056549",
-    "route_id":"2124607",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535509500",
-    "trip_id":"3351056549",
-    "route_id":"2124606",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535506212",
-    "trip_id":"3351056549",
-    "route_id":"2124605",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535502904",
-    "trip_id":"3351056549",
-    "route_id":"2124604",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535499571",
-    "trip_id":"3351056549",
-    "route_id":"2124603",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535496300",
-    "trip_id":"3351056549",
-    "route_id":"2124602",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535492986",
-    "trip_id":"3351056549",
-    "route_id":"2124601",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535489645",
-    "trip_id":"3351056549",
-    "route_id":"2124600",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535486276",
-    "trip_id":"3351056549",
-    "route_id":"2124599",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535482895",
-    "trip_id":"3351056549",
-    "route_id":"2124598",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535479638",
-    "trip_id":"3351056549",
-    "route_id":"2124597",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535476347",
-    "trip_id":"3351056549",
-    "route_id":"2124596",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535473064",
-    "trip_id":"3351056549",
-    "route_id":"2124595",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535469764",
-    "trip_id":"3351056549",
-    "route_id":"2124594",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535466445",
-    "trip_id":"3351056549",
-    "route_id":"2124593",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535463344",
-    "trip_id":"3351056549",
-    "route_id":"2124592",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535460212",
-    "trip_id":"3351056549",
-    "route_id":"2124591",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535457058",
-    "trip_id":"3351056549",
-    "route_id":"2124590",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535453859",
-    "trip_id":"3351056549",
-    "route_id":"2124589",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535450638",
-    "trip_id":"3351056549",
-    "route_id":"2124588",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535447440",
-    "trip_id":"3351056549",
-    "route_id":"2124587",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535444226",
-    "trip_id":"3351056549",
-    "route_id":"2124586",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535440982",
-    "trip_id":"3351056549",
-    "route_id":"2124585",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535437710",
-    "trip_id":"3351056549",
-    "route_id":"2124584",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535434416",
-    "trip_id":"3351056549",
-    "route_id":"2124583",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535431197",
-    "trip_id":"3351056549",
-    "route_id":"2124582",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535427962",
-    "trip_id":"3351056549",
-    "route_id":"2124581",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535424707",
-    "trip_id":"3351056549",
-    "route_id":"2124580",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535421436",
-    "trip_id":"3351056549",
-    "route_id":"2124579",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535418155",
-    "trip_id":"3351056549",
-    "route_id":"2124578",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535415018",
-    "trip_id":"3351056549",
-    "route_id":"2124577",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535411855",
-    "trip_id":"3351056549",
-    "route_id":"2124576",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535408691",
-    "trip_id":"3351056549",
-    "route_id":"2124575",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535405504",
-    "trip_id":"3351056549",
-    "route_id":"2124574",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535402312",
-    "trip_id":"3351056549",
-    "route_id":"2124573",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535399171",
-    "trip_id":"3351056549",
-    "route_id":"2124572",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535396018",
-    "trip_id":"3351056549",
-    "route_id":"2124571",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535392836",
-    "trip_id":"3351056549",
-    "route_id":"2124570",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535389650",
-    "trip_id":"3351056549",
-    "route_id":"2124569",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535386449",
-    "trip_id":"3351056549",
-    "route_id":"2124568",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535383439",
-    "trip_id":"3351056549",
-    "route_id":"2124567",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535380447",
-    "trip_id":"3351056549",
-    "route_id":"2124566",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535377453",
-    "trip_id":"3351056549",
-    "route_id":"2124565",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535374450",
-    "trip_id":"3351056549",
-    "route_id":"2124564",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535371461",
-    "trip_id":"3351056549",
-    "route_id":"2124563",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535368966",
-    "trip_id":"3351056549",
-    "route_id":"2124562",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535366456",
-    "trip_id":"3351056549",
-    "route_id":"2124561",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535363944",
-    "trip_id":"3351056549",
-    "route_id":"2124560",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535361409",
-    "trip_id":"3351056549",
-    "route_id":"2124559",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535358843",
-    "trip_id":"3351056549",
-    "route_id":"2124558",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535356293",
-    "trip_id":"3351056549",
-    "route_id":"2124557",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535353721",
-    "trip_id":"3351056549",
-    "route_id":"2124556",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"7535351122",
-    "trip_id":"3351056549",
-    "route_id":"2124555",
-    "lat":32.821922,
-    "lon":35.143039,
-    "bearing":296,
-    "velocity":0,
-    "timestamp":"2037-12-02T14:31:16+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10019",
-    "nearest_stop_name":"רמת החייל",
-    "distance_to_stop_m":69788.7681293228
-  },
-  {
-    "vehicle_id":"3278101627",
-    "trip_id":"1564573646",
-    "route_id":"1041627",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276877019",
-    "trip_id":"1563795134",
-    "route_id":"1041461",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276870459",
-    "trip_id":"1563795134",
-    "route_id":"1041460",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276863843",
-    "trip_id":"1563795134",
-    "route_id":"1041459",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276857591",
-    "trip_id":"1563795134",
-    "route_id":"1041458",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276851374",
-    "trip_id":"1563795134",
-    "route_id":"1041457",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276845086",
-    "trip_id":"1563795134",
-    "route_id":"1041456",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276838713",
-    "trip_id":"1563795134",
-    "route_id":"1041455",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276832272",
-    "trip_id":"1563795134",
-    "route_id":"1041454",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276825906",
-    "trip_id":"1563795134",
-    "route_id":"1041453",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276819532",
-    "trip_id":"1563795134",
-    "route_id":"1041452",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276813113",
-    "trip_id":"1563795134",
-    "route_id":"1041451",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276806624",
-    "trip_id":"1563795134",
-    "route_id":"1041450",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276800052",
-    "trip_id":"1563795134",
-    "route_id":"1041449",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276793645",
-    "trip_id":"1563795134",
-    "route_id":"1041448",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276787228",
-    "trip_id":"1563795134",
-    "route_id":"1041447",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276780733",
-    "trip_id":"1563795134",
-    "route_id":"1041446",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
-  },
-  {
-    "vehicle_id":"3276774178",
-    "trip_id":"1563795134",
-    "route_id":"1041445",
-    "lat":31.268779,
-    "lon":34.81422,
-    "bearing":0,
-    "velocity":0,
-    "timestamp":"2037-05-27T20:27:59+00:00",
-    "source":"hasadna-siri",
-    "nearest_stop_id":"STOP_10007",
-    "nearest_stop_name":"שדרות רוטשילד",
-    "distance_to_stop_m":74588.5610891001
+    "nearest_stop_id":"STOP_10000",
+    "nearest_stop_name":"תחנה מרכזית",
+    "distance_to_stop_m":59172.2994186628
   }
 ]
