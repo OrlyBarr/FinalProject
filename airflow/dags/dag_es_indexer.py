@@ -1,9 +1,15 @@
 """
 airflow/dags/dag_es_indexer.py
 DAG 4: Kafka → Elasticsearch real-time indexer
-Schedule: every 30 seconds
-Reads from all Kafka topics and bulk-upserts into Elasticsearch
-so Kibana can visualize live transit data.
+Schedule: every 1 minute
+
+FIXES:
+  - execution_timeout raised from 25s to 60s
+    (was impossible: 6 parallel tasks each with 5s consumer timeout + ES write time)
+  - schedule_interval changed from 30s to 1 minute to give runs room to breathe
+  - Each index task now wraps in try/except and pushes -1 on error so
+    log_indexing_summary can report failures instead of silently showing 0
+  - index_minio_backfill documents the duplicate-indexing risk and adds a guard
 """
 
 import sys
@@ -16,8 +22,8 @@ from airflow.utils.trigger_rule import TriggerRule
 sys.path.append("/opt/airflow")
 
 import os
-os.environ.setdefault("ELASTICSEARCH_HOST",    "http://elasticsearch:9200")
-os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS","kafka:29092")
+os.environ.setdefault("ELASTICSEARCH_HOST",     "http://elasticsearch:9200")
+os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
 default_args = {
     "owner":             "transit-team",
@@ -26,85 +32,114 @@ default_args = {
     "email_on_failure":  False,
     "retries":           1,
     "retry_delay":       timedelta(seconds=10),
-    "execution_timeout": timedelta(seconds=25),
+    "execution_timeout": timedelta(seconds=60),  # FIX: was 25s — impossible with 6 parallel tasks
 }
 
 
-def index_bus_positions(**context):
+def _safe_index(context, xcom_key: str, topic: str, max_msgs: int, consumer_timeout_ms: int):
+    """
+    FIX: Shared wrapper that catches exceptions and pushes -1 on failure,
+    so log_indexing_summary can distinguish 'no data' (0) from 'task failed' (-1).
+    Without this, a crash silently showed 0 in the summary.
+    """
     from storage.es_indexer import index_topic
-    n = index_topic("bus_positions", max_msgs=1000, consumer_timeout_ms=5000)
-    print(f"ES bus positions indexed: {n}")
-    context["ti"].xcom_push(key="bus_n", value=n)
+    try:
+        n = index_topic(topic, max_msgs=max_msgs, consumer_timeout_ms=consumer_timeout_ms)
+        context["ti"].xcom_push(key=xcom_key, value=n)
+        print(f"ES {topic} indexed: {n}")
+        return n
+    except Exception as e:
+        print(f"ERROR indexing {topic}: {e}")
+        context["ti"].xcom_push(key=xcom_key, value=-1)
+        raise  # re-raise so Airflow marks the task failed
+
+
+def index_bus_positions(**context):
+    _safe_index(context, "bus_n", "bus_positions", max_msgs=1000, consumer_timeout_ms=5000)
 
 
 def index_trip_updates(**context):
-    from storage.es_indexer import index_topic
-    n = index_topic("trip_updates", max_msgs=1000, consumer_timeout_ms=5000)
-    print(f"ES trip updates indexed: {n}")
-    context["ti"].xcom_push(key="trips_n", value=n)
+    _safe_index(context, "trips_n", "trip_updates", max_msgs=1000, consumer_timeout_ms=5000)
 
 
 def index_train_positions(**context):
-    from storage.es_indexer import index_topic
-    n = index_topic("train_positions", max_msgs=500, consumer_timeout_ms=5000)
-    print(f"ES train positions indexed: {n}")
-    context["ti"].xcom_push(key="trains_n", value=n)
+    _safe_index(context, "trains_n", "train_positions", max_msgs=500, consumer_timeout_ms=5000)
 
 
 def index_service_alerts(**context):
-    from storage.es_indexer import index_topic
-    n = index_topic("service_alerts", max_msgs=200, consumer_timeout_ms=3000)
-    print(f"ES service alerts indexed: {n}")
-    context["ti"].xcom_push(key="alerts_n", value=n)
+    _safe_index(context, "alerts_n", "service_alerts", max_msgs=200, consumer_timeout_ms=3000)
 
 
 def index_delay_events(**context):
-    from storage.es_indexer import index_topic
-    n = index_topic("delay_events", max_msgs=200, consumer_timeout_ms=3000)
-    print(f"ES delay events indexed: {n}")
-    context["ti"].xcom_push(key="delays_n", value=n)
+    _safe_index(context, "delays_n", "delay_events", max_msgs=200, consumer_timeout_ms=3000)
 
 
 def index_minio_backfill(**context):
-    """Read latest files from MinIO and index into ES (catches any data missed by Kafka consumer)."""
-    from storage.es_indexer import index_from_minio
+    """
+    Read latest files from MinIO and index into ES (catches data missed by Kafka consumer).
+
+    FIX: Added already-indexed guard using an ES doc to track the last indexed file key.
+    Without this, the same max_files=3 MinIO files were re-indexed every 30 seconds,
+    causing duplicate documents in Elasticsearch.
+    """
+    from storage.es_indexer import index_from_minio, get_last_indexed_key, set_last_indexed_key
     from datetime import datetime
+
     today = datetime.utcnow().strftime("year=%Y/month=%m/day=%d")
-    n = index_from_minio("bus_positions", date_prefix=today, max_files=3)
-    print(f"MinIO backfill indexed: {n} docs")
-    context["ti"].xcom_push(key="minio_n", value=n)
+
+    try:
+        last_key = get_last_indexed_key("bus_positions", today)
+        n = index_from_minio("bus_positions", date_prefix=today, max_files=3, after_key=last_key)
+        if n > 0:
+            set_last_indexed_key("bus_positions", today)
+        print(f"MinIO backfill indexed: {n} docs")
+        context["ti"].xcom_push(key="minio_n", value=n)
+    except Exception as e:
+        print(f"ERROR in MinIO backfill: {e}")
+        context["ti"].xcom_push(key="minio_n", value=-1)
+        raise
 
 
 def log_indexing_summary(**context):
+    """
+    FIX: Now distinguishes between 0 (no data) and -1 (task failed).
+    Logs a warning line for any failed tasks so ops can spot issues at a glance.
+    """
     ti = context["ti"]
     summary = {
-        "bus_positions":   ti.xcom_pull(task_ids="index_bus_positions",  key="bus_n")    or 0,
-        "trip_updates":    ti.xcom_pull(task_ids="index_trip_updates",   key="trips_n")  or 0,
-        "train_positions": ti.xcom_pull(task_ids="index_train_positions",key="trains_n") or 0,
-        "service_alerts":  ti.xcom_pull(task_ids="index_service_alerts", key="alerts_n") or 0,
-        "delay_events":    ti.xcom_pull(task_ids="index_delay_events",   key="delays_n") or 0,
-        "minio_backfill":  ti.xcom_pull(task_ids="index_minio_backfill", key="minio_n")  or 0,
+        "bus_positions":   ti.xcom_pull(task_ids="index_bus_positions",   key="bus_n")    or 0,
+        "trip_updates":    ti.xcom_pull(task_ids="index_trip_updates",    key="trips_n")  or 0,
+        "train_positions": ti.xcom_pull(task_ids="index_train_positions", key="trains_n") or 0,
+        "service_alerts":  ti.xcom_pull(task_ids="index_service_alerts",  key="alerts_n") or 0,
+        "delay_events":    ti.xcom_pull(task_ids="index_delay_events",    key="delays_n") or 0,
+        "minio_backfill":  ti.xcom_pull(task_ids="index_minio_backfill",  key="minio_n")  or 0,
     }
-    total = sum(summary.values())
-    print(f"ES Indexing Summary: {summary} | total={total}")
+
+    failed  = [k for k, v in summary.items() if v == -1]
+    success = {k: v for k, v in summary.items() if v >= 0}
+    total   = sum(v for v in success.values())
+
+    if failed:
+        print(f"FAILED tasks: {failed}")
+    print(f"ES Indexing Summary: {success} | total={total}")
 
 
 with DAG(
     dag_id="dag_es_indexer",
     default_args=default_args,
-    description="Kafka → Elasticsearch indexer (every 30s) for Kibana dashboards",
-    schedule_interval=timedelta(seconds=30),
+    description="Kafka → Elasticsearch indexer (every 1 min) for Kibana dashboards",
+    schedule_interval=timedelta(minutes=1),    # FIX: was timedelta(seconds=30)
     catchup=False,
     max_active_runs=1,
     tags=["elasticsearch", "kibana", "transit"],
 ) as dag:
 
-    t_bus    = PythonOperator(task_id="index_bus_positions",  python_callable=index_bus_positions)
-    t_trips  = PythonOperator(task_id="index_trip_updates",   python_callable=index_trip_updates)
-    t_trains = PythonOperator(task_id="index_train_positions",python_callable=index_train_positions)
-    t_alerts = PythonOperator(task_id="index_service_alerts", python_callable=index_service_alerts)
-    t_delays = PythonOperator(task_id="index_delay_events",   python_callable=index_delay_events)
-    t_minio  = PythonOperator(task_id="index_minio_backfill", python_callable=index_minio_backfill)
+    t_bus    = PythonOperator(task_id="index_bus_positions",   python_callable=index_bus_positions)
+    t_trips  = PythonOperator(task_id="index_trip_updates",    python_callable=index_trip_updates)
+    t_trains = PythonOperator(task_id="index_train_positions", python_callable=index_train_positions)
+    t_alerts = PythonOperator(task_id="index_service_alerts",  python_callable=index_service_alerts)
+    t_delays = PythonOperator(task_id="index_delay_events",    python_callable=index_delay_events)
+    t_minio  = PythonOperator(task_id="index_minio_backfill",  python_callable=index_minio_backfill)
 
     t_summary = PythonOperator(
         task_id="log_indexing_summary",

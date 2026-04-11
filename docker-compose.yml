@@ -79,8 +79,11 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
 
-  # ─────────────────────────────────────────
+# ─────────────────────────────────────────
   # KAFKA TOPIC INITIALIZER
+  # ─────────────────────────────────────────
+  # FIX: Added traffic-data topic (was missing — dag_traffic_ingestion producer
+  #      would fail on first publish attempt with UnknownTopicOrPartitionError)
   # ─────────────────────────────────────────
   kafka-init:
     image: confluentinc/cp-kafka:7.4.0
@@ -96,6 +99,7 @@ services:
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 4 --replication-factor 1 --topic train-positions
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 2 --replication-factor 1 --topic trip-updates
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 2 --replication-factor 1 --topic service-alerts
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 2 --replication-factor 1 --topic traffic-data
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic delay-events
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic pipeline-errors
       echo 'All transit topics created!'
@@ -242,6 +246,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
     container_name: elasticsearch
+    restart: unless-stopped
     networks: [transit_net]
     environment:
       - discovery.type=single-node
@@ -264,6 +269,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.8.0
     container_name: kibana
+    restart: unless-stopped
     networks: [transit_net]
     depends_on:
       elasticsearch:

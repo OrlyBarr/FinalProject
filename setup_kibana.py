@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 setup_kibana.py
-יוצר index patterns ודשבורד ב-Kibana אוטומטית.
-הרץ: python3 setup_kibana.py
+Automatically creates index patterns and dashboard in Kibana.
+Run: python3 setup_kibana.py
 """
 
 import requests
@@ -125,7 +125,7 @@ def create_dashboard():
     viz1_id = "bus-count-over-time"
     viz1 = {
         "attributes": {
-            "title": "🚌 מיקומי אוטובוסים לאורך זמן",
+            "title": "🚌 Bus Positions Over Time",
             "visState": json.dumps({
                 "title": "Bus Positions Over Time",
                 "type": "line",
@@ -167,7 +167,7 @@ def create_dashboard():
     viz2_id = "operator-distribution"
     viz2 = {
         "attributes": {
-            "title": "🏢 התפלגות לפי מפעיל",
+            "title": "🏢 Operator Distribution",
             "visState": json.dumps({
                 "title": "Operator Distribution",
                 "type": "pie",
@@ -201,7 +201,7 @@ def create_dashboard():
     viz3_id = "delay-distribution"
     viz3 = {
         "attributes": {
-            "title": "⏱️ התפלגות איחורים",
+            "title": "⏱️ Delay Distribution",
             "visState": json.dumps({
                 "title": "Delay Distribution",
                 "type": "histogram",
@@ -235,7 +235,7 @@ def create_dashboard():
     viz4_id = "traffic-congestion-region"
     viz4 = {
         "attributes": {
-            "title": "🚗 עומסי תנועה לפי אזור",
+            "title": "🚗 Traffic Congestion by Region",
             "visState": json.dumps({
                 "title": "Traffic by Region",
                 "type": "histogram",
@@ -270,7 +270,7 @@ def create_dashboard():
     viz5_id = "active-buses-metric"
     viz5 = {
         "attributes": {
-            "title": "🚌 סה\"כ אוטובוסים פעילים",
+            "title": "🚌 Total Active Buses",
             "visState": json.dumps({
                 "title": "Total Active Buses",
                 "type": "metric",
@@ -362,7 +362,7 @@ def create_dashboard():
 def main():
     print("\n🚌 Israel Transit — Kibana Setup\n")
 
-    # מחק index patterns ודשבורד ישנים לפני יצירה מחדש
+    # Delete old index patterns and dashboard before recreating
     for obj_type, obj_id in [
         ("dashboard", "israel-transit-dashboard"),
         ("visualization", "bus-count-over-time"),

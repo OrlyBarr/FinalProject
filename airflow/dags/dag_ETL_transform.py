@@ -2,6 +2,14 @@
 airflow/dags/dag_etl_transform.py
 DAG 2: Consume all Kafka topics → Transform → S3 + Redshift
 Schedule: every 10 minutes
+
+FIXES:
+  - schedule_interval changed from timedelta(seconds=30) to timedelta(minutes=10)
+    (docstring said 10 min, code had 30s — this was hammering Redshift 120x/hour)
+  - traffic topic key changed from "traffic_data" to "traffic-data" to match
+    the Kafka topic name created in kafka-init (hyphen, not underscore)
+  - consume_service_alerts refactored to use _consume_topic (removed copy-paste logic)
+  - Redshift upsert for service_alerts now uses batch_upsert instead of per-record loop
 """
 
 from datetime import datetime, timedelta, timezone
@@ -22,16 +30,28 @@ default_args = {
 }
 
 
-def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: str, redshift_table: str, max_msgs: int = 1000):
+def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: str,
+                   redshift_table: str, max_msgs: int = 1000,
+                   filter_fn=None, upsert_key: str = None):
     """
     Generic consume → raw S3 → transform → processed S3 + Redshift.
 
+    Args:
+        topic_key:       Key in KAFKA_TOPICS config (e.g. "bus-positions")
+        group_id:        Kafka consumer group ID (must be unique per DAG/topic)
+        transformer_cls: Transformer class with a .transform(raw) method
+        s3_prefix:       S3 prefix for processed output (raw/ derived automatically)
+        redshift_table:  Target Redshift table (schema.table)
+        max_msgs:        Max messages to consume per run
+        filter_fn:       Optional callable(raw_record) → bool to filter records
+        upsert_key:      If set, use batch_upsert with this key instead of bulk_insert
+
     Flow:
-      1. קרא מ-Kafka
-      2. שמור raw records ל-S3 raw/
-      3. עבד (transform)
-      4. שמור processed records ל-S3 processed/
-      5. טען ל-Redshift (אם מוגדר)
+      1. Read from Kafka
+      2. Save raw records to S3 raw/
+      3. Transform (with optional filter)
+      4. Save processed records to S3 processed/
+      5. Load to Redshift via bulk_insert or batch_upsert (if configured)
     """
     from kafka import KafkaConsumer
     from config.settings import KAFKA_TOPICS
@@ -49,19 +69,16 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
         max_poll_records=500,
     )
 
-    transformer      = transformer_cls()
+    transformer = transformer_cls()
 
-    # raw prefix: raw/bus-positions, raw/train-positions וכו'
     raw_prefix       = s3_prefix.replace("processed/", "raw/")
-    s3_raw           = S3Writer(prefix=raw_prefix)
-
-    # processed prefix: processed/bus-positions וכו'
     processed_prefix = s3_prefix if s3_prefix.startswith("processed/") else s3_prefix.replace("raw/", "processed/")
+    s3_raw           = S3Writer(prefix=raw_prefix)
     s3_processed     = S3Writer(prefix=processed_prefix)
 
-    raw_records        = []
-    processed_records  = []
-    count              = 0
+    raw_records       = []
+    processed_records = []
+    count             = 0
 
     for msg in consumer:
         if count >= max_msgs:
@@ -70,14 +87,16 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
         if not raw:
             continue
 
-        # שמור את ה-raw record כמו שהגיע (עם metadata)
+        # Apply optional record filter (e.g. require alert_id)
+        if filter_fn and not filter_fn(raw):
+            continue
+
         raw_record = dict(raw)
-        raw_record["_fetched_at"]  = msg.value.get("fetched_at")
-        raw_record["_source"]      = msg.value.get("source")
+        raw_record["_fetched_at"]   = msg.value.get("fetched_at")
+        raw_record["_source"]       = msg.value.get("source")
         raw_record["_kafka_offset"] = msg.offset
         raw_records.append(raw_record)
 
-        # עבד ל-processed
         try:
             transformed = transformer.transform(raw)
             transformed["ingested_at"] = msg.value.get("fetched_at")
@@ -90,22 +109,23 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     consumer.commit()
     consumer.close()
 
-    # כתוב raw → S3 raw/
     if raw_records:
         s3_raw.write_batch(raw_records)
         print(f"Raw: {len(raw_records)} records → s3://{raw_prefix}")
 
-    # כתוב processed → S3 processed/
     if processed_records:
         s3_processed.write_batch(processed_records)
         print(f"Processed: {len(processed_records)} records → s3://{processed_prefix}")
 
-        # טען ל-Redshift אם מוגדר
         if os.getenv("REDSHIFT_HOST"):
             from warehouse.redshift_writer import RedshiftWriter
-            redshift_writer = RedshiftWriter()
-            redshift_writer.bulk_insert(redshift_table, processed_records)
-            redshift_writer.close()
+            rw = RedshiftWriter()
+            if upsert_key:
+                # FIX: batch upsert instead of per-record loop
+                rw.batch_upsert(redshift_table, processed_records, upsert_key)
+            else:
+                rw.bulk_insert(redshift_table, processed_records)
+            rw.close()
 
     return len(processed_records)
 
@@ -113,7 +133,7 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
 def consume_bus_positions(**context):
     from etl.transformers import BusPositionTransformer
     n = _consume_topic(
-        "bus_positions", "bus-etl-group",
+        "bus-positions", "bus-etl-group",
         BusPositionTransformer,
         "processed/bus-positions",
         "transit.fact_bus_positions",
@@ -126,7 +146,7 @@ def consume_bus_positions(**context):
 def consume_trip_updates(**context):
     from etl.transformers import TripUpdateTransformer
     n = _consume_topic(
-        "trip_updates", "trips-etl-group",
+        "trip-updates", "trips-etl-group",
         TripUpdateTransformer,
         "processed/trip-updates",
         "transit.fact_trip_updates",
@@ -139,7 +159,7 @@ def consume_trip_updates(**context):
 def consume_train_positions(**context):
     from etl.transformers import TrainPositionTransformer
     n = _consume_topic(
-        "train_positions", "trains-etl-group",
+        "train-positions", "trains-etl-group",
         TrainPositionTransformer,
         "processed/train-positions",
         "transit.fact_train_positions",
@@ -149,47 +169,21 @@ def consume_train_positions(**context):
 
 
 def consume_service_alerts(**context):
+    """
+    FIX: Refactored to use _consume_topic with filter_fn and upsert_key
+    instead of duplicating the consumer loop logic.
+    """
     from etl.transformers import ServiceAlertTransformer
-    from kafka import KafkaConsumer
-    from config.settings import KAFKA_TOPICS
-    from storage.s3_writer import S3Writer
-    import json, os
-
-    consumer = KafkaConsumer(
-        KAFKA_TOPICS["service_alerts"],
-        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
-        group_id="alerts-etl-group",
-        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="earliest",
-        enable_auto_commit=False,
-        consumer_timeout_ms=5000,    # 5s max wait
+    n = _consume_topic(
+        "service-alerts", "alerts-etl-group",
+        ServiceAlertTransformer,
+        "processed/service-alerts",
+        "transit.fact_service_alerts",
+        filter_fn=lambda raw: bool(raw.get("alert_id")),  # skip records without alert_id
+        upsert_key="alert_id",                             # FIX: batch upsert, not per-record loop
     )
-    transformer     = ServiceAlertTransformer()
-    s3_writer       = S3Writer(prefix="processed/service-alerts")
-
-    records = []
-    for msg in consumer:
-        raw = msg.value.get("data", {})
-        if not raw.get("alert_id"):
-            continue
-        transformed = transformer.transform(raw)
-        transformed["ingested_at"] = msg.value.get("fetched_at")
-        records.append(transformed)
-
-    consumer.commit()
-    consumer.close()
-
-    if records:
-        s3_writer.write_batch(records)
-        if os.getenv("REDSHIFT_HOST"):   # skip Redshift when not configured
-            from warehouse.redshift_writer import RedshiftWriter
-            redshift_writer = RedshiftWriter()
-            for r in records:
-                redshift_writer.upsert("transit.fact_service_alerts", r, "alert_id")
-            redshift_writer.close()
-
-    print(f"Service alerts processed: {len(records)}")
-    context["ti"].xcom_push(key="alerts_n", value=len(records))
+    print(f"Service alerts processed: {n}")
+    context["ti"].xcom_push(key="alerts_n", value=n)
 
 
 def detect_and_publish_delay_events(**context):
@@ -200,7 +194,6 @@ def detect_and_publish_delay_events(**context):
     """
     from kafka import KafkaProducer
     import json, os
-    from datetime import timezone
 
     if not os.getenv("REDSHIFT_HOST"):
         print("REDSHIFT_HOST not set — skipping delay detection (requires Redshift)")
@@ -239,14 +232,14 @@ def detect_and_publish_delay_events(**context):
 
     for delay in severe_delays:
         producer.send("delay-events", value={
-            "event_type":     "severe_delay",
-            "trip_id":        delay["trip_id"],
-            "route":          delay["route_short_name"],
-            "stop_id":        delay["stop_id"],
-            "delay_minutes":  delay["delay_minutes"],
-            "severity":       delay["delay_category"],
-            "time_period":    delay["time_period"],
-            "detected_at":    now_str,
+            "event_type":    "severe_delay",
+            "trip_id":       delay["trip_id"],
+            "route":         delay["route_short_name"],
+            "stop_id":       delay["stop_id"],
+            "delay_minutes": delay["delay_minutes"],
+            "severity":      delay["delay_category"],
+            "time_period":   delay["time_period"],
+            "detected_at":   now_str,
         })
 
     producer.flush()
@@ -256,12 +249,13 @@ def detect_and_publish_delay_events(**context):
 
 
 def consume_traffic(**context):
+    """
+    FIX: topic_key changed from "traffic_data" (underscore) to "traffic-data" (hyphen)
+    to match the Kafka topic name defined in kafka-init and config/settings.py.
+    """
     from etl.traffic_transformer import TrafficTransformer
-    # s3_prefix="processed/traffic-data" →
-    #   raw will be written to:       raw/traffic-data/
-    #   processed will be written to: processed/traffic-data/
     n = _consume_topic(
-        "traffic_data", "traffic-etl-group",
+        "traffic-data", "traffic-etl-group",   # FIX: was "traffic_data"
         TrafficTransformer,
         "processed/traffic-data",
         "transit.fact_traffic_flow",
@@ -274,11 +268,11 @@ def consume_traffic(**context):
 def log_etl_summary(**context):
     ti = context["ti"]
     summary = {
-        "bus_positions":   ti.xcom_pull(task_ids="consume_bus_positions",  key="bus_n")    or 0,
-        "trip_updates":    ti.xcom_pull(task_ids="consume_trip_updates",   key="trips_n")  or 0,
-        "train_positions": ti.xcom_pull(task_ids="consume_train_positions",key="trains_n") or 0,
-        "service_alerts":  ti.xcom_pull(task_ids="consume_service_alerts", key="alerts_n") or 0,
-        "traffic_flow":    ti.xcom_pull(task_ids="consume_traffic",        key="traffic_n") or 0,
+        "bus_positions":   ti.xcom_pull(task_ids="consume_bus_positions",  key="bus_n")          or 0,
+        "trip_updates":    ti.xcom_pull(task_ids="consume_trip_updates",   key="trips_n")        or 0,
+        "train_positions": ti.xcom_pull(task_ids="consume_train_positions",key="trains_n")       or 0,
+        "service_alerts":  ti.xcom_pull(task_ids="consume_service_alerts", key="alerts_n")       or 0,
+        "traffic_flow":    ti.xcom_pull(task_ids="consume_traffic",        key="traffic_n")      or 0,
         "delay_events":    ti.xcom_pull(task_ids="detect_delay_events",    key="delay_events_n") or 0,
     }
     total = sum(summary.values())
@@ -292,17 +286,17 @@ with DAG(
     dag_id="dag_etl_transform",
     default_args=default_args,
     description="Consume Kafka → Transform → S3 + Redshift (every 10 min)",
-    schedule_interval=timedelta(seconds=30),   # every 30 seconds
+    schedule_interval=timedelta(minutes=10),   # FIX: was timedelta(seconds=30)
     catchup=False,
     max_active_runs=1,
     tags=["etl", "transform", "transit"],
 ) as dag:
 
     t_traffic = PythonOperator(task_id="consume_traffic",          python_callable=consume_traffic)
-    t_bus    = PythonOperator(task_id="consume_bus_positions",   python_callable=consume_bus_positions)
-    t_trips  = PythonOperator(task_id="consume_trip_updates",    python_callable=consume_trip_updates)
-    t_trains = PythonOperator(task_id="consume_train_positions", python_callable=consume_train_positions)
-    t_alerts = PythonOperator(task_id="consume_service_alerts",  python_callable=consume_service_alerts)
+    t_bus     = PythonOperator(task_id="consume_bus_positions",    python_callable=consume_bus_positions)
+    t_trips   = PythonOperator(task_id="consume_trip_updates",     python_callable=consume_trip_updates)
+    t_trains  = PythonOperator(task_id="consume_train_positions",  python_callable=consume_train_positions)
+    t_alerts  = PythonOperator(task_id="consume_service_alerts",   python_callable=consume_service_alerts)
 
     t_delays = PythonOperator(
         task_id="detect_delay_events",

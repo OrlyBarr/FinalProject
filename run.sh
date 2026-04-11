@@ -130,6 +130,20 @@ docker compose pull --quiet 2>/dev/null || true
 log "Removing old containers that may cause conflicts..."
 docker compose down --remove-orphans 2>/dev/null || true
 
+# Clean up orphaned containers from previous sessions (hash-prefix names)
+# These arise when a container was first started without container_name set
+log "Cleaning up orphaned containers from previous sessions..."
+for svc in elasticsearch postgres airflow-webserver airflow-scheduler kibana kafka kafka-ui minio zookeeper; do
+  # Find containers with this compose-service label that are NOT named exactly $svc
+  ORPHANS=$(docker ps -a --filter "label=com.docker.compose.service=${svc}" \
+    --format '{{.Names}}' 2>/dev/null | grep -v "^${svc}$" || true)
+  for ORPHAN in $ORPHANS; do
+    warn "Found orphaned container: $ORPHAN — attempting cleanup..."
+    docker stop "$ORPHAN" 2>/dev/null && docker rm "$ORPHAN" 2>/dev/null || \
+      warn "Could not remove $ORPHAN (may need: sudo docker rm -f $ORPHAN)"
+  done
+done
+
 # Force-remove only STOPPED/EXITED containers with conflicting names (skip running ones)
 for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
   STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
@@ -294,7 +308,7 @@ step "8 — Enabling Airflow DAGs"
 
 sleep 5  # Wait for DAG files to sync
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
@@ -333,10 +347,16 @@ if here_key:
     try:
         r = requests.get(
             'https://data.traffic.hereapi.com/v7/flow',
-            params={'apiKey': here_key, 'in': 'bbox:34.7,32.0,35.0,32.2'},
+            params={'apiKey': here_key, 'in': 'bbox:34.7,31.9,35.0,32.1',
+                    'locationReferencing': 'shape'},
             timeout=5
         )
-        print(f'✅ HERE Traffic API: available (HTTP {r.status_code})')
+        if r.status_code == 200:
+            print(f'✅ HERE Traffic API: available and responding (HTTP 200)')
+        elif r.status_code == 401:
+            print(f'❌ HERE Traffic API: invalid API key (HTTP 401)')
+        else:
+            print(f'⚠️  HERE Traffic API: reachable, key valid (HTTP {r.status_code})')
     except Exception as e:
         print(f'⚠️  HERE Traffic API: {e}')
 else:
@@ -422,9 +442,9 @@ echo -e "  ${YELLOW}Service status:${NC}    docker compose ps"
 echo -e "  ${YELLOW}Manual producer:${NC}   source venv/bin/activate && python3 producers/bus_positions_producer.py"
 echo ""
 echo -e "${BOLD}  🚌  Project components:${NC}"
-echo -e "  • ${GREEN}4 Producers${NC} fetching data from GTFS-RT and Israel Railways"
-echo -e "  • ${GREEN}6 Kafka Topics${NC} for real-time streaming"
-echo -e "  • ${GREEN}3 Airflow DAGs${NC} for ETL scheduling"
+  echo -e "  • ${GREEN}5 Producers${NC} fetching data from GTFS-RT, Israel Railways, and HERE Traffic API"
+  echo -e "  • ${GREEN}7 Kafka Topics${NC} for real-time streaming"
+echo -e "  • ${GREEN}5 Airflow DAGs${NC} for ETL scheduling"
 echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
 echo ""
