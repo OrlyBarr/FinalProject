@@ -53,6 +53,17 @@ class ServiceAlertsProducer(BaseProducer):
             self.logger.error(f"Failed to fetch ServiceAlerts: {e}")
             return []
 
+        # Guard: MOT server sometimes returns an HTML error page (IP/WAF block)
+        # instead of a binary protobuf — detect it early for a clear error message.
+        if response.headers.get("Content-Type", "").startswith("text/html"):
+            self.logger.error(
+                f"MOT ServiceAlerts feed returned HTML instead of protobuf — "
+                f"IP may be blocked by WAF or service is unavailable "
+                f"(HTTP {response.status_code}, {len(response.content)} bytes). "
+                f"Check https://gtfs.mot.gov.il/ for status."
+            )
+            return []
+
         feed = gtfs_realtime_pb2.FeedMessage()
         try:
             feed.ParseFromString(response.content)

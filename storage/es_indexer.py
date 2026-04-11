@@ -261,3 +261,11 @@ def set_last_indexed_key(topic_key: str, date_prefix: str, last_key: str = "done
 
 
 if __name__ == "__main__":
+    import sys
+    topic = sys.argv[1] if len(sys.argv) > 1 else None
+    if topic:
+        n = index_topic(topic)
+        print(f"Indexed {n} documents into transit-{topic.replace('_', '-')}")
+    else:
+        results = index_all_topics()
+        print("Indexing complete:", results)
