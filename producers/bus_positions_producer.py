@@ -102,14 +102,13 @@ class BusPositionsProducer(BaseProducer):
                 "route_id":         line_ref,
                 "operator_id":      operator_ref,
                 "operator_name":    OPERATORS.get(operator_ref, f"unknown_operator_{operator_ref}" if operator_ref else "unknown"),
-                "direction_id":     item.get("siri_route__direction_id"),  # FIX: singular
                 "start_date":       timestamp[:10],
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
                 "bearing":          item.get("bearing"),
-                "speed_kmh":        None,
+                "speed_kmh":        item.get("velocity"),          # FIX: was None; API provides "velocity" (km/h)
                 "current_stop_seq": item.get("current_stop_sequence"),
-                "stop_id":          str(item.get("siri_stop_id") or ""),
+                "stop_id":          str(item.get("siri_ride_stop_id") or ""),  # FIX: was siri_stop_id (nonexistent); correct field is siri_ride_stop_id
                 "current_status":   "in_transit",
                 "timestamp":        timestamp,
                 "congestion_level": 0,
