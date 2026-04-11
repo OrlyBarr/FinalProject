@@ -154,7 +154,8 @@ def index_all_topics(max_msgs: int = 2000) -> dict:
     return results
 
 
-def index_from_minio(topic_key: str, date_prefix: str = None, max_files: int = 10) -> int:
+def index_from_minio(topic_key: str, date_prefix: str = None,
+                     max_files: int = 10, after_key: str = None) -> int:
     """
     Read processed JSON files from MinIO and index them into Elasticsearch.
     Use this to backfill historical data that was stored by the ETL DAG.
@@ -163,6 +164,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None, max_files: int = 1
         topic_key:   e.g. "bus_positions" reads from raw/bus-positions/
         date_prefix: e.g. "year=2026/month=03/day=01" to narrow the scan
         max_files:   max number of JSON files to process per call
+        after_key:   only index files whose S3 key > after_key (skip already-indexed)
     """
     import boto3
     from botocore.client import Config
@@ -229,12 +231,33 @@ def index_from_minio(topic_key: str, date_prefix: str = None, max_files: int = 1
     return total_docs
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Last-indexed tracking helpers (used by dag_es_indexer MinIO backfill)
+# Stores the last-processed S3 key in a small Elasticsearch document so that
+# each backfill run only processes *new* files, preventing duplicate indexing.
+# ─────────────────────────────────────────────────────────────────────────────
+_TRACKER_INDEX = "transit-indexer-state"
+
+
+def get_last_indexed_key(topic_key: str, date_prefix: str) -> str | None:
+    """Return the S3 key of the last file indexed for this topic + date, or None."""
+    es  = get_es_client()
+    doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
+    try:
+        res = es.get(index=_TRACKER_INDEX, id=doc_id, ignore=[404])
+        return res.get("_source", {}).get("last_key") if res.get("found") else None
+    except Exception:
+        return None
+
+
+def set_last_indexed_key(topic_key: str, date_prefix: str, last_key: str = "done") -> None:
+    """Persist the last-indexed S3 key for this topic + date."""
+    es  = get_es_client()
+    doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
+    try:
+        es.index(index=_TRACKER_INDEX, id=doc_id, document={"last_key": last_key, "updated_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as e:
+        log.warning(f"Could not save indexer state: {e}")
+
+
 if __name__ == "__main__":
-    import sys
-    topic = sys.argv[1] if len(sys.argv) > 1 else None
-    if topic:
-        n = index_topic(topic)
-        print(f"Indexed {n} documents into transit-{topic.replace('_', '-')}")
-    else:
-        results = index_all_topics()
-        print("Indexing complete:", results)

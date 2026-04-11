@@ -37,7 +37,7 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     Generic consume → raw S3 → transform → processed S3 + Redshift.
 
     Args:
-        topic_key:       Key in KAFKA_TOPICS config (e.g. "bus-positions")
+        topic_key:       Kafka topic name directly (e.g. "bus-positions", "traffic-data")
         group_id:        Kafka consumer group ID (must be unique per DAG/topic)
         transformer_cls: Transformer class with a .transform(raw) method
         s3_prefix:       S3 prefix for processed output (raw/ derived automatically)
@@ -54,12 +54,11 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
       5. Load to Redshift via bulk_insert or batch_upsert (if configured)
     """
     from kafka import KafkaConsumer
-    from config.settings import KAFKA_TOPICS
     from storage.s3_writer import S3Writer
     import json, os
 
     consumer = KafkaConsumer(
-        KAFKA_TOPICS[topic_key],
+        topic_key,   # topic_key IS the Kafka topic name (e.g. "bus-positions", "traffic-data")
         bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
         group_id=group_id,
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
@@ -188,64 +187,91 @@ def consume_service_alerts(**context):
 
 def detect_and_publish_delay_events(**context):
     """
-    Read from fact_trip_updates, find new severe delays,
-    publish to delay-events Kafka topic for real-time alerting.
-    Skipped when REDSHIFT_HOST is not configured.
+    Detect severe delay events from the trip-updates Kafka topic and:
+      1. Write them to MinIO raw/delay-events/ and processed/delay-events/
+      2. Publish to the delay-events Kafka topic for real-time alerting + ES indexing
+
+    Uses a dedicated consumer group (delay-detect-group) so it reads trip-updates
+    independently of the ETL consumer (trips-etl-group) without interfering with it.
+
+    DOES NOT require REDSHIFT — works with Kafka + MinIO only.
+    Threshold: delay_minutes >= 5 (minor delays excluded from delay-events).
     """
-    from kafka import KafkaProducer
+    from kafka import KafkaConsumer, KafkaProducer
+    from etl.transformers import TripUpdateTransformer
+    from storage.s3_writer import S3Writer
     import json, os
+    from datetime import datetime, timezone
 
-    if not os.getenv("REDSHIFT_HOST"):
-        print("REDSHIFT_HOST not set — skipping delay detection (requires Redshift)")
-        return
+    DELAY_THRESHOLD_MIN = 5  # only flag delays >= 5 minutes as events
 
-    from warehouse.redshift_writer import RedshiftWriter
-    rw = RedshiftWriter()
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-
-    severe_delays = rw.execute_query(f"""
-        SELECT
-            trip_id,
-            route_short_name,
-            stop_id,
-            delay_minutes,
-            delay_category,
-            time_period,
-            operator_name,
-            processed_at
-        FROM transit.fact_trip_updates
-        WHERE delay_category IN ('severe', 'critical')
-          AND processed_at >= DATEADD(minute, -10, GETDATE())
-        ORDER BY delay_minutes DESC
-        LIMIT 100;
-    """)
-    rw.close()
-
-    if not severe_delays:
-        print("No severe delays detected")
-        return
-
-    producer = KafkaProducer(
+    consumer = KafkaConsumer(
+        "trip-updates",
         bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
-        value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
+        group_id="delay-detect-group",   # dedicated group — independent of trips-etl-group
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+        consumer_timeout_ms=5000,
+        max_poll_records=500,
     )
 
-    for delay in severe_delays:
-        producer.send("delay-events", value={
-            "event_type":    "severe_delay",
-            "trip_id":       delay["trip_id"],
-            "route":         delay["route_short_name"],
-            "stop_id":       delay["stop_id"],
-            "delay_minutes": delay["delay_minutes"],
-            "severity":      delay["delay_category"],
-            "time_period":   delay["time_period"],
-            "detected_at":   now_str,
-        })
+    transformer  = TripUpdateTransformer()
+    s3_raw       = S3Writer(prefix="raw/delay-events")
+    s3_processed = S3Writer(prefix="processed/delay-events")
 
-    producer.flush()
-    producer.close()
-    print(f"Published {len(severe_delays)} delay events to Kafka")
-    context["ti"].xcom_push(key="delay_events_n", value=len(severe_delays))
+    raw_events       = []
+    processed_events = []
+
+    for msg in consumer:
+        if len(raw_events) >= 5000:
+            break
+        raw = msg.value.get("data", {})
+        if not raw:
+            continue
+        try:
+            transformed = transformer.transform(raw)
+            if transformed.get("delay_minutes", 0) >= DELAY_THRESHOLD_MIN:
+                raw_rec = dict(raw)
+                raw_rec["_fetched_at"]   = msg.value.get("fetched_at")
+                raw_rec["_source"]       = msg.value.get("source")
+                raw_rec["_kafka_offset"] = msg.offset
+                raw_events.append(raw_rec)
+
+                transformed["detected_at"] = datetime.now(timezone.utc).isoformat()
+                processed_events.append(transformed)
+        except Exception as e:
+            print(f"Delay transform error: {e}")
+
+    consumer.commit()
+    consumer.close()
+
+    print(f"Detected {len(processed_events)} delay events (threshold: {DELAY_THRESHOLD_MIN} min)")
+
+    if raw_events:
+        s3_raw.write_batch(raw_events)
+        print(f"Raw: {len(raw_events)} records → MinIO raw/delay-events/")
+
+    if processed_events:
+        s3_processed.write_batch(processed_events)
+        print(f"Processed: {len(processed_events)} records → MinIO processed/delay-events/")
+
+        # Publish to delay-events Kafka topic so ES indexer + Kibana pick them up
+        kp = KafkaProducer(
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
+            value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
+        )
+        for event in processed_events:
+            kp.send("delay-events", value={
+                "source":     "delay-detector",
+                "fetched_at": event["detected_at"],
+                "data":       event,
+            })
+        kp.flush()
+        kp.close()
+        print(f"Published {len(processed_events)} delay events to Kafka delay-events topic")
+
+    context["ti"].xcom_push(key="delay_events_n", value=len(processed_events))
 
 
 def consume_traffic(**context):
