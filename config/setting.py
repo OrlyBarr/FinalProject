@@ -107,14 +107,22 @@ REDSHIFT_SCHEMA = "transit"
 # ISRAEL TRANSIT CONSTANTS
 # ─────────────────────────────────────────
 
-# Transit operators - operator IDs in GTFS Israel
+# Transit operators - maps numeric operator_ref (from SIRI API) to display name
+# Keys are the numeric string IDs returned by the Hasadna open-bus API in
+# the siri_route__operator_ref field.
 OPERATORS = {
-    "dan":        "3",    # Dan
-    "egged":      "5",    # Egged
-    "metropoline": "14",  # Metropoline
-    "kavim":      "21",   # Kavim
-    "nateev_express": "25",  # Nateev Express
-    "rail":       "2",    # Israel Railways
+    "2":  "Israel Railways",
+    "3":  "Dan",
+    "5":  "Egged",
+    "6":  "NTA",             # Metropolitan Mass Transit System (light rail)
+    "14": "Metropoline",
+    "15": "Egged Taavura",
+    "16": "Tnufa",
+    "18": "Superbus",
+    "21": "Kavim",
+    "25": "Nateev Express",
+    "32": "V-Line",
+    "42": "Afikim",
 }
 
 # Major train stations

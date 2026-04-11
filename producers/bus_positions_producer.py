@@ -89,18 +89,20 @@ class BusPositionsProducer(BaseProducer):
             if not (29.5 <= lat <= 33.3 and 34.2 <= lon <= 35.9):
                 return None
 
-            operator_ref = str(item.get("siri_routes__operator_ref") or "")
-            line_ref     = str(item.get("siri_routes__line_ref") or "")
+            # FIX: API returns singular siri_route__ / siri_ride__ (not plural)
+            operator_ref = str(item.get("siri_route__operator_ref") or "")
+            line_ref     = str(item.get("siri_route__line_ref") or "")
             timestamp    = self._parse_timestamp(item.get("recorded_at_time", ""))
 
             return {
-                "vehicle_id":       str(item.get("vehicle_ref") or item.get("id") or ""),
+                # FIX: API uses siri_ride__vehicle_ref, not vehicle_ref
+                "vehicle_id":       str(item.get("siri_ride__vehicle_ref") or item.get("id") or ""),
                 "entity_id":        str(item.get("id") or ""),
-                "trip_id":          str(item.get("siri_rides__id") or ""),
+                "trip_id":          str(item.get("siri_ride__id") or ""),  # FIX: singular
                 "route_id":         line_ref,
                 "operator_id":      operator_ref,
-                "operator_name":    OPERATORS.get(operator_ref, f"operator_{operator_ref}"),
-                "direction_id":     item.get("siri_routes__direction_id"),
+                "operator_name":    OPERATORS.get(operator_ref, f"unknown_operator_{operator_ref}" if operator_ref else "unknown"),
+                "direction_id":     item.get("siri_route__direction_id"),  # FIX: singular
                 "start_date":       timestamp[:10],
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
