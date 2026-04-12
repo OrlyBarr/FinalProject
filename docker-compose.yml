@@ -130,6 +130,7 @@ services:
     image: apache/airflow:2.7.0
     container_name: airflow-webserver
     networks: [transit_net]
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -187,6 +188,7 @@ services:
     image: apache/airflow:2.7.0
     container_name: airflow-scheduler
     networks: [transit_net]
+    env_file: .env
     depends_on:
       airflow-webserver:
         condition: service_healthy
@@ -194,6 +196,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PYTHONPATH: /opt/airflow
       _PIP_ADDITIONAL_REQUIREMENTS: >-
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
