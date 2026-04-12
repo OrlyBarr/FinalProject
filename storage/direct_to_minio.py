@@ -27,7 +27,16 @@ import sys
 import logging
 import argparse
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
+
+# Israel time — automatically handles DST (UTC+2 winter / UTC+3 summer)
+IL_TZ = ZoneInfo("Asia/Jerusalem")
+
+
+def now_il() -> datetime:
+    """Current datetime in Israel local time."""
+    return datetime.now(IL_TZ)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -90,8 +99,8 @@ def ensure_bucket(s3):
 
 
 def upload(s3, records: list, prefix: str, label: str) -> str:
-    """Upload list of records as JSON to time-partitioned S3 path."""
-    now = datetime.now(timezone.utc)
+    """Upload list of records as JSON to time-partitioned S3 path (Israel time)."""
+    now = now_il()
     key = (
         f"{prefix}/"
         f"year={now.year}/month={now.month:02d}/"
@@ -124,7 +133,7 @@ def fetch_buses() -> list:
         )
         r.raise_for_status()
         records = r.json()
-        now = datetime.now(timezone.utc).isoformat()
+        now = now_il().isoformat()
         result = [
             {
                 "vehicle_id":   str(rec.get("id", "")),
@@ -167,7 +176,7 @@ def fetch_trains() -> list:
         )
         r.raise_for_status()
         records = r.json()
-        now = datetime.now(timezone.utc).isoformat()
+        now = now_il().isoformat()
         result = [
             {
                 "train_number":    str(rec.get("siri_ride__vehicle_ref") or rec.get("vehicle_ref") or ""),
@@ -196,7 +205,7 @@ def fetch_trains() -> list:
 # ── Traffic (HERE API) ────────────────────────────────────────────────────────
 
 def _normalize_traffic(result: dict, tile_name: str) -> dict:
-    now         = datetime.now(timezone.utc)
+    now         = now_il()
     location    = result.get("location", {})
     description = location.get("description", "")
     shape       = location.get("shape", {})
