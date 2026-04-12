@@ -63,19 +63,28 @@ def fetch_service_alerts(**context):
 
 
 def check_kafka_health(**context):
-    """Verify Kafka broker and all required topics are available."""
-    from kafka import KafkaAdminClient
-    import os
-    admin = KafkaAdminClient(
-        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-    )
-    existing = set(admin.list_topics())
-    required = {"bus-positions", "train-positions", "trip-updates", "service-alerts", "delay-events"}
-    missing  = required - existing
-    if missing:
-        raise RuntimeError(f"Missing Kafka topics: {missing}")
-    admin.close()
-    print(f"Kafka healthy — topics: {existing}")
+    """
+    Advisory Kafka health check — logs warnings but never raises.
+    Producers run regardless so a Kafka hiccup does not block all ingestion.
+    """
+    try:
+        from kafka import KafkaAdminClient
+        import os
+        admin = KafkaAdminClient(
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
+            request_timeout_ms=5000,
+        )
+        existing = set(admin.list_topics())
+        required = {"bus-positions", "train-positions", "trip-updates", "service-alerts", "delay-events"}
+        missing  = required - existing
+        admin.close()
+        if missing:
+            print(f"WARNING: Missing Kafka topics: {missing} — producers will still run")
+        else:
+            print(f"Kafka healthy — topics: {existing}")
+    except Exception as e:
+        # Do NOT raise — let downstream tasks run and fail individually if needed
+        print(f"WARNING: Kafka health check failed ({e}) — proceeding anyway")
 
 
 def validate_ingestion(**context):
@@ -106,16 +115,21 @@ def upload_to_minio(**context):
 with DAG(
     dag_id="dag_realtime_ingestion",
     default_args=default_args,
-    description="Fetch GTFS-RT + Railways → Kafka (every minute)",
-    schedule_interval=timedelta(seconds=30),   # every 30 seconds
+    description="Fetch GTFS-RT + Railways → Kafka (every 2 min)",
+    schedule_interval=timedelta(minutes=2),    # was 30s — too aggressive, caused scheduler backlog
     catchup=False,
     max_active_runs=1,
     tags=["ingestion", "realtime", "transit", "israel"],
 ) as dag:
 
-    health = PythonOperator(task_id="check_kafka_health", python_callable=check_kafka_health)
+    # Health check is advisory only — runs in parallel with producers, never blocks them
+    health = PythonOperator(
+        task_id="check_kafka_health",
+        python_callable=check_kafka_health,
+        trigger_rule=TriggerRule.ALL_DONE,
+    )
 
-    # Parallel fetching
+    # Parallel fetching — run regardless of health check result
     t_bus    = PythonOperator(task_id="fetch_bus_positions",   python_callable=fetch_bus_positions)
     t_trips  = PythonOperator(task_id="fetch_trip_updates",    python_callable=fetch_trip_updates)
     t_trains = PythonOperator(task_id="fetch_train_positions", python_callable=fetch_train_positions)
@@ -133,4 +147,6 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    health >> [t_bus, t_trips, t_trains, t_alerts] >> t_validate >> t_minio
+    # Producers run independently; health check and validate/minio run after all are done
+    [t_bus, t_trips, t_trains, t_alerts] >> t_validate >> t_minio
+    [t_bus, t_trips, t_trains, t_alerts] >> health

@@ -34,17 +34,8 @@ default_args = {
 def run_traffic_producer(**context):
     """
     Fetch HERE traffic data for all Israel and publish to Kafka.
-
-    FIX: records = producer.fetch_data() or []
-         Prevents TypeError when fetch_data() returns None (e.g. on API error
-         that doesn't raise, or when HERE returns an empty response object).
-
-    FIX: xcom_push is now always called (not only inside `if records`)
-         so log_traffic_summary never pulls a missing key.
-
-    NOTE: HERE Traffic API returns the same road segments every 5 minutes.
-         Consider hashing (segment_id + timestamp) before send_batch to
-         deduplicate segments that haven't changed since the last pull.
+    Gracefully handles Kafka connectivity failures — task succeeds with n=0
+    instead of crashing so the scheduler backlog does not grow.
     """
     import sys
     sys.path.append("/opt/airflow")
@@ -53,17 +44,28 @@ def run_traffic_producer(**context):
     producer = TrafficProducer()
     n = 0
     try:
-        records = producer.fetch_data() or []   # FIX: guard against None
+        records = producer.fetch_data() or []
         if records:
-            producer.send_batch(records)
-            n = len(records)
-            print(f"Traffic: {n} segments published to Kafka")
+            try:
+                producer.send_batch(records)
+                n = len(records)
+                print(f"Traffic: {n} segments published to Kafka")
+            except Exception as kafka_err:
+                # Kafka publish failed — log but do not fail the task
+                # Data is still being written to MinIO via dag_direct_traffic
+                print(f"WARNING: Kafka publish failed ({kafka_err}) — data available via dag_direct_traffic")
+                n = 0
         else:
             print("Traffic: no records returned from HERE API this cycle")
+    except Exception as e:
+        print(f"WARNING: Traffic producer error ({e})")
     finally:
-        producer.close()
+        try:
+            producer.close()
+        except Exception:
+            pass
 
-    context["ti"].xcom_push(key="segments_n", value=n)  # FIX: always push
+    context["ti"].xcom_push(key="segments_n", value=n)
 
 
 def log_traffic_summary(**context):
