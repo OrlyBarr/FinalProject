@@ -5,6 +5,12 @@ Automatically creates index patterns and dashboard in Kibana.
 Run: python3 setup_kibana.py
 """
 
+import sys
+
+# Ensure stdout uses UTF-8 so emoji / Hebrew text print correctly on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import requests
 import json
 import time

@@ -17,12 +17,17 @@ Endpoints:
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import sys
 import threading
 import time
 import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
+
+# Ensure stdout uses UTF-8 so emoji / Hebrew text print correctly on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 RAIL_BOARD_URL = "https://israelrail.azurewebsites.net/stations/GetStationBoard"

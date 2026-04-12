@@ -1,3 +1,9 @@
+import sys
+
+# Ensure stdout uses UTF-8 so emoji / Hebrew text print correctly on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import requests
 import zipfile
 import io
@@ -5,7 +11,6 @@ import pandas as pd
 from google.transit import gtfs_realtime_pb2
 from geopy.distance import geodesic
 from datetime import datetime
-import sys
 
 # Hasadna Open Bus SIRI API (primary — always available)
 HASADNA_SIRI_URL = "https://open-bus-stride-api.hasadna.org.il/siri_vehicle_locations/list"

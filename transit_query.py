@@ -21,6 +21,10 @@ import math
 import sys
 from datetime import datetime
 
+# Ensure stdout uses UTF-8 so emoji / Hebrew text print correctly on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 try:
     import requests
 except ImportError:
