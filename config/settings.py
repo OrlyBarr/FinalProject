@@ -1,0 +1,13 @@
+# settings.py — compatibility alias for setting.py
+# (code throughout the project imports 'config.settings')
+from config.setting import *   # noqa: F401,F403
+from config.setting import (
+    KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPICS, KAFKA_PRODUCER_CONFIG,
+    KAFKA_CONSUMER_CONFIG, GTFS_RT_BUS_URL, GTFS_RT_VEHICLE_URL,
+    GTFS_RT_ALERTS_URL, OPEN_BUS_API_URL, RAIL_API_URL, MOT_API_KEY,
+    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+    S3_BUCKET, S3_PREFIXES, USE_MINIO, MINIO_ENDPOINT,
+    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, REDSHIFT_CONFIG,
+    REDSHIFT_SCHEMA, OPERATORS, LOG_LEVEL, LOG_FORMAT,
+    HERE_API_KEY,
+)
