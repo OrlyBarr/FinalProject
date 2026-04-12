@@ -18,7 +18,7 @@ from airflow.utils.trigger_rule import TriggerRule
 _default = {
     "owner":             "transit-team",
     "depends_on_past":   False,
-    "start_date":        datetime(2025, 1, 1),
+    "start_date":        datetime(2026, 4, 13),
     "retries":           2,
     "retry_delay":       timedelta(seconds=30),
     "execution_timeout": timedelta(minutes=4),
