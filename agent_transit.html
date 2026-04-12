@@ -135,6 +135,34 @@
     .badge-bad  { color: var(--orange); }
     .badge-err  { color: var(--red); }
 
+    /* Stops panel inside bus card */
+    .stops-toggle {
+      background: none; border: 1px solid var(--border);
+      border-radius: 6px; color: var(--cyan); cursor: pointer;
+      font-size: .78rem; padding: 4px 10px; margin-top: 4px;
+      transition: border-color .2s; align-self: flex-start;
+    }
+    .stops-toggle:hover { border-color: var(--cyan); }
+    .stops-panel {
+      display: none; margin-top: 8px;
+      border-top: 1px solid var(--border); padding-top: 10px;
+    }
+    .stops-panel.open { display: block; }
+    .stop-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 5px 0; border-bottom: 1px solid var(--surface2);
+      font-size: .82rem;
+    }
+    .stop-row:last-child { border-bottom: none; }
+    .stop-seq {
+      background: var(--surface2); border-radius: 4px;
+      padding: 1px 6px; font-size: .75rem; color: var(--muted);
+      flex-shrink: 0; min-width: 28px; text-align: center;
+    }
+    .stop-name { color: var(--text); flex: 1; }
+    .stop-time { color: var(--cyan); font-size: .78rem; flex-shrink: 0; }
+    .stop-passed { opacity: .4; }
+
     /* Alert card */
     .alert-card {
       background: var(--surface); border: 1px solid var(--border);
@@ -184,10 +212,25 @@
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: 8px; padding: 8px 12px; cursor: pointer;
       color: var(--text); font-size: .82rem; text-align: right;
-      transition: border-color .2s;
+      transition: border-color .2s, background .2s;
     }
-    .station-btn:hover { border-color: var(--accent); }
-    .station-btn .s-id { color: var(--cyan); font-weight: 700; font-size: .9rem; }
+    .station-btn:hover  { border-color: var(--accent); }
+    .station-btn.active { border-color: var(--accent); background: rgba(31,111,235,.15); }
+    .station-btn .s-id  { color: var(--cyan); font-weight: 700; font-size: .9rem; }
+
+    /* Lines picker (Tab 2) */
+    #lines-picker {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px;
+    }
+    .line-chip {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 3px 12px; font-size: .82rem;
+      cursor: pointer; color: var(--text);
+      transition: border-color .2s, background .2s;
+    }
+    .line-chip:hover { border-color: var(--accent); background: rgba(31,111,235,.12); }
 
     code { font-family: monospace; font-size: .82rem; }
   </style>
@@ -212,7 +255,9 @@
 
 <main>
 
-  <!-- Tab 1: Buses near address -->
+  <!-- ══════════════════════════════════════════════════════
+       Tab 1: Buses near address
+  ══════════════════════════════════════════════════════ -->
   <div id="tab-bus" class="tab-panel active">
     <div class="search-row">
       <div class="field">
@@ -235,39 +280,48 @@
     <div id="results-bus"></div>
   </div>
 
-  <!-- Tab 2: Track bus line -->
+  <!-- ══════════════════════════════════════════════════════
+       Tab 2: Track bus line — operator → line picker
+  ══════════════════════════════════════════════════════ -->
   <div id="tab-line" class="tab-panel">
     <div class="search-row">
-      <div class="field" style="max-width:160px">
+      <div class="field" style="max-width:200px">
+        <label>מפעיל</label>
+        <select id="line-operator" onchange="loadLinesForOperator()">
+          <option value="">בחר מפעיל...</option>
+          <option value="3">3 — דן</option>
+          <option value="5">5 — אגד</option>
+          <option value="6">6 — אגד תעבורה</option>
+          <option value="7">7 — קוופרטיב</option>
+          <option value="10">10 — מטרופולין</option>
+          <option value="14">14 — קווים</option>
+          <option value="15">15 — נתיב אקספרס</option>
+          <option value="16">16 — ירושלים</option>
+          <option value="18">18 — גולן</option>
+          <option value="20">20 — Kavim</option>
+          <option value="25">25 — נצרת</option>
+          <option value="42">42 — Extra</option>
+        </select>
+      </div>
+      <div class="field">
         <label>מספר קו אוטובוס</label>
         <input id="line-input" type="text" placeholder="89" />
       </div>
-      <div class="field" style="max-width:190px">
-        <label>מפעיל (אופציונלי)</label>
-        <select id="line-operator">
-          <option value="">כל המפעילים</option>
-          <option value="3">3 — דן</option>
-          <option value="5">5 — אגד</option>
-          <option value="14">14 — מטרופולין</option>
-          <option value="21">21 — קווים</option>
-          <option value="25">25 — נתיב אקספרס</option>
-          <option value="42">42 — קונקט</option>
-        </select>
-      </div>
       <button class="btn" onclick="searchLine()">עקוב</button>
     </div>
-    <div class="chips">
-      <span class="chip" onclick="quickLine('1')">קו 1</span>
-      <span class="chip" onclick="quickLine('89')">קו 89</span>
-      <span class="chip" onclick="quickLine('480')">קו 480</span>
-      <span class="chip" onclick="quickLine('271')">קו 271</span>
-      <span class="chip" onclick="quickLine('51')">קו 51</span>
-      <span class="chip" onclick="quickLine('240')">קו 240</span>
+
+    <!-- Line picker: populated when operator is selected -->
+    <div id="lines-picker-wrap" style="display:none">
+      <div class="summary" id="lines-picker-label"></div>
+      <div id="lines-picker"></div>
     </div>
+
     <div id="results-line"></div>
   </div>
 
-  <!-- Tab 3: Train station board -->
+  <!-- ══════════════════════════════════════════════════════
+       Tab 3: Train station board
+  ══════════════════════════════════════════════════════ -->
   <div id="tab-station" class="tab-panel">
     <div class="search-row">
       <div class="field" style="max-width:200px">
@@ -293,20 +347,54 @@
     <div id="results-station"></div>
   </div>
 
-  <!-- Tab 4: Track train by number -->
+  <!-- ══════════════════════════════════════════════════════
+       Tab 4: Track train — search by station + optional train number
+  ══════════════════════════════════════════════════════ -->
   <div id="tab-train" class="tab-panel">
     <div class="search-row">
       <div class="field" style="max-width:200px">
-        <label>מספר רכבת</label>
+        <label>מספר רכבת (אופציונלי)</label>
         <input id="train-input" type="text" placeholder="145" />
       </div>
-      <button class="btn" onclick="trackTrain()">עקוב</button>
+      <button class="btn" onclick="trackTrain()">חפש בכל התחנות</button>
     </div>
-    <p style="font-size:.82rem;color:var(--muted)">מחפש את הרכבת בכל התחנות הראשיות בזמן אמת.</p>
+    <p style="font-size:.82rem;color:var(--muted)">
+      לחץ על תחנה כדי לראות את כל הרכבות העוברות בה. אם הכנסת מספר רכבת — תוצאות יסוננו.
+    </p>
+
+    <!-- Station selector -->
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="summary">בחר תחנה לאיתור הרכבת:</div>
+      <div class="station-grid" id="train-station-grid">
+        <button class="station-btn" onclick="trackByStation('1500')"><div class="s-id">1500</div>ת"א סבידור מרכז</button>
+        <button class="station-btn" onclick="trackByStation('1600')"><div class="s-id">1600</div>ת"א השלום</button>
+        <button class="station-btn" onclick="trackByStation('1700')"><div class="s-id">1700</div>ת"א הרכבת</button>
+        <button class="station-btn" onclick="trackByStation('2300')"><div class="s-id">2300</div>ת"א מרכז</button>
+        <button class="station-btn" onclick="trackByStation('3100')"><div class="s-id">3100</div>ירושלים נבון</button>
+        <button class="station-btn" onclick="trackByStation('3200')"><div class="s-id">3200</div>ירושלים ביג</button>
+        <button class="station-btn" onclick="trackByStation('3700')"><div class="s-id">3700</div>בן גוריון</button>
+        <button class="station-btn" onclick="trackByStation('4100')"><div class="s-id">4100</div>חיפה כרמל</button>
+        <button class="station-btn" onclick="trackByStation('4600')"><div class="s-id">4600</div>נהריה</button>
+        <button class="station-btn" onclick="trackByStation('5000')"><div class="s-id">5000</div>נתניה</button>
+        <button class="station-btn" onclick="trackByStation('5200')"><div class="s-id">5200</div>פ"ת קריית אריה</button>
+        <button class="station-btn" onclick="trackByStation('5410')"><div class="s-id">5410</div>כפר סבא נורדאו</button>
+        <button class="station-btn" onclick="trackByStation('7000')"><div class="s-id">7000</div>הרצליה</button>
+        <button class="station-btn" onclick="trackByStation('7300')"><div class="s-id">7300</div>באר שבע מרכז</button>
+        <button class="station-btn" onclick="trackByStation('7500')"><div class="s-id">7500</div>אשדוד עד הלום</button>
+        <button class="station-btn" onclick="trackByStation('7600')"><div class="s-id">7600</div>אשקלון</button>
+        <button class="station-btn" onclick="trackByStation('2100')"><div class="s-id">2100</div>רחובות</button>
+        <button class="station-btn" onclick="trackByStation('3500')"><div class="s-id">3500</div>לוד</button>
+        <button class="station-btn" onclick="trackByStation('3600')"><div class="s-id">3600</div>רמלה</button>
+        <button class="station-btn" onclick="trackByStation('8600')"><div class="s-id">8600</div>מודיעין נבון</button>
+      </div>
+    </div>
+
     <div id="results-train"></div>
   </div>
 
-  <!-- Tab 5: Service alerts -->
+  <!-- ══════════════════════════════════════════════════════
+       Tab 5: Service alerts
+  ══════════════════════════════════════════════════════ -->
   <div id="tab-alerts" class="tab-panel">
     <div class="search-row">
       <button class="btn" onclick="loadAlerts()">רענן התראות</button>
@@ -317,24 +405,34 @@
 </main>
 
 <script>
-// ── Constants (same as transit_query.py) ──────────────────
+// ── Constants ────────────────────────────────────────────
 const OPEN_BUS_BASE = "https://open-bus-stride-api.hasadna.org.il";
 const RAIL_BOARD    = "/proxy/rail";
 const NOMINATIM     = "https://nominatim.openstreetmap.org/search";
 
 const OPERATORS = {
-  "3":"דן","5":"אגד","7":"אגד תעופה","14":"מטרופולין",
-  "21":"קווים","25":"נתיב אקספרס","42":"קונקט","16":"גבעה",
-};
-const TRAIN_STATIONS = {
-  "2300":"תל אביב מרכז","2820":"תל אביב השלום","3400":"ירושלים נבון",
-  "3600":"חיפה מרכז שמיר","3100":"נתניה","5000":"הרצליה",
-  "5010":"רעננה ב","4600":"באר שבע מרכז","1220":"נהריה","700":"חדרה מערב",
-  "2500":"פתח תקווה ספיר","2200":"בני ברק","4900":"דימונה","3500":"עכו",
-  "6700":"אשקלון","6900":"אשדוד עד הלום",
+  "3":"דן","5":"אגד","6":"אגד תעבורה","7":"קוופרטיב","10":"מטרופולין",
+  "14":"קווים","15":"נתיב אקספרס","16":"ירושלים","18":"גולן",
+  "20":"Kavim","25":"נצרת","42":"Extra",
 };
 
-// ── Clock ───────────────────────────────────────────────
+const TRAIN_STATIONS = {
+  "1500":"ת\"א סבידור מרכז","1600":"ת\"א השלום","1700":"ת\"א הרכבת",
+  "2100":"רחובות","2200":"בני ברק","2300":"ת\"א מרכז",
+  "2400":"ראשון לציון משה דיין","2500":"ראשון לציון הישן",
+  "2600":"בת ים קוממיות","2820":"ת\"א השלום",
+  "3100":"ירושלים נבון","3200":"ירושלים ביג","3300":"בית שמש",
+  "3500":"לוד","3600":"רמלה","3700":"בן גוריון",
+  "4100":"חיפה כרמל","4200":"חיפה בת גלים","4600":"נהריה",
+  "4640":"עכו","4900":"חדרה מערב","5000":"נתניה",
+  "5200":"פ\"ת קריית אריה","5300":"פ\"ת סגולה",
+  "5410":"כפר סבא נורדאו","6700":"רעננה ב","7000":"הרצליה",
+  "7100":"בני ברק","7200":"קריית גת","7300":"באר שבע מרכז",
+  "7400":"דימונה","7500":"אשדוד עד הלום","7600":"אשקלון",
+  "8600":"מודיעין נבון","9200":"כרמיאל","700":"חדרה מערב",
+};
+
+// ── Clock ────────────────────────────────────────────────
 setInterval(() => {
   document.getElementById("live-time").textContent =
     new Date().toLocaleTimeString("he-IL");
@@ -373,12 +471,12 @@ function bearingDir(b) {
 }
 
 function statusBadge(delaySec, cancelled) {
-  if (cancelled)       return `<span class="badge-err">❌ בוטל</span>`;
+  if (cancelled)        return `<span class="badge-err">❌ בוטל</span>`;
   if (delaySec == null) return `<span class="badge-warn">❓ אין מידע</span>`;
-  if (delaySec <= 60)  return `<span class="badge-ok">✅ בזמן</span>`;
+  if (delaySec <= 60)   return `<span class="badge-ok">✅ בזמן</span>`;
   const m = Math.floor(delaySec/60);
-  if (delaySec <= 300) return `<span class="badge-warn">🟡 ${m} דק' איחור</span>`;
-  if (delaySec <= 900) return `<span class="badge-bad">🟠 ${m} דק' איחור</span>`;
+  if (delaySec <= 300)  return `<span class="badge-warn">🟡 ${m} דק' איחור</span>`;
+  if (delaySec <= 900)  return `<span class="badge-bad">🟠 ${m} דק' איחור</span>`;
   return `<span class="badge-err">🔴 ${m} דק' איחור</span>`;
 }
 
@@ -389,18 +487,32 @@ function setMsg(el, text, type="") {
   el.innerHTML = `<div class="msg-box ${type}">${text}</div>`;
 }
 
-// Geocode via Nominatim (same logic as transit_query.py)
+function fmtTime(iso) {
+  if (!iso) return "—";
+  try { return new Date(iso).toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit" }); }
+  catch { return iso.slice(11,16) || "—"; }
+}
+
+// Geocode via bot proxy (avoids CORS for Nominatim)
 async function geocode(address) {
   const q = /ישר|israel/i.test(address) ? address : `${address}, Israel`;
-  const r = await fetch(`${NOMINATIM}?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=he`);
-  const data = await r.json();
+  try {
+    const r = await fetch(`/geocode?q=${encodeURIComponent(q)}`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.lat) return { lat: d.lat, lon: d.lon, name: d.display_name || address };
+    }
+  } catch {}
+  // fallback: direct Nominatim
+  const r2 = await fetch(`${NOMINATIM}?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=he`);
+  const data = await r2.json();
   if (!data.length) return null;
   return { lat: +data[0].lat, lon: +data[0].lon, name: data[0].display_name };
 }
 
-// ═══════════════════════════════════════════════════════
-//  Tab 1 — Buses near address  (find_buses_near_address)
-// ═══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  Tab 1 — Buses near address + future stops per bus
+// ══════════════════════════════════════════════════════════
 function quickAddr(a) { document.getElementById("addr-input").value = a; searchNearAddress(); }
 
 async function searchNearAddress() {
@@ -411,14 +523,13 @@ async function searchNearAddress() {
 
   setLoading(out);
 
-  // Step 1 — geocode via Nominatim
   let geo;
   try { geo = await geocode(addr); }
   catch(e) { setMsg(out, `❌ שגיאת Nominatim: ${e.message}`, "err"); return; }
   if (!geo) { setMsg(out, "❌ הכתובת לא נמצאה. נסה ניסוח אחר.", "err"); return; }
 
-  // Step 2 — Open Bus Stride siri_vehicle_locations/list (bounding box)
-  const deg_m = 0.00001;  // ~1m per 0.00001 deg lat
+  // Bounding box query
+  const deg_m = 0.00001;
   const lat_d = (radius * deg_m) * 1.2;
   const lon_d = (radius * deg_m) * 1.5;
   let vehicles = [];
@@ -434,7 +545,7 @@ async function searchNearAddress() {
     setMsg(out, `❌ שגיאת Open Bus Stride: ${e.message}`, "err"); return;
   }
 
-  // Filter by exact haversine distance
+  // Exact haversine filter
   vehicles = vehicles
     .map(v => ({ ...v, _dist: haversine(geo.lat, geo.lon, +v.lat, +v.lon) }))
     .filter(v => v._dist <= radius)
@@ -446,7 +557,8 @@ async function searchNearAddress() {
   }
 
   let html = `<div class="summary">📍 ${geo.name.slice(0,80)} &nbsp;|&nbsp; נמצאו ${vehicles.length} רכבים בטווח ${radius}מ'</div>`;
-  for (const v of vehicles) {
+  for (let i = 0; i < vehicles.length; i++) {
+    const v      = vehicles[i];
     const line   = v.siri_route__line_ref || v.line_ref || "—";
     const opId   = String(v.siri_route__operator_ref || v.operator_ref || "");
     const opName = OPERATORS[opId] || `מפעיל ${opId}`;
@@ -455,23 +567,148 @@ async function searchNearAddress() {
     const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
     const sched  = v.siri_ride__scheduled_start_time
       ? `🕐 ${v.siri_ride__scheduled_start_time.slice(11,16)} &nbsp;` : "";
+    const rideId = v.siri_ride__id || v.siri_ride_id || "";
+    const cardId = `bus-card-${i}`;
+    const panelId = `stops-panel-${i}`;
+
     html += `
-    <div class="v-card">
+    <div class="v-card" id="${cardId}">
       <div class="v-header">
         <span class="line-badge">קו ${line}</span>
         <span class="op-name">${opName}</span>
         <span class="age">${Math.round(v._dist)}מ' ממך &nbsp; ${bearing} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
       </div>
       <div class="v-row">${vid}${spd}${sched}</div>
+      ${rideId
+        ? `<button class="stops-toggle" onclick="toggleStops('${panelId}','${rideId}',this)">▶ הצג תחנות עתידיות</button>
+           <div class="stops-panel" id="${panelId}"></div>`
+        : `<div style="font-size:.75rem;color:var(--muted)">מזהה נסיעה חסר — לא ניתן לטעון תחנות</div>`
+      }
     </div>`;
   }
   out.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════════
-//  Tab 2 — Track bus line  (track_bus_line)
-// ═══════════════════════════════════════════════════════
+async function toggleStops(panelId, rideId, btn) {
+  const panel = document.getElementById(panelId);
+  if (panel.classList.contains("open")) {
+    panel.classList.remove("open");
+    btn.textContent = "▶ הצג תחנות עתידיות";
+    return;
+  }
+  btn.textContent = "⏳ טוען תחנות...";
+  btn.disabled = true;
+  panel.classList.add("open");
+
+  try {
+    const url = `${OPEN_BUS_BASE}/siri_ride_stops/list?siri_ride_id=${rideId}&limit=100&order_by=order asc`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const stops = await r.json();
+
+    if (!stops.length) {
+      panel.innerHTML = `<div style="font-size:.82rem;color:var(--muted);padding:6px 0">לא נמצאו תחנות לנסיעה זו</div>`;
+      btn.textContent = "▼ תחנות עתידיות";
+      btn.disabled = false;
+      return;
+    }
+
+    const now = new Date();
+    // Separate future (not yet arrived) from past stops
+    const future = [];
+    const past   = [];
+    for (const s of stops) {
+      const t = s.planned_arrival_time || s.actual_arrival_time || s.expected_arrival_time;
+      const isPast = t ? new Date(t) < now : false;
+      (isPast ? past : future).push({ ...s, _time: t });
+    }
+
+    let html = `<div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">
+      ${future.length} תחנות עתידיות · ${past.length} תחנות שחלפו</div>`;
+
+    if (!future.length) {
+      html += `<div style="font-size:.82rem;color:var(--muted)">הרכבת עברה את כל התחנות ברשימה</div>`;
+    } else {
+      for (const s of future) {
+        const name    = s.gtfs_stop__stop_name || s.stop_name || `תחנה ${s.gtfs_stop_id || s.stop_id || "?"}`;
+        const stopId  = s.gtfs_stop__stop_code || s.gtfs_stop_id || s.stop_id || "";
+        const timeStr = s._time ? fmtTime(s._time) : "—";
+        const seq     = s.order != null ? s.order : "";
+        html += `
+        <div class="stop-row">
+          <span class="stop-seq">${seq}</span>
+          <span class="stop-name">🚏 ${name}${stopId ? ` <span style="color:var(--muted);font-size:.72rem">(${stopId})</span>` : ""}</span>
+          <span class="stop-time">⏰ ${timeStr}</span>
+        </div>`;
+      }
+    }
+
+    panel.innerHTML = html;
+    btn.textContent = "▼ הסתר תחנות";
+  } catch(e) {
+    panel.innerHTML = `<div style="font-size:.82rem;color:var(--red)">❌ שגיאה בטעינת תחנות: ${e.message}</div>`;
+    btn.textContent = "▼ שגיאה";
+  }
+  btn.disabled = false;
+}
+
+// ══════════════════════════════════════════════════════════
+//  Tab 2 — Track bus line + operator → line picker
+// ══════════════════════════════════════════════════════════
 function quickLine(n) { document.getElementById("line-input").value = n; searchLine(); }
+
+async function loadLinesForOperator() {
+  const opId  = document.getElementById("line-operator").value;
+  const wrap  = document.getElementById("lines-picker-wrap");
+  const picker = document.getElementById("lines-picker");
+  const label  = document.getElementById("lines-picker-label");
+
+  if (!opId) { wrap.style.display = "none"; return; }
+
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.gap = "8px";
+  label.textContent = "טוען קווים...";
+  picker.innerHTML = `<div class="loader"><div class="spinner"></div></div>`;
+
+  const opName = OPERATORS[opId] || opId;
+
+  try {
+    const url = `${OPEN_BUS_BASE}/gtfs_routes/list?operator_refs=${opId}&limit=500&order_by=line_ref asc`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const routes = await r.json();
+
+    if (!routes.length) {
+      label.textContent = `לא נמצאו קווים עבור ${opName}`;
+      picker.innerHTML = "";
+      return;
+    }
+
+    // Deduplicate by line_ref
+    const seen = new Set();
+    const unique = routes.filter(rt => {
+      const key = String(rt.line_ref || rt.route_short_name || rt.route_id || "");
+      if (!key || seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+
+    label.textContent = `${unique.length} קווים עבור ${opName} — לחץ לבחירה:`;
+    picker.innerHTML = unique.map(rt => {
+      const lineRef = String(rt.line_ref || rt.route_short_name || rt.route_id || "?");
+      const desc    = rt.route_long_name || rt.route_desc || "";
+      return `<span class="line-chip" title="${desc}" onclick="pickLine('${lineRef}')">קו ${lineRef}</span>`;
+    }).join("");
+  } catch(e) {
+    label.textContent = `❌ שגיאה בטעינת קווים: ${e.message}`;
+    picker.innerHTML = "";
+  }
+}
+
+function pickLine(lineRef) {
+  document.getElementById("line-input").value = lineRef;
+  searchLine();
+}
 
 async function searchLine() {
   const line = document.getElementById("line-input").value.trim();
@@ -498,7 +735,6 @@ async function searchLine() {
     return;
   }
 
-  // Group by direction (same as track_bus_line in script)
   const byDir = {};
   for (const v of vehicles) {
     const d = String(v.direction_ref ?? v.direction_id ?? "0");
@@ -510,7 +746,7 @@ async function searchLine() {
     const label = dir === "0" ? "כיוון א׳" : dir === "1" ? "כיוון ב׳" : `כיוון ${dir}`;
     html += `<div style="font-size:.85rem;font-weight:600;color:var(--cyan);margin:8px 0 4px">${label} (${vlist.length} רכבים)</div>`;
     for (const v of vlist) {
-      const opName = OPERATORS[String(v.siri_route__operator_ref||v.operator_ref||"")] || `מפעיל ${v.siri_route__operator_ref||v.operator_ref||""}`;
+      const opName = OPERATORS[String(v.siri_route__operator_ref||v.operator_ref||"")] || `מפעיל ${v.siri_route__operator_ref||v.operator_ref||"?"}`;
       const dir2   = bearingDir(v.bearing);
       const spd    = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;` : "";
       const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
@@ -529,9 +765,9 @@ async function searchLine() {
   out.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════════
-//  Tab 3 — Train station board  (get_train_station)
-// ═══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  Tab 3 — Train station board
+// ══════════════════════════════════════════════════════════
 function quickStation(sid) { document.getElementById("station-input").value = sid; searchStation(); }
 
 async function searchStation() {
@@ -552,10 +788,8 @@ async function searchStation() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     data = await r.json();
   } catch(e) {
-    // CORS likely — show CLI fallback
     setMsg(out, `❌ שגיאת Railways API: ${e.message}<br>
-      <small style="color:var(--muted)">ה-API עלול לחסום בקשות מהדפדפן (CORS).<br>
-      הרץ בטרמינל: <code style="color:var(--cyan)">python3 transit_query.py --train-station ${sid}</code></small>`, "err");
+      <small style="color:var(--muted)">הרץ בטרמינל: <code style="color:var(--cyan)">python3 transit_query.py --train-station ${sid}</code></small>`, "err");
     return;
   }
 
@@ -609,22 +843,70 @@ function renderTrain(t) {
   </div>`;
 }
 
-// ═══════════════════════════════════════════════════════
-//  Tab 4 — Track train by number  (track_train)
-// ═══════════════════════════════════════════════════════
-async function trackTrain() {
+// ══════════════════════════════════════════════════════════
+//  Tab 4 — Track train by station + optional train number
+// ══════════════════════════════════════════════════════════
+let _selectedTrainStation = null;
+
+async function trackByStation(sid) {
+  // Highlight selected station button
+  document.querySelectorAll("#train-station-grid .station-btn").forEach(b => b.classList.remove("active"));
+  event.currentTarget.classList.add("active");
+  _selectedTrainStation = sid;
+
   const trainNum = document.getElementById("train-input").value.trim();
   const out      = document.getElementById("results-train");
-  if (!trainNum) { setMsg(out, "הכנס מספר רכבת", "warn"); return; }
+  const sName    = TRAIN_STATIONS[sid] || `תחנה ${sid}`;
+  setLoading(out);
+
+  const today = new Date().toISOString().slice(0,10);
+  const hour  = new Date().getHours();
+
+  let data;
+  try {
+    const r = await fetch(`${RAIL_BOARD}?stationId=${sid}&date=${today}&hour=${hour}`,
+      { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+  } catch(e) {
+    setMsg(out, `❌ שגיאת Railways API: ${e.message}`, "err"); return;
+  }
+
+  let trains = data?.result?.trains || data?.Data || data?.trains || [];
+
+  if (!trains.length) {
+    setMsg(out, `⚠️ אין נסיעות בתחנת ${sName} בשעה הנוכחית.`, "warn");
+    return;
+  }
+
+  // Filter by train number if provided
+  if (trainNum) {
+    trains = trains.filter(t => String(t.trainno || t.TrainNumber || "") === trainNum);
+    if (!trains.length) {
+      setMsg(out, `⚠️ רכבת ${trainNum} לא נמצאה בתחנת ${sName}. נסה תחנה אחרת.`, "warn");
+      return;
+    }
+  }
+
+  const filterNote = trainNum ? ` · מסונן לרכבת ${trainNum}` : "";
+  let html = `<div class="summary">🚆 ${sName} — ${trains.length} נסיעות${filterNote}</div>`;
+  for (const t of trains.slice(0, 20)) html += renderTrain(t);
+  out.innerHTML = html;
+}
+
+async function trackTrain() {
+  // Search by train number across all key stations
+  const trainNum = document.getElementById("train-input").value.trim();
+  const out      = document.getElementById("results-train");
+  if (!trainNum) { setMsg(out, "הכנס מספר רכבת או לחץ על תחנה", "warn"); return; }
 
   setLoading(out);
 
   const today = new Date().toISOString().slice(0,10);
   const hour  = new Date().getHours();
-  // Same stations as transit_query.py check_stations list
-  const checkStations = ["2300","2820","3400","3600","3100","5000","4600","700","2200","1220"];
+  const checkStations = ["1500","1600","2300","3100","3700","4100","5000","7000","7300","7500","7600","3500","3600","8600"];
 
-  let found = null, foundStation = null;
+  let found = [], foundStations = [];
   for (const sid of checkStations) {
     try {
       const r = await fetch(`${RAIL_BOARD}?stationId=${sid}&date=${today}&hour=${hour}`,
@@ -634,27 +916,27 @@ async function trackTrain() {
       const trains = data?.result?.trains || data?.Data || data?.trains || [];
       for (const t of trains) {
         if (String(t.trainno || t.TrainNumber || "") === trainNum) {
-          found = t; foundStation = sid; break;
+          found.push(t);
+          foundStations.push(TRAIN_STATIONS[sid] || `תחנה ${sid}`);
         }
       }
     } catch {}
-    if (found) break;
   }
 
-  if (!found) {
-    setMsg(out, `⚠️ רכבת ${trainNum} לא נמצאה. ייתכן שטרם יצאה, הגיעה ליעד, או שמספרה שגוי.`, "warn");
+  if (!found.length) {
+    setMsg(out, `⚠️ רכבת ${trainNum} לא נמצאה. ייתכן שטרם יצאה, הגיעה ליעד, או שמספרה שגוי.<br>
+      <small style="color:var(--muted)">נסה לבחור תחנה ספציפית מהרשימה למעלה</small>`, "warn");
     return;
   }
 
-  const sName = TRAIN_STATIONS[foundStation] || `תחנה ${foundStation}`;
-  out.innerHTML = `<div class="summary">✅ רכבת ${trainNum} נמצאה בתחנת ${sName}</div>` + renderTrain(found);
+  let html = `<div class="summary">✅ רכבת ${trainNum} נמצאה ב-${found.length} תחנות: ${foundStations.join(", ")}</div>`;
+  for (const t of found) html += renderTrain(t);
+  out.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 //  Tab 5 — Service alerts
-//  GTFS-RT protobuf can't be decoded natively in browser.
-//  Show CLI instructions + API status check.
-// ═══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 async function loadAlerts() {
   const out = document.getElementById("results-alerts");
   setLoading(out);
@@ -684,9 +966,8 @@ async function loadAlerts() {
     <div class="alert-card" style="border-right-color:var(--accent)">
       <div class="a-title">📋 כלי שורת הפקודה — transit_query.py</div>
       <div style="font-size:.82rem;color:var(--muted);margin-top:6px;line-height:2">
-        <code style="color:var(--cyan)">python3 transit_query.py</code> — תפריט אינטראקטיבי<br>
-        <code style="color:var(--cyan)">python3 transit_query.py --address "דיזנגוף 50, ת\"א"</code><br>
-        <code style="color:var(--cyan)">python3 transit_query.py --line 89</code><br>
+        <code style="color:var(--cyan)">python3 transit_query.py --buses-near "דיזנגוף 50, ת\"א"</code><br>
+        <code style="color:var(--cyan)">python3 transit_query.py --track-line 89</code><br>
         <code style="color:var(--cyan)">python3 transit_query.py --train-station 2300</code><br>
         <code style="color:var(--cyan)">python3 transit_query.py --track-train 145</code><br>
         <code style="color:var(--cyan)">python3 transit_query.py --alerts</code>
@@ -694,7 +975,7 @@ async function loadAlerts() {
     </div>`;
 }
 
-// ── Enter key shortcuts ─────────────────────────────────
+// ── Enter key shortcuts ──────────────────────────────────
 document.getElementById("addr-input").addEventListener("keydown",    e=>{ if(e.key==="Enter") searchNearAddress(); });
 document.getElementById("line-input").addEventListener("keydown",    e=>{ if(e.key==="Enter") searchLine(); });
 document.getElementById("station-input").addEventListener("keydown", e=>{ if(e.key==="Enter") searchStation(); });
