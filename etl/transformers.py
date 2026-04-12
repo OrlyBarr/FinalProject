@@ -114,7 +114,8 @@ class BusPositionTransformer:
             "route_short_name":  extract_route_name(data.get("route_id", "")),  # FIX: shared fn
             "operator_id":       data.get("operator_id", ""),
             "operator_name":     data.get("operator_name", ""),
-            "direction_id":      data.get("direction_id"),
+            # NOTE: direction_id omitted — Hasadna SIRI API does not provide it;
+            # removing avoids a persistent null column in every processed record.
             "latitude":          lat,
             "longitude":         lon,
             "is_valid_location": self._is_in_israel(lat, lon),
@@ -200,29 +201,35 @@ class TrainPositionTransformer:
         delay_sec = data.get("delay_seconds") or int(delay_min * 60)
         now       = datetime.now(timezone.utc)
 
+        # NOTE: station fields (origin_station_id, dest_station_id, platform,
+        # scheduled/actual departure/arrival) are NOT included because the Hasadna
+        # SIRI API does not provide this information. Fields were removed to avoid
+        # persistent null columns in MinIO and Redshift.
         return {
-            "train_number":         data.get("train_number", ""),
-            "origin_station_id":    data.get("origin_station_id", ""),
-            "dest_station_id":      data.get("dest_station_id", ""),
-            "queried_station_id":   data.get("queried_station_id", ""),
-            "queried_station_name": data.get("queried_station_name", ""),
-            "platform":             data.get("platform"),
-            # FIX: normalise time strings to ISO 8601 so Redshift TIMESTAMP cast won't fail
-            "scheduled_departure":  parse_time_field(data.get("scheduled_departure")),
-            "actual_departure":     parse_time_field(data.get("actual_departure")),
-            "scheduled_arrival":    parse_time_field(data.get("scheduled_arrival")),
-            "actual_arrival":       parse_time_field(data.get("actual_arrival")),
-            "delay_minutes":        round(delay_min, 1),
-            "delay_seconds":        delay_sec,  # FIX: sourced from raw data when available
-            "delay_category":       self._delay_category(delay_min),
-            "is_delayed":           data.get("is_delayed", False),
-            "is_cancelled":         data.get("is_cancelled", False),
-            "operator":             "israel_railways",
-            "hour_of_day":          now.hour,
-            "time_period":          classify_time_period(now.hour),
-            "day_of_week":          now.strftime("%A"),
-            "is_weekend":           now.weekday() in (4, 5),  # FIX: was >= 4
-            "processed_at":         now.isoformat(),
+            "train_number":     data.get("train_number", ""),
+            "line_ref":         data.get("line_ref", ""),
+            "operator":         "israel_railways",
+            "operator_ref":     data.get("operator_ref", "2"),
+            # Position — from Hasadna SIRI API
+            "lat":              data.get("lat"),
+            "lon":              data.get("lon"),
+            "bearing":          data.get("bearing"),
+            "velocity":         data.get("velocity"),
+            # Schedule
+            "scheduled_start":  data.get("scheduled_start", ""),
+            "recorded_at":      data.get("recorded_at", ""),
+            # Delay
+            "delay_minutes":    round(delay_min, 1),
+            "delay_seconds":    delay_sec,
+            "delay_category":   self._delay_category(delay_min),
+            "is_delayed":       data.get("is_delayed", False),
+            "is_cancelled":     data.get("is_cancelled", False),
+            # Time dimensions
+            "hour_of_day":      now.hour,
+            "time_period":      classify_time_period(now.hour),
+            "day_of_week":      now.strftime("%A"),
+            "is_weekend":       now.weekday() in (4, 5),
+            "processed_at":     now.isoformat(),
         }
 
     def _delay_category(self, delay_min: float) -> str:

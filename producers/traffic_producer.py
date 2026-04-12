@@ -142,7 +142,7 @@ class TrafficProducer(BaseProducer):
         speed_ratio = round(speed / free_flow, 3) if free_flow > 0 else 0
 
         return {
-            "segment_id":       result.get("id", ""),
+            "segment_id":       first_link.get("id", ""),     # FIX: HERE v7 segment ID lives in location.shape.links[].id, not result.id
             "tile_name":        tile_name,
             "description":      description,
             "lat":              mid_point.get("lat"),
