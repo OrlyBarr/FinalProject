@@ -38,7 +38,7 @@ def run_traffic_producer(**context):
     instead of crashing so the scheduler backlog does not grow.
     """
     import sys
-    sys.path.append("/opt/airflow")
+    sys.path.insert(0, "/opt/airflow")
     from producers.traffic_producer import TrafficProducer
 
     producer = TrafficProducer()

@@ -17,7 +17,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import sys
-sys.path.append("/opt/airflow")
+sys.path.insert(0, "/opt/airflow")
 
 default_args = {
     "owner":            "transit-team",

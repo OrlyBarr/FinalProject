@@ -15,6 +15,7 @@ FIXES:
 
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 logger = logging.getLogger("etl.transformers")
 
@@ -79,7 +80,7 @@ def extract_route_name(route_id: str) -> str:
     return parts[1] if len(parts) > 1 else route_id[:10]
 
 
-def parse_time_field(value) -> str | None:
+def parse_time_field(value) -> Optional[str]:
     """
     Normalise a time string to ISO 8601 or return None.
     Handles HH:MM, HH:MM:SS, and ISO formats from Israel Railways API.

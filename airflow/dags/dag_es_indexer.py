@@ -19,7 +19,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 
-sys.path.append("/opt/airflow")
+sys.path.insert(0, "/opt/airflow")
 
 import os
 os.environ.setdefault("ELASTICSEARCH_HOST",     "http://elasticsearch:9200")

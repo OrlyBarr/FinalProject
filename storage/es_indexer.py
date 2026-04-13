@@ -13,6 +13,7 @@ Indices created:
 
 import json
 import os
+from typing import Optional
 import logging
 from datetime import datetime, timezone
 
@@ -239,7 +240,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
 _TRACKER_INDEX = "transit-indexer-state"
 
 
-def get_last_indexed_key(topic_key: str, date_prefix: str) -> str | None:
+def get_last_indexed_key(topic_key: str, date_prefix: str) -> Optional[str]:
     """Return the S3 key of the last file indexed for this topic + date, or None."""
     es  = get_es_client()
     doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
