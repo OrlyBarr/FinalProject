@@ -1,18 +1,18 @@
 """
 Historical Delay Fetcher
 =========================
-שולף נתוני עיכובים היסטוריים (batch) לאוטובוסים ורכבות
-ומפרסם ל-Kafka topics ייעודיים לנתונים היסטוריים.
+Fetches historical (batch) delay data for buses and trains
+and publishes to dedicated Kafka topics for historical data.
 
-שימוש:
+Usage:
   python historical_fetcher.py --days 7
   python historical_fetcher.py --days 30 --transport bus
   python historical_fetcher.py --days 7  --transport train
   python historical_fetcher.py --from 2025-01-01 --to 2025-01-31
 
-הנתונים ישמרו ב:
+Data will be saved to:
   - Kafka: bus-delays-historical / train-delays-historical
-  - MinIO: לאחר consume ע"י delay_kafka_consumer.py
+  - MinIO: after being consumed by delay_kafka_consumer.py
 """
 
 import json
@@ -57,10 +57,10 @@ def iter_historical_bus_delays(
     batch_size: int = HISTORICAL_BATCH_SIZE,
 ) -> Iterator[dict]:
     """
-    מחזיר iterator על נתוני עיכובי אוטובוס היסטוריים.
+    Returns an iterator over historical bus delay data.
     
-    משתמש ב-gtfs_ride_stop עם פילטר תאריך.
-    מחזיר רשומות עם actual_arrival_time (עצירות שהתרחשו בפועל).
+    Uses gtfs_ride_stop with date filter.
+    Returns records with actual_arrival_time (stops that actually occurred).
     """
     offset = 0
     date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -108,7 +108,7 @@ def iter_historical_bus_delays(
         log.info(f"Bus history: fetched {len(records)} records (offset {offset})")
         offset += batch_size
 
-        # נימנע מ-rate limiting
+        # avoid rate limiting
         time.sleep(0.5)
 
 
@@ -118,8 +118,8 @@ def iter_historical_bus_vehicle_monitoring(
     batch_size: int = HISTORICAL_BATCH_SIZE,
 ) -> Iterator[dict]:
     """
-    נתוני vehicle monitoring היסטוריים מ-SIRI.
-    מאפשר לראות מיקום + עיכוד לפי זמן.
+    Historical vehicle monitoring data from SIRI.
+    Allows viewing location + delay over time.
     """
     offset = 0
     date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -180,8 +180,8 @@ def iter_historical_train_delays(
     date_to: date,
 ) -> Iterator[dict]:
     """
-    מחזיר iterator על עיכובי רכבת היסטוריים.
-    עובר על כל יום בטווח ועל כל המסלולים המוגדרים.
+    Returns an iterator over historical train delays.
+    Iterates over each day in the range and all defined routes.
     """
     current = date_from
     while current <= date_to:
@@ -215,7 +215,7 @@ def iter_historical_train_delays(
 
             route_data = data.get("Data", {})
 
-            # עיכובים לפי תחנה
+            # Delays by station
             for raw in (route_data.get("Delays") or []):
                 try:
                     delay_min = int(raw.get("Min", 0))
@@ -237,7 +237,7 @@ def iter_historical_train_delays(
                     "is_delayed":        delay_min > 0,
                 }
 
-            # נסיעות ועצירות (לנתח דפוסי עיכוד)
+            # Trips and stops (for analyzing delay patterns)
             for route_info in (route_data.get("Routes") or []):
                 for train in (route_info.get("Train") or []):
                     train_no = train.get("Trainno")
@@ -295,19 +295,19 @@ def main():
         "--transport",
         choices=["bus", "train", "both"],
         default="both",
-        help="איזו תחבורה לשלוף (ברירת מחדל: both)",
+        help="Which transport to fetch (default: both)",
     )
     parser.add_argument(
         "--days",
         type=int,
         default=HISTORICAL_DAYS_BACK,
-        help=f"כמה ימים אחורה (ברירת מחדל: {HISTORICAL_DAYS_BACK})",
+        help=f"How many days back (default: {HISTORICAL_DAYS_BACK})",
     )
     parser.add_argument("--from", dest="date_from", help="תאריך התחלה YYYY-MM-DD")
     parser.add_argument("--to",   dest="date_to",   help="תאריך סיום YYYY-MM-DD")
     args = parser.parse_args()
 
-    # חישוב טווח תאריכים
+    # Calculate date range
     now = datetime.now(timezone.utc)
     if args.date_from:
         dt_from = datetime.fromisoformat(args.date_from).replace(tzinfo=timezone.utc)

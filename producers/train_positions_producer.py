@@ -5,10 +5,10 @@ Fetches real-time Israel Railways train data via Open Bus Stride API.
 Runs every 30 seconds.
 
 Data source:
-  Open Bus Stride (Hasadna) — operator_ref=2 (רכבת ישראל)
+  Open Bus Stride (Hasadna) — operator_ref=2 (Israel Railways)
   https://open-bus-stride-api.hasadna.org.il
 
-Note: israelrail.azurewebsites.net נחטף, www.rail.co.il חסום Cloudflare.
+Note: israelrail.azurewebsites.net was taken over, www.rail.co.il is blocked by Cloudflare.
 """
 
 import requests
@@ -18,7 +18,7 @@ sys.path.append("..")
 from config.settings import OPEN_BUS_API_URL, KAFKA_TOPICS, DELAY_THRESHOLD_SECONDS
 from producers.base_producer import BaseProducer
 
-RAIL_OPERATOR_REF = "2"   # רכבת ישראל ב-Open Bus Stride
+RAIL_OPERATOR_REF = "2"   # Israel Railways in Open Bus Stride
 
 
 class TrainPositionsProducer(BaseProducer):

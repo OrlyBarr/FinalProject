@@ -60,12 +60,12 @@ def classify_time_period(hour: int) -> str:
     FIX: labels standardised to match traffic_transformer.py
          (was "morning_rush"/"evening_rush" here vs "morning_peak"/"evening_peak" there)
     """
-    if 6  <= hour < 9:  return "morning_rush"   # פיק בוקר
+    if 6  <= hour < 9:  return "morning_rush"   # morning peak
     if 9  <= hour < 12: return "mid_morning"
     if 12 <= hour < 15: return "midday"
-    if 15 <= hour < 19: return "evening_rush"   # פיק ערב
+    if 15 <= hour < 19: return "evening_rush"   # evening peak
     if 19 <= hour < 23: return "evening"
-    return "off_peak"                            # לילה / מוקדם
+    return "off_peak"                            # night / early morning
 
 
 def extract_route_name(route_id: str) -> str:

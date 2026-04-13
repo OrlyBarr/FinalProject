@@ -1,15 +1,15 @@
 """
 Train Delay Collector
 ======================
-שולף נתוני עיכובים בזמן אמת מה-API של רכבת ישראל
-ומפרסם ל-Kafka topic: train-delays
+Fetches real-time delay data from the Israel Railways API
+and publishes to Kafka topic: train-delays
 
-מקור הנתונים:
-  - API לא-רשמי של rail.co.il (מתועד ע"י OpenTrainCommunity)
-  - שדה Delays: עיכוד בדקות לפי תחנה
-  - שדה TrainPositions: מיקום רכבת + עיכוד נוכחי
+Data sources:
+  - Unofficial API of rail.co.il (documented by OpenTrainCommunity)
+  - Delays field: delay in minutes by station
+  - TrainPositions field: train location + current delay
 
-הרצה:
+Usage:
   python train_delay_collector.py
   python train_delay_collector.py --once
 """
@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Headers נדרשים לגישה ל-API של רכבת ישראל
+# Required headers for Israel Railways API
 RAIL_HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "application/json",
@@ -49,18 +49,18 @@ RAIL_HEADERS = {
 
 def fetch_route_delays(origin: str, destination: str, travel_date: str = None) -> dict:
     """
-    שולף נתוני מסלול + עיכובים לנסיעה ספציפית.
+    Fetches route data + delays for a specific trip.
     
     endpoint: /Plan/GetRoutes
-    פרמטרים:
-      OId   : תחנת מוצא (מזהה 4 ספרות)
-      TId   : תחנת יעד
-      Date  : תאריך (DD/MM/YYYY)
-      Hour  : שעה (0 = כל היום)
+    Parameters:
+      OId   : Origin station (4-digit ID)
+      TId   : Destination station
+      Date  : Date (DD/MM/YYYY)
+      Hour  : Hour (0 = all day)
       
-    Response מכיל:
-      Delays[]         : עיכובים לפי תחנה ורכבת
-      TrainPositions[] : מיקום + עיכוד נוכחי לכל רכבת פעילה
+    Response contains:
+      Delays[]         : Delays by station and train
+      TrainPositions[] : Location + current delay for each active train
     """
     if travel_date is None:
         travel_date = date.today().strftime("%d/%m/%Y")
@@ -91,14 +91,14 @@ def fetch_route_delays(origin: str, destination: str, travel_date: str = None) -
 
 def normalize_delay_record(raw_delay: dict, route_meta: dict) -> dict:
     """
-    ממפה רשומת עיכוד מה-API לפורמט אחיד.
+    Maps a delay record from the API to a unified format.
     
-    raw_delay שדות:
-      Station : מזהה תחנה
-      Date    : תאריך YYYYMMDD
-      Time    : שעה HHMMSS
-      Train   : מספר רכבת
-      Min     : עיכוד בדקות (מחרוזת "0006" = 6 דקות)
+    raw_delay fields:
+      Station : Station ID
+      Date    : Date YYYYMMDD
+      Time    : Time HHMMSS
+      Train   : Train number
+      Min     : Delay in minutes (string "0006" = 6 minutes)
     """
     delay_str = raw_delay.get("Min", "0")
     try:
@@ -110,16 +110,16 @@ def normalize_delay_record(raw_delay: dict, route_meta: dict) -> dict:
         "source":         "rail_api_delays",
         "transport_type": "train",
         "collected_at":   datetime.now(timezone.utc).isoformat(),
-        # זיהוי
+        # Identification
         "train_number":   raw_delay.get("Train"),
         "station_id":     raw_delay.get("Station"),
-        # מסלול
+        # Route
         "route_origin":      route_meta.get("origin"),
         "route_destination": route_meta.get("destination"),
-        # זמנים
+        # Times
         "delay_date":     raw_delay.get("Date"),
         "delay_time":     raw_delay.get("Time"),
-        # עיכוד
+        # Delay
         "delay_minutes":  delay_min,
         "delay_seconds":  delay_min * 60,
         "is_delayed":     delay_min > 0,
@@ -128,19 +128,19 @@ def normalize_delay_record(raw_delay: dict, route_meta: dict) -> dict:
 
 def normalize_position_record(raw_pos: dict, route_meta: dict) -> dict:
     """
-    ממפה רשומת מיקום רכבת לפורמט אחיד.
+    Maps a train position record to a unified format.
     
-    raw_pos שדות:
-      TrainNumber    : מספר רכבת
-      CurrentStation : תחנה נוכחית
-      NextStation    : תחנה הבאה
-      DifMin         : עיכוד נוכחי בדקות
-      DifType        : סוג עיכוד (1=מאחר, 2=מוקדם, 0=בזמן)
+    raw_pos fields:
+      TrainNumber    : Train number
+      CurrentStation : Current station
+      NextStation    : Next station
+      DifMin         : Current delay in minutes
+      DifType        : Delay type (1=late, 2=early, 0=on time)
     """
     dif_min  = raw_pos.get("DifMin", 0)
     dif_type = raw_pos.get("DifType", 0)
 
-    # DifType: 1=עיכוד, 2=מוקדם
+    # DifType: 1=delayed, 2=early
     if dif_type == 2:
         dif_min = -abs(dif_min)
 
@@ -148,14 +148,14 @@ def normalize_position_record(raw_pos: dict, route_meta: dict) -> dict:
         "source":         "rail_api_positions",
         "transport_type": "train",
         "collected_at":   datetime.now(timezone.utc).isoformat(),
-        # זיהוי
+        # Identification
         "train_number":      str(raw_pos.get("TrainNumber")),
         "current_station":   raw_pos.get("CurrentStation"),
         "next_station":      raw_pos.get("NextStation"),
-        # מסלול
+        # Route
         "route_origin":      route_meta.get("origin"),
         "route_destination": route_meta.get("destination"),
-        # עיכוד
+        # Delay
         "delay_minutes":  dif_min,
         "delay_seconds":  dif_min * 60,
         "delay_type":     {0: "on_time", 1: "delayed", 2: "early"}.get(dif_type, "unknown"),
@@ -199,19 +199,19 @@ def collect_once(producer: KafkaProducer) -> int:
         if not data:
             continue
 
-        # 1) עיכובים לפי תחנה
+        # 1) Delays by station
         raw_delays = data.get("Delays", []) or []
         delay_records = [
             normalize_delay_record(d, route)
             for d in raw_delays
-            if int(d.get("Min", 0)) > 0  # רק עיכובים ממשיים
+            if int(d.get("Min", 0)) > 0  # only actual delays
         ]
         if delay_records:
             n = publish_records(producer, delay_records, KAFKA_TOPIC_TRAIN_DELAYS)
             log.info(f"Route {origin}→{dest}: {n} delay records published")
             total += n
 
-        # 2) מיקומי רכבות נוכחיים
+        # 2) Current train positions
         raw_positions = data.get("TrainPositions", []) or []
         position_records = [
             normalize_position_record(p, route)
@@ -222,7 +222,7 @@ def collect_once(producer: KafkaProducer) -> int:
             log.info(f"Route {origin}→{dest}: {n} position records published")
             total += n
 
-        # המתנה קצרה בין מסלולים למניעת rate limiting
+        # short pause between routes to avoid rate limiting
         time.sleep(1)
 
     return total

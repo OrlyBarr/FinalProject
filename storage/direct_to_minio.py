@@ -459,9 +459,9 @@ def fetch_service_alerts() -> list:
             "alert_type":         "CANCELLATION" if is_cancelled else "SIGNIFICANT_DELAY",
             "severity":           "CRITICAL" if is_cancelled else ("HIGH" if delay_added >= 20 else "MEDIUM"),
             "description": (
-                f"הקו {rec.get('gtfs_route__route_short_name','?')} בוטל"
+                f"Route {rec.get('gtfs_route__route_short_name','?')} cancelled"
                 if is_cancelled else
-                f"הקו {rec.get('gtfs_route__route_short_name','?')} מאחר ב-{delay_added} דקות"
+                f"Route {rec.get('gtfs_route__route_short_name','?')} delayed by {delay_added} minutes"
             ),
             "fetched_at": fetched_at,
             "source": "hasadna-siri-rides",

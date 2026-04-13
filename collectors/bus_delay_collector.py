@@ -1,14 +1,14 @@
 """
 Bus Delay Collector
 ====================
-שולף נתוני עיכובים בזמן אמת מ-Open Bus Stride API
-ומפרסם ל-Kafka topic: bus-delays
+Fetches real-time delay data from the Open Bus Stride API
+and publishes to Kafka topic: bus-delays
 
-מקור הנתונים:
+Data sources:
   - SIRI SM (real-time vehicle monitoring) דרך Stride API
-  - השוואה אוטומטית בין זמן בפועל לזמן מתוכנן
+  - Automatic comparison between actual time and scheduled time
 
-הרצה:
+Usage:
   python bus_delay_collector.py
   python bus_delay_collector.py --once   # ריצה חד פעמית (לבדיקה)
 """
@@ -41,9 +41,9 @@ log = logging.getLogger(__name__)
 
 def fetch_siri_vehicle_locations(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
     """
-    שולף מיקומי רכבים נוכחיים עם עיכוב בפועל.
+    Fetches current vehicle locations with actual delay.
     endpoint: /siri_vehicle_monitoring/list
-    שדות מרכזיים:
+    Key fields:
       - recorded_at_time       : זמן הדיווח בפועל
       - aimed_arrival_time     : זמן הגעה מתוכנן
       - expected_arrival_time  : זמן הגעה צפוי (לאחר עדכון)
@@ -55,7 +55,7 @@ def fetch_siri_vehicle_locations(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
     params = {
         "limit": limit,
         "get_count": "false",
-        # מסנן רק רכבים שדיווחו בדקה האחרונה
+        # filter only vehicles that reported in the last minute
         "order_by": "-recorded_at_time",
     }
     try:
@@ -69,9 +69,9 @@ def fetch_siri_vehicle_locations(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
 
 def fetch_ride_stops_with_delay(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
     """
-    שולף נתוני עצירה עם עיכוב מחושב (actual vs planned).
+    Fetches stop data with computed delay (actual vs planned).
     endpoint: /gtfs_ride_stop/list
-    שדות מרכזיים:
+    Key fields:
       - gtfs_stop_id           : מזהה תחנה
       - planned_arrival_time   : זמן הגעה מתוכנן
       - actual_arrival_time    : זמן הגעה בפועל (null אם טרם הגיע)
@@ -96,7 +96,7 @@ def fetch_ride_stops_with_delay(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
 
 def normalize_vehicle_record(raw: dict) -> dict:
     """
-    ממפה רשומה מה-API לפורמט אחיד לשליחה ל-Kafka.
+    Maps an API record to a unified format for Kafka.
     """
     aimed    = raw.get("aimed_arrival_time")
     expected = raw.get("expected_arrival_time")
@@ -121,7 +121,7 @@ def normalize_vehicle_record(raw: dict) -> dict:
         "line_ref":        raw.get("line_ref"),
         "operator_ref":    raw.get("operator_ref"),
         "journey_ref":     raw.get("dated_vehicle_journey_ref"),
-        # תחנה
+        # Stop
         "stop_point_ref":  raw.get("stop_point_ref"),
         "stop_order":      raw.get("order"),
         # זמנים
@@ -131,7 +131,7 @@ def normalize_vehicle_record(raw: dict) -> dict:
         # עיכוב
         "delay_seconds":   delay_seconds,
         "delay_minutes":   round(delay_seconds / 60, 1) if delay_seconds is not None else None,
-        # מיקום
+        # Location
         "lat":             raw.get("lat"),
         "lon":             raw.get("lon"),
     }
@@ -139,20 +139,20 @@ def normalize_vehicle_record(raw: dict) -> dict:
 
 def normalize_ride_stop_record(raw: dict) -> dict:
     """
-    ממפה רשומת עצירה מ-gtfs_ride_stop לפורמט אחיד.
+    Maps a gtfs_ride_stop record to a unified format.
     """
     delay_sec = raw.get("delay_arrival")
     return {
         "source":         "gtfs_ride_stop",
         "transport_type": "bus",
         "collected_at":   datetime.now(timezone.utc).isoformat(),
-        # זיהוי
+        # Identification
         "gtfs_ride_id":   raw.get("gtfs_ride_id"),
         "gtfs_stop_id":   raw.get("gtfs_stop_id"),
-        # זמנים
+        # Times
         "planned_arrival":  raw.get("planned_arrival_time"),
         "actual_arrival":   raw.get("actual_arrival_time"),
-        # עיכוב
+        # Delay
         "delay_seconds":  delay_sec,
         "delay_minutes":  round(delay_sec / 60, 1) if delay_sec is not None else None,
         "is_early":       delay_sec < 0 if delay_sec is not None else None,
@@ -174,7 +174,7 @@ def create_producer() -> KafkaProducer:
 def publish_records(producer: KafkaProducer, records: list[dict], topic: str):
     published = 0
     for record in records:
-        # מפתח: שילוב line_ref + stop (לחלוקת partitions)
+        # Key: combination of line_ref + stop (for partition distribution)
         key = f"{record.get('line_ref', 'unknown')}_{record.get('stop_point_ref') or record.get('gtfs_stop_id', '')}"
         producer.send(topic, key=key, value=record)
         published += 1

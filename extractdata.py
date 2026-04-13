@@ -118,7 +118,7 @@ def fetch_bus_positions():
 # -----------------------------
 def fetch_stops():
     """Downloads and extracts bus stops from GTFS static data"""
-    print("מוריד נתוני תחנות...")
+    print("Downloading stop data...")
     
     try:
         resp = requests.get(GTFS_STATIC_URL, timeout=20)
@@ -158,11 +158,11 @@ def create_sample_stops_data():
     
     stops = []
     stop_names = [
-        "תחנה מרכזית", "רחוב דיזנגוף", "כיכר רבין", "תחנת רכבת",
-        "קניון", "בית חולים", "אוניברסיטה", "שדרות רוטשילד",
-        "נמל תל אביב", "תחנת מרכז", "רמת אביב", "רמת גן",
-        "בני ברק", "גבעתיים", "חולון", "בת ים",
-        "פלורנטין", "נווה צדק", "יפו", "רמת החייל"
+        "Central Station", "Dizengoff Street", "Rabin Square", "Train Station",
+        "Shopping Mall", "Hospital", "University", "Rothschild Blvd",
+        "Tel Aviv Port", "Central Bus Stop", "Ramat Aviv", "Ramat Gan",
+        "Bnei Brak", "Givatayim", "Holon", "Bat Yam",
+        "Florentin", "Neve Tzedek", "Jaffa", "Ramat HaChayal"
     ]
     
     for i, name in enumerate(stop_names):
@@ -183,13 +183,13 @@ def find_nearest_stop(bus_row, stops_df):
     """Finds the nearest bus stop for a given bus position"""
     bus_loc = (bus_row.lat, bus_row.lon)
 
-    # מחשבים מרחק לכל תחנה
+    # Calculate distance to each stop
     stops_df["distance_m"] = stops_df.apply(
         lambda row: geodesic(bus_loc, (row.stop_lat, row.stop_lon)).meters,
         axis=1
     )
 
-    # מוצאים את התחנה הקרובה ביותר
+    # Find the nearest stop
     nearest = stops_df.loc[stops_df["distance_m"].idxmin()]
 
     return pd.Series({
@@ -226,22 +226,22 @@ def create_sample_bus_data():
 # MAIN
 # -----------------------------
 def main():
-    print("מוריד נתוני אוטובוסים...")
+    print("Downloading bus data...")
     buses = fetch_bus_positions()
 
-    print("מוריד נתוני תחנות...")
+    print("Downloading stop data...")
     stops = fetch_stops()
 
-    print("מחשב תחנה קרובה לכל אוטובוס...")
+    print("Computing nearest stop for each bus...")
     merged = buses.join(
         buses.apply(lambda row: find_nearest_stop(row, stops.copy()), axis=1)
     )
 
-    print("\n📌 טבלה רלציונית (5 שורות ראשונות):")
+    print("\n📌 Relational table (first 5 rows):")
     print(merged.head())
 
     merged.to_json("buses_with_nearest_stops.json", orient="records", indent=2, force_ascii=False)
-    print("\n📁 נשמר קובץ JSON בשם buses_with_nearest_stops.json")
+    print("\n📁 Saved JSON file: buses_with_nearest_stops.json")
 
 
 if __name__ == "__main__":

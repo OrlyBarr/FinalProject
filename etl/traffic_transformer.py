@@ -51,15 +51,15 @@ ISRAEL_REGIONS = [
     ("south",     29.4, 31.5, 34.2, 35.5),
 ]
 
-REGION_NAMES_HE = {
-    "north":     "צפון",
-    "haifa":     "חיפה",
-    "tel_aviv":  "תל אביב",
-    "center":    "מרכז",
-    "jerusalem": "ירושלים",
-    "south":     "דרום",
-    "dead_sea":  "ים המלח",
-    "unknown":   "לא ידוע",
+REGION_NAMES_EN = {
+    "north":     "North",
+    "haifa":     "Haifa",
+    "tel_aviv":  "Tel Aviv",
+    "center":    "Center",
+    "jerusalem": "Jerusalem",
+    "south":     "South",
+    "dead_sea":  "Dead Sea",
+    "unknown":   "Unknown",
 }
 
 
@@ -148,7 +148,7 @@ class TrafficTransformer:
             "road_name":        data.get("road_name", description[:100]),
             "description":      description[:200],
             "region":           region,
-            "region_he":        REGION_NAMES_HE.get(region, "לא ידוע"),
+            "region_he":        REGION_NAMES_EN.get(region, "Unknown"),
             "road_type":        road_type,
 
             # traffic metrics

@@ -178,9 +178,9 @@ class BotHandler(BaseHTTPRequestHandler):
         elif path == "/geocode":
             address = urllib.parse.unquote_plus((qs.get("q") or [""])[0]).strip()
             if not address:
-                self.send_json({"error": "נדרש ?q=כתובת"}, status=400)
+                self.send_json({"error": "?q=address parameter required"}, status=400)
                 return
-            q = address if ("ישראל" in address or "israel" in address.lower()) else address + ", Israel"
+            q = address if "israel" in address.lower() else address + ", Israel"
             target = NOMINATIM_URL + "?" + urllib.parse.urlencode({
                 "q": q, "format": "json", "limit": 1,
                 "countrycodes": "il", "accept-language": "he",
@@ -193,7 +193,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     results = json.loads(resp.read())
                 if not results:
-                    self.send_json({"error": f"כתובת לא נמצאה: {address}"}, status=404)
+                    self.send_json({"error": f"Address not found: {address}"}, status=404)
                     return
                 r = results[0]
                 self.send_json({
@@ -241,7 +241,7 @@ def main():
     print(f"   /status                   → system status")
     print(f"   /buses                    → bus positions")
     print(f"   /stops                    → buses + nearest stops")
-    print(f"   /geocode?q=כתובת         → address → GPS (Nominatim proxy)")
+    print(f"   /geocode?q=address       → address → GPS (Nominatim proxy)")
     print(f"   /proxy/hasadna/<path>?... → Hasadna Open Bus API proxy")
     print(f"   /proxy/rail?...           → Israel Railways API proxy")
     try:

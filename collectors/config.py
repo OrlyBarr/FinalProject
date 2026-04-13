@@ -14,31 +14,31 @@ KAFKA_TOPIC_TRAIN_DELAYS = "train-delays"
 KAFKA_TOPIC_BUS_HISTORICAL   = "bus-delays-historical"
 KAFKA_TOPIC_TRAIN_HISTORICAL = "train-delays-historical"
 
-# ─── Open Bus Stride API (אוטובוסים) ─────────────────────────────────────────
+# ─── Open Bus Stride API (Buses) ─────────────────────────────────────────
 STRIDE_API_BASE = "https://open-bus-stride-api.hasadna.org.il"
-# כמה שניות להמתין בין polling cycles
+# Seconds to wait between polling cycles
 BUS_POLL_INTERVAL_SECONDS = 30
-# כמה רשומות לשלוף בכל קריאה
+# Records to fetch per request
 BUS_FETCH_LIMIT = 100
 
-# ─── Israel Railways API (רכבות) ──────────────────────────────────────────────
+# ─── Israel Railways API (Trains) ──────────────────────────────────────────────
 RAIL_API_BASE = "https://www.rail.co.il/apiinfo/api"
-# polling interval לרכבות (שינויים פחות תכופים)
+# Polling interval for trains (changes less frequently)
 TRAIN_POLL_INTERVAL_SECONDS = 60
 
-# תחנות לניטור — ניתן להרחיב
-# מזהי תחנות רכבת: https://www.rail.co.il
+# Monitored routes — can be extended
+# Train station IDs: https://www.rail.co.il
 MONITORED_TRAIN_ROUTES = [
-    {"origin": "3600", "destination": "3700"},  # ת"א סבידור → חיפה מרכז
-    {"origin": "3700", "destination": "3600"},  # חיפה מרכז → ת"א סבידור
-    {"origin": "4900", "destination": "3700"},  # באר שבע → חיפה
-    {"origin": "3600", "destination": "7000"},  # ת"א → ירושלים נבון
+    {"origin": "3700", "destination": "4100"},  # Tel Aviv Savidor → Haifa Central
+    {"origin": "4100", "destination": "3700"},  # Haifa Central → Tel Aviv Savidor
+    {"origin": "4900", "destination": "3700"},  # Hadera West → Tel Aviv Savidor
+    {"origin": "3700", "destination": "3100"},  # Tel Aviv → Jerusalem Navon
 ]
 
 # ─── Historical fetch ─────────────────────────────────────────────────────────
-# כמה ימים אחורה לשלוף בכל ריצת batch
+# Days back to fetch in each batch run
 HISTORICAL_DAYS_BACK = 7
-# גודל batch לשליפה היסטורית
+# Batch size for historical fetch
 HISTORICAL_BATCH_SIZE = 500
 
 # ─── Elasticsearch ────────────────────────────────────────────────────────────

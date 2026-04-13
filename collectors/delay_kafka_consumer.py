@@ -1,11 +1,11 @@
 """
 Delay Kafka Consumer
 =====================
-מאזין ל-Kafka topics של עיכובים ושומר:
+Listens to Kafka delay topics and saves:
   - Elasticsearch: לחיפוש וניתוח בזמן אמת
   - MinIO: לשמירה היסטורית גולמית (Parquet/JSON)
 
-הרצה:
+Usage:
   python delay_kafka_consumer.py
   python delay_kafka_consumer.py --topics bus-delays train-delays
   python delay_kafka_consumer.py --es-only
@@ -48,7 +48,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# כמה messages לאסוף לפני flush ל-ES/MinIO
+# Number of messages to buffer before flushing to ES/MinIO
 ES_BULK_SIZE    = 200
 MINIO_BULK_SIZE = 500
 
@@ -140,7 +140,7 @@ def save_batch_to_minio(minio: Minio, records: list[dict]):
     שומר batch של רשומות ל-MinIO כ-gzipped JSONL.
     נתיב: transport_type/YYYY/MM/DD/HH/timestamp.jsonl.gz
     """
-    # מקבץ לפי transport_type ותאריך
+    # Group by transport_type and date
     by_bucket: dict[str, list[dict]] = defaultdict(list)
     for rec in records:
         bucket = get_minio_bucket(rec)
@@ -241,7 +241,7 @@ class DelayConsumer:
                 with self._lock:
                     self._buffer.append(record)
 
-                # flush אחרי כל bulk
+                # flush after each bulk
                 if len(self._buffer) >= ES_BULK_SIZE:
                     self._flush()
 
@@ -266,7 +266,7 @@ def main():
             KAFKA_TOPIC_BUS_HISTORICAL,
             KAFKA_TOPIC_TRAIN_HISTORICAL,
         ],
-        help="Kafka topics להאזנה",
+        help="Kafka topics to listen on",
     )
     parser.add_argument("--es-only",    action="store_true", help="שמור רק ל-Elasticsearch")
     parser.add_argument("--minio-only", action="store_true", help="שמור רק ל-MinIO")
