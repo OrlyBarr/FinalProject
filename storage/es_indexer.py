@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from kafka import KafkaConsumer
 from elasticsearch import Elasticsearch, helpers
+from typing import Optional
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -239,7 +240,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
 _TRACKER_INDEX = "transit-indexer-state"
 
 
-def get_last_indexed_key(topic_key: str, date_prefix: str) -> str | None:
+def get_last_indexed_key(topic_key: str, date_prefix: str) -> Optional[str]:
     """Return the S3 key of the last file indexed for this topic + date, or None."""
     es  = get_es_client()
     doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
