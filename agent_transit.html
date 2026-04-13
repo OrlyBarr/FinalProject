@@ -1,261 +1,133 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Israel Transit Query Tool 🚌</title>
-  <style>
-    :root {
-      --bg:       #0d1117;
-      --surface:  #161b22;
-      --surface2: #1c2128;
-      --border:   #30363d;
-      --accent:   #1f6feb;
-      --green:    #3fb950;
-      --yellow:   #d29922;
-      --orange:   #e3891e;
-      --red:      #f85149;
-      --cyan:     #39c5cf;
-      --text:     #e6edf3;
-      --muted:    #8b949e;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Transit IL — תחבורה ציבורית</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#f5f7fa;--surface:#ffffff;--surface2:#f0f4f9;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --accent:#2563eb;--accent-lt:#eff6ff;--accent-md:#bfdbfe;
+  --green:#16a34a;--green-lt:#f0fdf4;
+  --yellow:#d97706;--yellow-lt:#fffbeb;
+  --orange:#ea580c;--red:#dc2626;--red-lt:#fef2f2;
+  --teal:#0891b2;
+  --text:#1e293b;--text2:#475569;--text3:#94a3b8;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.08);
+  --radius:12px;--radius-sm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl}
 
-    /* Header */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    header h1 { font-size: 1.2rem; font-weight: 700; }
-    header h1 span { color: var(--accent); }
-    #live-badge {
-      display: flex; align-items: center; gap: 6px;
-      font-size: .78rem; color: var(--muted);
-    }
-    #live-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--green);
-      animation: pulse 1.6s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--shadow)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:34px;height:34px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-text{font-size:1.05rem;font-weight:700;color:var(--text)}
+.logo-text span{color:var(--accent)}
+#clock{font-size:.82rem;color:var(--text3);display:flex;align-items:center;gap:6px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 
-    /* Nav tabs */
-    nav {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex; gap: 0; overflow-x: auto;
-    }
-    nav button {
-      background: none; border: none; border-bottom: 3px solid transparent;
-      color: var(--muted); cursor: pointer;
-      padding: 12px 20px; font-size: .9rem; white-space: nowrap;
-      transition: color .2s, border-color .2s;
-    }
-    nav button:hover { color: var(--text); }
-    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;padding:0 20px;gap:4px}
+nav button{background:none;border:none;border-bottom:3px solid transparent;color:var(--text2);cursor:pointer;padding:14px 16px;font-size:.88rem;font-weight:500;white-space:nowrap;font-family:'Heebo',sans-serif;transition:color .18s,border-color .18s}
+nav button:hover{color:var(--accent)}
+nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
 
-    /* Layout */
-    main { padding: 24px; max-width: 960px; margin: 0 auto; }
-    .tab-panel { display: none; flex-direction: column; gap: 18px; }
-    .tab-panel.active { display: flex; }
+main{padding:24px;max-width:920px;margin:0 auto}
+.tab-panel{display:none;flex-direction:column;gap:16px}
+.tab-panel.active{display:flex}
 
-    /* Search bar */
-    .search-row {
-      display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
-    }
-    .search-row .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px; }
-    .search-row label { font-size: .78rem; color: var(--muted); }
-    .search-row input, .search-row select {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text);
-      padding: 9px 12px; font-size: .9rem; outline: none;
-      transition: border-color .2s;
-    }
-    .search-row input:focus, .search-row select:focus { border-color: var(--accent); }
-    .btn {
-      background: var(--accent); color: #fff; border: none;
-      border-radius: 8px; padding: 9px 20px; cursor: pointer;
-      font-size: .9rem; font-weight: 600; white-space: nowrap;
-      transition: opacity .2s; align-self: flex-end;
-    }
-    .btn:hover { opacity: .85; }
-    .btn:disabled { opacity: .4; cursor: default; }
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
 
-    /* Quick chips */
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chip {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 20px; padding: 4px 14px; font-size: .8rem;
-      cursor: pointer; color: var(--muted); transition: border-color .2s, color .2s;
-    }
-    .chip:hover { border-color: var(--accent); color: var(--text); }
+.search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:170px}
+label{font-size:.78rem;font-weight:600;color:var(--text2);letter-spacing:.02em}
+input,select{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:9px 12px;font-size:.9rem;font-family:'Heebo',sans-serif;outline:none;transition:border-color .18s,box-shadow .18s}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 20px;cursor:pointer;font-size:.9rem;font-weight:600;font-family:'Heebo',sans-serif;white-space:nowrap;transition:background .18s,transform .1s;align-self:flex-end}
+.btn:hover{background:#1d4ed8}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1.5px solid var(--border)}
+.btn-ghost:hover{background:var(--border);color:var(--text)}
 
-    /* Loading */
-    .loader {
-      display: flex; align-items: center; gap: 10px;
-      color: var(--muted); font-size: .9rem; padding: 12px 0;
-    }
-    .spinner {
-      width: 18px; height: 18px; border-radius: 50%;
-      border: 2px solid var(--border); border-top-color: var(--accent);
-      animation: spin .8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.8rem;cursor:pointer;color:var(--text2);transition:all .18s;font-weight:500}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-lt)}
 
-    /* Vehicle cards */
-    .v-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px 16px;
-      display: flex; flex-direction: column; gap: 6px;
-    }
-    .v-card .v-header {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    }
-    .v-card .line-badge {
-      background: var(--accent); color: #fff;
-      border-radius: 6px; padding: 2px 10px;
-      font-weight: 700; font-size: 1rem;
-    }
-    .v-card .op-name { color: var(--cyan); font-size: .88rem; }
-    .v-card .age     { color: var(--muted); font-size: .78rem; margin-right: auto; }
-    .v-card .v-row   { font-size: .85rem; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
-    .v-card .v-row span { color: var(--text); }
-    .badge-ok   { color: var(--green); }
-    .badge-warn { color: var(--yellow); }
-    .badge-bad  { color: var(--orange); }
-    .badge-err  { color: var(--red); }
+.section-label{font-size:.78rem;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px}
 
-    /* Stops panel inside bus card */
-    .stops-toggle {
-      background: none; border: 1px solid var(--border);
-      border-radius: 6px; color: var(--cyan); cursor: pointer;
-      font-size: .78rem; padding: 4px 10px; margin-top: 4px;
-      transition: border-color .2s; align-self: flex-start;
-    }
-    .stops-toggle:hover { border-color: var(--cyan); }
-    .stops-panel {
-      display: none; margin-top: 8px;
-      border-top: 1px solid var(--border); padding-top: 10px;
-    }
-    .stops-panel.open { display: block; }
-    .stop-row {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 5px 0; border-bottom: 1px solid var(--surface2);
-      font-size: .82rem;
-    }
-    .stop-row:last-child { border-bottom: none; }
-    .stop-seq {
-      background: var(--surface2); border-radius: 4px;
-      padding: 1px 6px; font-size: .75rem; color: var(--muted);
-      flex-shrink: 0; min-width: 28px; text-align: center;
-    }
-    .stop-name { color: var(--text); flex: 1; }
-    .stop-time { color: var(--cyan); font-size: .78rem; flex-shrink: 0; }
-    .stop-passed { opacity: .4; }
+.loader{display:flex;align-items:center;gap:10px;color:var(--text3);font-size:.9rem;padding:16px 0}
+.spinner{width:18px;height:18px;border-radius:50%;border:2.5px solid var(--border2);border-top-color:var(--accent);animation:spin .75s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.msg-box{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;color:var(--text2);font-size:.9rem;text-align:center}
+.msg-box.err{background:var(--red-lt);border-color:#fca5a5;color:var(--red)}
+.msg-box.warn{background:var(--yellow-lt);border-color:#fcd34d;color:var(--yellow)}
+.msg-box.ok{background:var(--green-lt);border-color:#86efac;color:var(--green)}
+.summary{font-size:.82rem;color:var(--text3);padding:2px 0}
 
-    /* Alert card */
-    .alert-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-right: 4px solid var(--red); border-radius: 10px;
-      padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
-    }
-    .alert-card .a-title { font-weight: 600; font-size: .95rem; }
-    .alert-card .a-effect { color: var(--orange); font-size: .82rem; }
+.v-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow);transition:box-shadow .18s}
+.v-card:hover{box-shadow:var(--shadow-md)}
+.v-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.line-badge{background:var(--accent);color:#fff;border-radius:7px;padding:3px 11px;font-weight:700;font-size:.95rem}
+.op-name{color:var(--teal);font-size:.86rem;font-weight:600}
+.age{color:var(--text3);font-size:.77rem;margin-right:auto}
+.v-row{font-size:.84rem;color:var(--text2);display:flex;gap:14px;flex-wrap:wrap}
 
-    /* Train board row */
-    .train-row {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px 16px;
-      display: grid; grid-template-columns: auto 1fr auto; gap: 6px 14px;
-      align-items: center;
-    }
-    .train-row .tn { font-weight: 700; font-size: 1.05rem; }
-    .train-row .route { font-size: .88rem; }
-    .train-row .platform {
-      background: var(--yellow); color: #000;
-      border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: .85rem;
-      text-align: center;
-    }
-    .train-row .times { font-size: .83rem; color: var(--muted); grid-column: 1/-1; }
-    .train-row .times span { color: var(--text); }
+.badge-ok{color:var(--green);font-weight:600}
+.badge-warn{color:var(--yellow);font-weight:600}
+.badge-bad{color:var(--orange);font-weight:600}
+.badge-err{color:var(--red);font-weight:600}
 
-    /* Empty / error states */
-    .msg-box {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 20px; text-align: center;
-      color: var(--muted); font-size: .9rem;
-    }
-    .msg-box.err  { border-color: var(--red);    color: var(--red); }
-    .msg-box.warn { border-color: var(--yellow); color: var(--yellow); }
-    .msg-box.ok   { border-color: var(--green);  color: var(--green); }
+.stops-toggle{background:var(--accent-lt);border:1.5px solid var(--accent-md);border-radius:6px;color:var(--accent);cursor:pointer;font-size:.8rem;font-weight:600;padding:5px 12px;margin-top:2px;transition:all .18s;align-self:flex-start;font-family:'Heebo',sans-serif}
+.stops-toggle:hover{background:var(--accent-md)}
+.stops-panel{display:none;margin-top:8px;border-top:1.5px solid var(--border);padding-top:10px}
+.stops-panel.open{display:block}
+.stop-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:.83rem}
+.stop-row:last-child{border-bottom:none}
+.stop-seq{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 7px;font-size:.73rem;color:var(--text3);flex-shrink:0;min-width:28px;text-align:center;font-weight:700}
+.stop-name{color:var(--text);flex:1;font-weight:500}
+.stop-addr{color:var(--text3);font-size:.75rem}
+.stop-time{color:var(--accent);font-size:.8rem;flex-shrink:0;font-weight:600}
 
-    /* Summary bar */
-    .summary { font-size: .82rem; color: var(--muted); padding: 4px 0; }
+.tab2-wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.tab2-left{flex:0 0 220px;display:flex;flex-direction:column;gap:10px}
+.tab2-right{flex:1;min-width:240px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;max-height:310px;overflow-y:auto}
+#lines-picker{display:flex;flex-wrap:wrap;gap:6px}
+.line-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;cursor:pointer;color:var(--text);transition:all .18s;display:flex;flex-direction:column;gap:2px}
+.line-chip:hover{border-color:var(--accent);background:var(--accent-lt)}
+.line-chip .chip-num{font-weight:700;color:var(--accent);font-size:.88rem}
+.line-chip .chip-dest{font-size:.72rem;color:var(--text3)}
 
-    /* Station grid */
-    .station-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 8px;
-    }
-    .station-btn {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 12px; cursor: pointer;
-      color: var(--text); font-size: .82rem; text-align: right;
-      transition: border-color .2s, background .2s;
-    }
-    .station-btn:hover  { border-color: var(--accent); }
-    .station-btn.active { border-color: var(--accent); background: rgba(31,111,235,.15); }
-    .station-btn .s-id  { color: var(--cyan); font-weight: 700; font-size: .9rem; }
+.station-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.station-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;cursor:pointer;color:var(--text);font-size:.82rem;text-align:right;transition:all .18s;font-family:'Heebo',sans-serif;box-shadow:var(--shadow)}
+.station-btn:hover{border-color:var(--accent);box-shadow:var(--shadow-md)}
+.station-btn.active{border-color:var(--accent);background:var(--accent-lt)}
+.station-btn .s-id{color:var(--accent);font-weight:700;font-size:.88rem;margin-bottom:1px}
 
-    /* Tab 2 side-by-side layout */
-    .tab2-layout {
-      display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
-    }
-    .tab2-controls {
-      flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;
-      min-width: 220px;
-    }
-    .tab2-lines {
-      flex: 1; min-width: 240px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px;
-      max-height: 320px; overflow-y: auto;
-    }
-    /* Lines picker (Tab 2) */
-    #lines-picker { display: flex; flex-wrap: wrap; gap: 6px; }
-    .line-chip {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 5px 12px; font-size: .82rem;
-      cursor: pointer; color: var(--text);
-      transition: border-color .2s, background .2s;
-      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-    }
-    .line-chip:hover { border-color: var(--accent); background: rgba(31,111,235,.12); }
-    .line-chip .chip-num  { font-weight: 700; color: var(--accent); font-size: .88rem; }
-    .line-chip .chip-dest { font-size: .72rem; color: var(--muted); }
-
-    code { font-family: monospace; font-size: .82rem; }
-  </style>
+.train-row{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);transition:all .18s}
+.train-row:hover{border-color:var(--accent);box-shadow:var(--shadow-md)}
+.train-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.train-num{font-weight:700;font-size:1rem;color:var(--text)}
+.train-route{font-size:.9rem;color:var(--text2);flex:1;font-weight:500}
+.platform-badge{background:var(--yellow-lt);color:var(--yellow);border:1.5px solid #fcd34d;border-radius:7px;padding:2px 10px;font-weight:700;font-size:.82rem}
+.train-times{font-size:.82rem;color:var(--text2)}
+.train-times span{color:var(--text);font-weight:600}
+.time-strike{text-decoration:line-through;opacity:.5}
+.time-late{color:var(--orange);font-weight:600}
+</style>
 </head>
 <body>
 
 <header>
-  <h1>🚌 <span>Israel</span> Transit Query Tool</h1>
-  <div id="live-badge">
-    <div id="live-dot"></div>
-    <span id="live-time">--:--:--</span>
+  <div class="logo">
+    <div class="logo-icon">🚌</div>
+    <div class="logo-text"><span>Transit</span> IL</div>
   </div>
+  <div id="clock"><div class="live-dot"></div><span id="live-time">--:--:--</span></div>
 </header>
 
 <nav>
@@ -268,43 +140,45 @@
 
 <main>
 
-  <!-- ══════════════════════════════════════════════════════
-       Tab 1: Buses near address
-  ══════════════════════════════════════════════════════ -->
-  <div id="tab-bus" class="tab-panel active">
+<!-- Tab 1: Buses near address -->
+<div id="tab-bus" class="tab-panel active">
+  <div class="card">
     <div class="search-row">
       <div class="field">
         <label>כתובת (עברית או אנגלית)</label>
-        <input id="addr-input" type="text" placeholder="רחוב הרצל 1, תל אביב" />
+        <input id="addr-input" type="text" placeholder="רחוב הרצל 1, תל אביב"/>
       </div>
       <div class="field" style="max-width:130px">
         <label>טווח (מטרים)</label>
-        <input id="addr-radius" type="number" value="500" min="100" max="3000" step="100" />
+        <input id="addr-radius" type="number" value="500" min="100" max="3000" step="100"/>
       </div>
       <button class="btn" onclick="searchNearAddress()">חיפוש</button>
-      <button class="btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted)" onclick="clearBusResults()">נקה</button>
+      <button class="btn btn-ghost" onclick="clearBusResults()">נקה</button>
     </div>
-    <div class="chips">
-      <span class="chip" onclick="quickAddr('דיזנגוף 50, תל אביב')">📍 דיזנגוף ת"א</span>
-      <span class="chip" onclick="quickAddr('כיכר ספרא, ירושלים')">📍 כיכר ספרא</span>
-      <span class="chip" onclick="quickAddr('הנמל, חיפה')">📍 נמל חיפה</span>
-      <span class="chip" onclick="quickAddr('שדרות בן גוריון, באר שבע')">📍 ב"ג באר שבע</span>
-      <span class="chip" onclick="quickAddr('רחוב ויצמן, רחובות')">📍 ויצמן רחובות</span>
-    </div>
-    <div id="results-bus"></div>
   </div>
+  <div class="chips">
+    <span class="chip" onclick="quickAddr('דיזנגוף 50, תל אביב')">📍 דיזנגוף ת"א</span>
+    <span class="chip" onclick="quickAddr('כיכר ספרא, ירושלים')">📍 כיכר ספרא</span>
+    <span class="chip" onclick="quickAddr('הנמל, חיפה')">📍 נמל חיפה</span>
+    <span class="chip" onclick="quickAddr('שדרות בן גוריון, באר שבע')">📍 ב"ג באר שבע</span>
+    <span class="chip" onclick="quickAddr('רחוב ויצמן, רחובות')">📍 ויצמן רחובות</span>
+  </div>
+  <div id="results-bus"></div>
+</div>
 
-  <!-- ══════════════════════════════════════════════════════
-       Tab 2: Track bus line — operator → line picker (side by side)
-  ══════════════════════════════════════════════════════ -->
-  <div id="tab-line" class="tab-panel">
-    <div class="tab2-layout">
-      <!-- Right side: controls -->
-      <div class="tab2-controls">
+<!-- Tab 2: Track bus line -->
+<div id="tab-line" class="tab-panel">
+  <div class="card">
+    <div class="tab2-wrap">
+      <div class="tab2-left">
         <div class="field">
-          <label>מפעיל</label>
-          <select id="line-operator" onchange="loadLinesForOperator()">
-            <option value="">בחר מפעיל...</option>
+          <label>מספר קו (חיפוש ישיר)</label>
+          <input id="line-number-input" type="text" placeholder="89" oninput="onLineNumberInput(this.value)"/>
+        </div>
+        <div class="field">
+          <label>מפעיל (לסינון)</label>
+          <select id="line-operator" onchange="onOperatorChange()">
+            <option value="">כל המפעילים</option>
             <option value="3">3 — דן</option>
             <option value="5">5 — אגד</option>
             <option value="6">6 — אגד תעבורה</option>
@@ -319,729 +193,600 @@
             <option value="42">42 — Extra</option>
           </select>
         </div>
-        <div class="field">
-          <label>מספר קו (ידני)</label>
-          <input id="line-input" type="text" placeholder="89" />
-        </div>
-        <button class="btn" onclick="searchLine()">עקוב אחרי קו</button>
+        <button class="btn" onclick="searchLine()">הצג תחנות עתידיות</button>
       </div>
-
-      <!-- Left side: line picker — populated when operator is selected -->
-      <div class="tab2-lines" id="lines-picker-wrap" style="display:none">
-        <div class="summary" id="lines-picker-label" style="margin-bottom:8px"></div>
+      <div class="tab2-right" id="lines-picker-wrap" style="display:none">
+        <div class="section-label" id="lines-picker-label">קווים</div>
         <div id="lines-picker"></div>
       </div>
     </div>
-
-    <div id="results-line"></div>
   </div>
+  <div id="results-line"></div>
+</div>
 
-  <!-- ══════════════════════════════════════════════════════
-       Tab 3: Train station board
-  ══════════════════════════════════════════════════════ -->
-  <div id="tab-station" class="tab-panel">
+<!-- Tab 3: Train station board -->
+<div id="tab-station" class="tab-panel">
+  <div class="card">
     <div class="search-row">
       <div class="field" style="max-width:200px">
         <label>מספר תחנה</label>
-        <input id="station-input" type="text" placeholder="2300" />
+        <input id="station-input" type="text" placeholder="2300"/>
       </div>
       <button class="btn" onclick="searchStation()">לוח יציאות</button>
     </div>
-    <div class="station-grid">
-      <button class="station-btn" onclick="quickStation('2300')"><div class="s-id">2300</div>תל אביב מרכז</button>
-      <button class="station-btn" onclick="quickStation('2820')"><div class="s-id">2820</div>תל אביב השלום</button>
-      <button class="station-btn" onclick="quickStation('3400')"><div class="s-id">3400</div>ירושלים נבון</button>
-      <button class="station-btn" onclick="quickStation('3600')"><div class="s-id">3600</div>חיפה מרכז שמיר</button>
-      <button class="station-btn" onclick="quickStation('3100')"><div class="s-id">3100</div>נתניה</button>
-      <button class="station-btn" onclick="quickStation('5000')"><div class="s-id">5000</div>הרצליה</button>
-      <button class="station-btn" onclick="quickStation('4600')"><div class="s-id">4600</div>באר שבע מרכז</button>
-      <button class="station-btn" onclick="quickStation('1220')"><div class="s-id">1220</div>נהריה</button>
-      <button class="station-btn" onclick="quickStation('700')"><div class="s-id">700</div>חדרה מערב</button>
-      <button class="station-btn" onclick="quickStation('6700')"><div class="s-id">6700</div>אשקלון</button>
-      <button class="station-btn" onclick="quickStation('6900')"><div class="s-id">6900</div>אשדוד עד הלום</button>
-      <button class="station-btn" onclick="quickStation('2200')"><div class="s-id">2200</div>בני ברק</button>
-    </div>
-    <div id="results-station"></div>
   </div>
-
-  <!-- ══════════════════════════════════════════════════════
-       Tab 4: Track train — search by station + optional train number
-  ══════════════════════════════════════════════════════ -->
-  <div id="tab-train" class="tab-panel">
-    <div class="search-row">
-      <div class="field" style="max-width:200px">
-        <label>מספר רכבת (אופציונלי)</label>
-        <input id="train-input" type="text" placeholder="145" />
-      </div>
-      <button class="btn" onclick="trackTrain()">חפש בכל התחנות</button>
-    </div>
-    <p style="font-size:.82rem;color:var(--muted)">
-      לחץ על תחנה כדי לראות את כל הרכבות העוברות בה. אם הכנסת מספר רכבת — תוצאות יסוננו.
-    </p>
-
-    <!-- Station selector -->
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="summary">בחר תחנה לאיתור הרכבת (נתוני Open Bus Stride — רכבת ישראל):</div>
-      <div class="station-grid" id="train-station-grid">
-        <button class="station-btn" onclick="trackByStation('1500',this)"><div class="s-id">1500</div>ת"א סבידור מרכז</button>
-        <button class="station-btn" onclick="trackByStation('1600',this)"><div class="s-id">1600</div>ת"א השלום</button>
-        <button class="station-btn" onclick="trackByStation('1700',this)"><div class="s-id">1700</div>ת"א הרכבת</button>
-        <button class="station-btn" onclick="trackByStation('2300',this)"><div class="s-id">2300</div>ת"א ע"ש ארלוזרוב</button>
-        <button class="station-btn" onclick="trackByStation('3100',this)"><div class="s-id">3100</div>ירושלים נבון</button>
-        <button class="station-btn" onclick="trackByStation('3200',this)"><div class="s-id">3200</div>ירושלים ביג</button>
-        <button class="station-btn" onclick="trackByStation('3700',this)"><div class="s-id">3700</div>בן גוריון</button>
-        <button class="station-btn" onclick="trackByStation('4100',this)"><div class="s-id">4100</div>חיפה מרכז כרמל</button>
-        <button class="station-btn" onclick="trackByStation('4600',this)"><div class="s-id">4600</div>נהריה</button>
-        <button class="station-btn" onclick="trackByStation('4640',this)"><div class="s-id">4640</div>עכו</button>
-        <button class="station-btn" onclick="trackByStation('4900',this)"><div class="s-id">4900</div>חדרה מערב</button>
-        <button class="station-btn" onclick="trackByStation('5000',this)"><div class="s-id">5000</div>נתניה</button>
-        <button class="station-btn" onclick="trackByStation('5200',this)"><div class="s-id">5200</div>פ"ת קריית אריה</button>
-        <button class="station-btn" onclick="trackByStation('5410',this)"><div class="s-id">5410</div>כפר סבא נורדאו</button>
-        <button class="station-btn" onclick="trackByStation('7000',this)"><div class="s-id">7000</div>הרצליה</button>
-        <button class="station-btn" onclick="trackByStation('7300',this)"><div class="s-id">7300</div>באר שבע מרכז</button>
-        <button class="station-btn" onclick="trackByStation('7500',this)"><div class="s-id">7500</div>אשדוד עד הלום</button>
-        <button class="station-btn" onclick="trackByStation('7600',this)"><div class="s-id">7600</div>אשקלון</button>
-        <button class="station-btn" onclick="trackByStation('2100',this)"><div class="s-id">2100</div>רחובות</button>
-        <button class="station-btn" onclick="trackByStation('3500',this)"><div class="s-id">3500</div>לוד</button>
-        <button class="station-btn" onclick="trackByStation('3600',this)"><div class="s-id">3600</div>רמלה</button>
-        <button class="station-btn" onclick="trackByStation('8600',this)"><div class="s-id">8600</div>מודיעין נבון</button>
-      </div>
-    </div>
-
-    <div id="results-train"></div>
+  <div class="station-grid">
+    <button class="station-btn" onclick="quickStation('2300')"><div class="s-id">2300</div>תל אביב מרכז</button>
+    <button class="station-btn" onclick="quickStation('2820')"><div class="s-id">2820</div>תל אביב השלום</button>
+    <button class="station-btn" onclick="quickStation('3400')"><div class="s-id">3400</div>ירושלים נבון</button>
+    <button class="station-btn" onclick="quickStation('3600')"><div class="s-id">3600</div>חיפה מרכז שמיר</button>
+    <button class="station-btn" onclick="quickStation('3100')"><div class="s-id">3100</div>נתניה</button>
+    <button class="station-btn" onclick="quickStation('5000')"><div class="s-id">5000</div>הרצליה</button>
+    <button class="station-btn" onclick="quickStation('4600')"><div class="s-id">4600</div>באר שבע מרכז</button>
+    <button class="station-btn" onclick="quickStation('1220')"><div class="s-id">1220</div>נהריה</button>
+    <button class="station-btn" onclick="quickStation('700')"><div class="s-id">700</div>חדרה מערב</button>
+    <button class="station-btn" onclick="quickStation('6700')"><div class="s-id">6700</div>אשקלון</button>
+    <button class="station-btn" onclick="quickStation('6900')"><div class="s-id">6900</div>אשדוד עד הלום</button>
+    <button class="station-btn" onclick="quickStation('2200')"><div class="s-id">2200</div>בני ברק</button>
   </div>
+  <div id="results-station"></div>
+</div>
 
-  <!-- ══════════════════════════════════════════════════════
-       Tab 5: Service alerts
-  ══════════════════════════════════════════════════════ -->
-  <div id="tab-alerts" class="tab-panel">
-    <div class="search-row">
-      <button class="btn" onclick="loadAlerts()">רענן התראות</button>
+<!-- Tab 4: Track train -->
+<div id="tab-train" class="tab-panel">
+  <div class="card">
+    <p style="font-size:.88rem;color:var(--text2);margin-bottom:12px">בחר תחנה כדי לראות רכבות פעילות באזור. לחץ על רכבת לצפייה בתחנות העתידיות.</p>
+    <div class="station-grid" id="train-station-grid">
+      <button class="station-btn" onclick="fetchTrainsAtStation('1500',this)"><div class="s-id">1500</div>ת"א סבידור מרכז</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('1600',this)"><div class="s-id">1600</div>ת"א השלום</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('1700',this)"><div class="s-id">1700</div>ת"א הרכבת</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('2300',this)"><div class="s-id">2300</div>ת"א ע"ש ארלוזרוב</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('3100',this)"><div class="s-id">3100</div>ירושלים נבון</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('3700',this)"><div class="s-id">3700</div>בן גוריון</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('4100',this)"><div class="s-id">4100</div>חיפה מרכז כרמל</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('4600',this)"><div class="s-id">4600</div>נהריה</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('4640',this)"><div class="s-id">4640</div>עכו</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('4900',this)"><div class="s-id">4900</div>חדרה מערב</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('5000',this)"><div class="s-id">5000</div>נתניה</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('5200',this)"><div class="s-id">5200</div>פ"ת קריית אריה</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('7300',this)"><div class="s-id">7300</div>באר שבע מרכז</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('7500',this)"><div class="s-id">7500</div>אשדוד עד הלום</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('7600',this)"><div class="s-id">7600</div>אשקלון</button>
+      <button class="station-btn" onclick="fetchTrainsAtStation('8600',this)"><div class="s-id">8600</div>מודיעין נבון</button>
     </div>
-    <div id="results-alerts"></div>
   </div>
+  <div id="results-train"></div>
+</div>
+
+<!-- Tab 5: Alerts -->
+<div id="tab-alerts" class="tab-panel">
+  <div class="card">
+    <button class="btn" onclick="loadAlerts()">רענן התראות</button>
+  </div>
+  <div id="results-alerts"></div>
+</div>
 
 </main>
 
 <script>
-// ── Constants ────────────────────────────────────────────
-const OPEN_BUS_BASE = "https://open-bus-stride-api.hasadna.org.il";
-const RAIL_BOARD    = "/proxy/rail";
-const NOMINATIM     = "https://nominatim.openstreetmap.org/search";
+// ── Constants ─────────────────────────────────────────────────────────────────
+const STRIDE     = "/proxy/stride";
+const RAIL_PROXY = "/proxy/rail";
 
 const OPERATORS = {
-  "3":"דן","5":"אגד","6":"אגד תעבורה","7":"קוופרטיב","10":"מטרופולין",
-  "14":"קווים","15":"נתיב אקספרס","16":"ירושלים","18":"גולן",
-  "20":"Kavim","25":"נצרת","42":"Extra",
+  "2":"רכבת ישראל","3":"דן","5":"אגד","6":"אגד תעבורה","7":"קוופרטיב",
+  "10":"מטרופולין","14":"קווים","15":"נתיב אקספרס","16":"ירושלים",
+  "18":"גולן","20":"Kavim","25":"נצרת","42":"Extra"
 };
 
-// Station data: name + GPS coords for proximity filtering (Open Bus Stride)
+const TRAIN_STATIONS = {
+  "700":"חדרה מערב","1220":"נהריה","1500":"ת\"א סבידור מרכז",
+  "1600":"ת\"א השלום","1700":"ת\"א הרכבת","2100":"רחובות",
+  "2200":"בני ברק","2300":"ת\"א ארלוזרוב","2820":"ת\"א השלום",
+  "3100":"נתניה","3200":"ירושלים ביג","3400":"ירושלים נבון",
+  "3500":"לוד","3600":"חיפה מרכז שמיר","3700":"בן גוריון",
+  "4100":"חיפה מרכז כרמל","4600":"נהריה","4640":"עכו",
+  "4900":"חדרה מערב","5000":"הרצליה","5200":"פ\"ת קריית אריה",
+  "5410":"כפר סבא נורדאו","6700":"אשקלון","6900":"אשדוד עד הלום",
+  "7300":"באר שבע מרכז","7500":"אשדוד עד הלום","7600":"אשקלון",
+  "8600":"מודיעין נבון"
+};
+
 const STATION_COORDS = {
-  "1500":{ name:"ת\"א סבידור מרכז",   lat:32.0893, lon:34.7773 },
-  "1600":{ name:"ת\"א השלום",          lat:32.0648, lon:34.7751 },
-  "1700":{ name:"ת\"א הרכבת",          lat:32.0858, lon:34.7784 },
-  "2100":{ name:"רחובות",              lat:31.8956, lon:34.8178 },
-  "2300":{ name:"ת\"א ע\"ש ארלוזרוב", lat:32.0993, lon:34.7977 },
-  "3100":{ name:"ירושלים נבון",        lat:31.7887, lon:35.2025 },
-  "3200":{ name:"ירושלים ביג",         lat:31.7702, lon:35.1904 },
-  "3500":{ name:"לוד",                 lat:31.9618, lon:34.8954 },
-  "3600":{ name:"רמלה",                lat:31.9296, lon:34.8725 },
-  "3700":{ name:"בן גוריון",           lat:31.9993, lon:34.8849 },
-  "4100":{ name:"חיפה מרכז כרמל",     lat:32.8145, lon:34.9886 },
-  "4600":{ name:"נהריה",               lat:33.0063, lon:35.0972 },
-  "4640":{ name:"עכו",                 lat:32.9257, lon:35.0707 },
-  "4900":{ name:"חדרה מערב",           lat:32.4493, lon:34.9205 },
-  "5000":{ name:"נתניה",               lat:32.3155, lon:34.8519 },
-  "5200":{ name:"פ\"ת קריית אריה",     lat:32.0912, lon:34.8560 },
-  "5410":{ name:"כפר סבא נורדאו",      lat:32.1775, lon:34.9134 },
-  "7000":{ name:"הרצליה",              lat:32.1537, lon:34.8370 },
-  "7300":{ name:"באר שבע מרכז",        lat:31.2435, lon:34.8018 },
-  "7500":{ name:"אשדוד עד הלום",       lat:31.8052, lon:34.6468 },
-  "7600":{ name:"אשקלון",              lat:31.6598, lon:34.5714 },
-  "8600":{ name:"מודיעין נבון",         lat:31.8952, lon:35.0186 },
+  "1500":{lat:32.0893,lon:34.7773},"1600":{lat:32.0648,lon:34.7751},
+  "1700":{lat:32.0858,lon:34.7784},"2300":{lat:32.0993,lon:34.7977},
+  "3100":{lat:32.3155,lon:34.8519},"3700":{lat:31.9993,lon:34.8849},
+  "4100":{lat:32.8145,lon:34.9886},"4600":{lat:33.0063,lon:35.0972},
+  "4640":{lat:32.9257,lon:35.0707},"4900":{lat:32.4493,lon:34.9205},
+  "5000":{lat:32.3155,lon:34.8519},"5200":{lat:32.0912,lon:34.8560},
+  "7300":{lat:31.2435,lon:34.8018},"7500":{lat:31.8052,lon:34.6468},
+  "7600":{lat:31.6598,lon:34.5714},"8600":{lat:31.8952,lon:35.0186}
 };
 
-// ── Clock ────────────────────────────────────────────────
-setInterval(() => {
-  document.getElementById("live-time").textContent =
-    new Date().toLocaleTimeString("he-IL");
-}, 1000);
+// ── Clock ─────────────────────────────────────────────────────────────────────
+setInterval(()=>{ document.getElementById("live-time").textContent=new Date().toLocaleTimeString("he-IL"); },1000);
 
-// ── Tab switching ────────────────────────────────────────
-function switchTab(id, btn) {
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(id,btn){
+  document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
+  if(id==="tab-alerts"&&!document.getElementById("results-alerts").innerHTML) loadAlerts();
 }
 
-// ── Utility helpers ──────────────────────────────────────
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000, toR = d => d * Math.PI / 180;
-  const dlat = toR(lat2-lat1), dlon = toR(lon2-lon1);
-  const a = Math.sin(dlat/2)**2 + Math.cos(toR(lat1))*Math.cos(toR(lat2))*Math.sin(dlon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function haversine(la1,lo1,la2,lo2){
+  const R=6371000,r=d=>d*Math.PI/180,dl=r(la2-la1),dn=r(lo2-lo1);
+  const a=Math.sin(dl/2)**2+Math.cos(r(la1))*Math.cos(r(la2))*Math.sin(dn/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function fmtTime(iso){
+  if(!iso) return "—";
+  try{ return new Date(iso).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}); }
+  catch{ return String(iso).slice(11,16)||"—"; }
+}
+function ageStr(iso){
+  if(!iso) return "";
+  const s=Math.floor((Date.now()-new Date(iso))/1000);
+  if(s<0) return "עכשיו";
+  if(s<60) return `${s}ש׳`;
+  return `${Math.floor(s/60)}ד׳`;
+}
+function delayBadge(sec,cancelled){
+  if(cancelled) return `<span class="badge-err">❌ בוטל</span>`;
+  if(sec==null) return `<span style="color:var(--text3)">—</span>`;
+  if(sec<=60)   return `<span class="badge-ok">✅ בזמן</span>`;
+  const m=Math.floor(sec/60);
+  if(sec<=300)  return `<span class="badge-warn">⏱ ${m} דק׳ איחור</span>`;
+  if(sec<=900)  return `<span class="badge-bad">⚠️ ${m} דק׳ איחור</span>`;
+  return `<span class="badge-err">🔴 ${m} דק׳ איחור</span>`;
+}
+function setLoading(el){ el.innerHTML=`<div class="loader"><div class="spinner"></div>טוען נתונים...</div>`; }
+function setMsg(el,txt,t=""){ el.innerHTML=`<div class="msg-box ${t}">${txt}</div>`; }
+
+async function geocode(addr){
+  const q=/ישר|israel/i.test(addr)?addr:`${addr}, Israel`;
+  try{
+    const r=await fetch(`/geocode?q=${encodeURIComponent(q)}`);
+    if(r.ok){ const d=await r.json(); if(d.lat) return d; }
+  }catch{}
+  const r2=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=he`);
+  const d=await r2.json();
+  if(!d.length) return null;
+  return {lat:+d[0].lat,lon:+d[0].lon,display_name:d[0].display_name};
 }
 
-function ageStr(iso) {
-  if (!iso) return "—";
-  try {
-    const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (sec < 0)  return "עכשיו";
-    if (sec < 60) return `${sec}ש' לפני`;
-    return `${Math.floor(sec/60)}דק' לפני`;
-  } catch { return "—"; }
+// ── Shared stops fetcher ──────────────────────────────────────────────────────
+async function fetchFutureStops(rideId){
+  const r=await fetch(`${STRIDE}/siri_ride_stops/list?siri_ride_id=${rideId}&limit=120&order_by=order asc`);
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  const stops=await r.json();
+  const now=new Date();
+  return stops.filter(s=>{
+    const t=s.planned_arrival_time||s.expected_arrival_time||s.actual_arrival_time;
+    return t ? new Date(t)>now : true;
+  });
 }
 
-function bearingDir(b) {
-  if (b == null) return "";
-  const dirs = ["↑N","↗NE","→E","↘SE","↓S","↙SW","←W","↖NW"];
-  return dirs[Math.round(((+b % 360) + 22.5) / 45) % 8];
+// isTrain=true  → show stop_name (station name e.g. "תל אביב סבידור מרכז")
+// isTrain=false → show stop_desc (street address) as primary label
+function renderStopsList(stops,isTrain=false){
+  if(!stops.length) return `<div style="font-size:.84rem;color:var(--text3);padding:8px 0">אין תחנות עתידיות</div>`;
+  return stops.map(s=>{
+    const stopName=s.gtfs_stop__stop_name||s.stop_name||"";
+    const stopDesc=s.gtfs_stop__stop_desc||s.stop_desc||"";
+    const code=s.gtfs_stop__stop_code||s.gtfs_stop_id||s.stop_id||"";
+    const t=s.planned_arrival_time||s.expected_arrival_time||s.actual_arrival_time;
+    const seq=s.order!=null?s.order:"";
+    const primary  =isTrain ? (stopName||`תחנה ${code||"?"}`) : (stopDesc||stopName||`תחנה ${code||"?"}`);
+    const secondary=isTrain ? "" : (stopDesc&&stopName&&stopName!==stopDesc?stopName:"");
+    return `<div class="stop-row">
+      <span class="stop-seq">${seq}</span>
+      <div style="flex:1">
+        <div class="stop-name">🚏 ${primary}${code?` <span style="color:var(--text3);font-size:.72rem">(${code})</span>`:""}</div>
+        ${secondary?`<div class="stop-addr">${secondary}</div>`:""}
+      </div>
+      <span class="stop-time">${t?fmtTime(t):"—"}</span>
+    </div>`;
+  }).join("");
 }
 
-function statusBadge(delaySec, cancelled) {
-  if (cancelled)        return `<span class="badge-err">❌ בוטל</span>`;
-  if (delaySec == null) return `<span class="badge-warn">❓ אין מידע</span>`;
-  if (delaySec <= 60)   return `<span class="badge-ok">✅ בזמן</span>`;
-  const m = Math.floor(delaySec/60);
-  if (delaySec <= 300)  return `<span class="badge-warn">🟡 ${m} דק' איחור</span>`;
-  if (delaySec <= 900)  return `<span class="badge-bad">🟠 ${m} דק' איחור</span>`;
-  return `<span class="badge-err">🔴 ${m} דק' איחור</span>`;
+// ── Tab 1: Buses near address ─────────────────────────────────────────────────
+function clearBusResults(){
+  document.getElementById("addr-input").value="";
+  document.getElementById("results-bus").innerHTML="";
 }
+function quickAddr(a){ document.getElementById("addr-input").value=a; searchNearAddress(); }
 
-function setLoading(el) {
-  el.innerHTML = `<div class="loader"><div class="spinner"></div> טוען נתונים...</div>`;
-}
-function setMsg(el, text, type="") {
-  el.innerHTML = `<div class="msg-box ${type}">${text}</div>`;
-}
-
-function fmtTime(iso) {
-  if (!iso) return "—";
-  try { return new Date(iso).toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit" }); }
-  catch { return iso.slice(11,16) || "—"; }
-}
-
-// Geocode via bot proxy (avoids CORS for Nominatim)
-async function geocode(address) {
-  const q = /ישר|israel/i.test(address) ? address : `${address}, Israel`;
-  try {
-    const r = await fetch(`/geocode?q=${encodeURIComponent(q)}`);
-    if (r.ok) {
-      const d = await r.json();
-      if (d.lat) return { lat: d.lat, lon: d.lon, name: d.display_name || address };
-    }
-  } catch {}
-  // fallback: direct Nominatim
-  const r2 = await fetch(`${NOMINATIM}?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=he`);
-  const data = await r2.json();
-  if (!data.length) return null;
-  return { lat: +data[0].lat, lon: +data[0].lon, name: data[0].display_name };
-}
-
-// ══════════════════════════════════════════════════════════
-//  Tab 1 — Buses near address + future stops per bus
-// ══════════════════════════════════════════════════════════
-function clearBusResults() {
-  document.getElementById("addr-input").value = "";
-  document.getElementById("results-bus").innerHTML = "";
-}
-
-function quickAddr(a) { document.getElementById("addr-input").value = a; searchNearAddress(); }
-
-async function searchNearAddress() {
-  const addr   = document.getElementById("addr-input").value.trim();
-  const radius = parseInt(document.getElementById("addr-radius").value) || 500;
-  const out    = document.getElementById("results-bus");
-  if (!addr) { setMsg(out, "הכנס כתובת לחיפוש", "warn"); return; }
-
+async function searchNearAddress(){
+  const addr=document.getElementById("addr-input").value.trim();
+  const radius=parseInt(document.getElementById("addr-radius").value)||500;
+  const out=document.getElementById("results-bus");
+  if(!addr){ setMsg(out,"הכנסי כתובת לחיפוש","warn"); return; }
   setLoading(out);
 
   let geo;
-  try { geo = await geocode(addr); }
-  catch(e) { setMsg(out, `❌ שגיאת Nominatim: ${e.message}`, "err"); return; }
-  if (!geo) { setMsg(out, "❌ הכתובת לא נמצאה. נסה ניסוח אחר.", "err"); return; }
+  try{ geo=await geocode(addr); }
+  catch(e){ setMsg(out,`❌ שגיאת Geocoding: ${e.message}`,"err"); return; }
+  if(!geo){ setMsg(out,"❌ הכתובת לא נמצאה. נסי ניסוח אחר.","err"); return; }
 
-  // Bounding box query
-  const deg_m = 0.00001;
-  const lat_d = (radius * deg_m) * 1.2;
-  const lon_d = (radius * deg_m) * 1.5;
-  let vehicles = [];
-  try {
-    const url = `${OPEN_BUS_BASE}/siri_vehicle_locations/list?` +
-      `lon__greater_or_equal=${(geo.lon - lon_d).toFixed(5)}&lon__lower_or_equal=${(geo.lon + lon_d).toFixed(5)}` +
-      `&lat__greater_or_equal=${(geo.lat - lat_d).toFixed(5)}&lat__lower_or_equal=${(geo.lat + lat_d).toFixed(5)}` +
+  const deg=0.00001,ld=(radius*deg)*1.2,lnd=(radius*deg)*1.5;
+  let vehicles=[];
+  try{
+    const url=`${STRIDE}/siri_vehicle_locations/list?`+
+      `lon__greater_or_equal=${(geo.lon-lnd).toFixed(5)}&lon__lower_or_equal=${(geo.lon+lnd).toFixed(5)}`+
+      `&lat__greater_or_equal=${(geo.lat-ld).toFixed(5)}&lat__lower_or_equal=${(geo.lat+ld).toFixed(5)}`+
       `&limit=100&order_by=id desc`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    vehicles = await r.json();
-  } catch(e) {
-    setMsg(out, `❌ שגיאת Open Bus Stride: ${e.message}`, "err"); return;
-  }
+    const r=await fetch(url);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    vehicles=await r.json();
+  }catch(e){ setMsg(out,`❌ שגיאת Stride: ${e.message}`,"err"); return; }
 
-  // Exact haversine filter
-  vehicles = vehicles
-    .map(v => ({ ...v, _dist: haversine(geo.lat, geo.lon, +v.lat, +v.lon) }))
-    .filter(v => v._dist <= radius)
-    .sort((a, b) => a._dist - b._dist);
+  vehicles=vehicles
+    .map(v=>({...v,_dist:haversine(geo.lat,geo.lon,+v.lat,+v.lon)}))
+    .filter(v=>v._dist<=radius)
+    .sort((a,b)=>a._dist-b._dist);
 
-  if (!vehicles.length) {
-    setMsg(out, `⚠️ לא נמצאו אוטובוסים בטווח ${radius}מ' מ: ${geo.name.slice(0,60)}`, "warn");
-    return;
-  }
+  if(!vehicles.length){ setMsg(out,`⚠️ לא נמצאו אוטובוסים בטווח ${radius}מ' מ: ${(geo.display_name||addr).slice(0,60)}`,"warn"); return; }
 
-  let html = `<div class="summary">📍 ${geo.name.slice(0,80)} &nbsp;|&nbsp; נמצאו ${vehicles.length} רכבים בטווח ${radius}מ'</div>`;
-  for (let i = 0; i < vehicles.length; i++) {
-    const v      = vehicles[i];
-    const line   = v.siri_route__line_ref || v.line_ref || "—";
-    const opId   = String(v.siri_route__operator_ref || v.operator_ref || "");
-    const opName = OPERATORS[opId] || `מפעיל ${opId}`;
-    const bearing = bearingDir(v.bearing);
-    const spd    = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;` : "";
-    const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
-    const sched  = v.siri_ride__scheduled_start_time
-      ? `🕐 ${v.siri_ride__scheduled_start_time.slice(11,16)} &nbsp;` : "";
-    const rideId = v.siri_ride__id || v.siri_ride_id || "";
-    const cardId = `bus-card-${i}`;
-    const panelId = `stops-panel-${i}`;
-
-    html += `
-    <div class="v-card" id="${cardId}">
+  let html=`<div class="summary">📍 ${(geo.display_name||addr).slice(0,70)} — נמצאו ${vehicles.length} רכבים בטווח ${radius}מ'</div>`;
+  for(let i=0;i<vehicles.length;i++){
+    const v=vehicles[i];
+    const line=v.siri_route__line_ref||v.line_ref||"—";
+    const opId=String(v.siri_route__operator_ref||v.operator_ref||"");
+    const opName=OPERATORS[opId]||`מפעיל ${opId}`;
+    const rideId=v.siri_ride__id||v.siri_ride_id||"";
+    const pid=`sp-${i}`;
+    html+=`<div class="v-card">
       <div class="v-header">
         <span class="line-badge">קו ${line}</span>
         <span class="op-name">${opName}</span>
-        <span class="age">${Math.round(v._dist)}מ' ממך &nbsp; ${bearing} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
+        <span class="age">${Math.round(v._dist)}מ׳ · ${ageStr(v.recorded_at_time)} לפני</span>
       </div>
-      <div class="v-row">${vid}${spd}${sched}</div>
+      <div class="v-row">
+        ${v.siri_ride__vehicle_ref?`🚌 רכב ${v.siri_ride__vehicle_ref}`:""}
+        ${v.velocity!=null?`💨 ${(+v.velocity).toFixed(0)} קמ"ש`:""}
+        ${v.siri_ride__scheduled_start_time?`🕐 ${v.siri_ride__scheduled_start_time.slice(11,16)}`:""}
+      </div>
       ${rideId
-        ? `<button class="stops-toggle" onclick="toggleStops('${panelId}','${rideId}',this)">▶ הצג תחנות עתידיות</button>
-           <div class="stops-panel" id="${panelId}"></div>`
-        : `<div style="font-size:.75rem;color:var(--muted)">מזהה נסיעה חסר — לא ניתן לטעון תחנות</div>`
-      }
+        ?`<button class="stops-toggle" onclick="toggleBusStops('${pid}','${rideId}',this)">▶ תחנות עתידיות</button>
+          <div class="stops-panel" id="${pid}"></div>`
+        :`<div style="font-size:.75rem;color:var(--text3)">מזהה נסיעה חסר</div>`}
     </div>`;
   }
-  out.innerHTML = html;
+  out.innerHTML=html;
 }
 
-async function toggleStops(panelId, rideId, btn) {
-  const panel = document.getElementById(panelId);
-  if (panel.classList.contains("open")) {
-    panel.classList.remove("open");
-    btn.textContent = "▶ הצג תחנות עתידיות";
-    return;
-  }
-  btn.textContent = "⏳ טוען תחנות...";
-  btn.disabled = true;
-  panel.classList.add("open");
-
-  try {
-    const url = `${OPEN_BUS_BASE}/siri_ride_stops/list?siri_ride_id=${rideId}&limit=100&order_by=order asc`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const stops = await r.json();
-
-    if (!stops.length) {
-      panel.innerHTML = `<div style="font-size:.82rem;color:var(--muted);padding:6px 0">לא נמצאו תחנות לנסיעה זו</div>`;
-      btn.textContent = "▼ תחנות עתידיות";
-      btn.disabled = false;
-      return;
-    }
-
-    const now = new Date();
-    // Separate future (not yet arrived) from past stops
-    const future = [];
-    const past   = [];
-    for (const s of stops) {
-      const t = s.planned_arrival_time || s.actual_arrival_time || s.expected_arrival_time;
-      const isPast = t ? new Date(t) < now : false;
-      (isPast ? past : future).push({ ...s, _time: t });
-    }
-
-    let html = `<div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">
-      ${future.length} תחנות עתידיות · ${past.length} תחנות שחלפו</div>`;
-
-    if (!future.length) {
-      html += `<div style="font-size:.82rem;color:var(--muted)">הרכבת עברה את כל התחנות ברשימה</div>`;
-    } else {
-      for (const s of future) {
-        const name    = s.gtfs_stop__stop_name || s.stop_name || `תחנה ${s.gtfs_stop_id || s.stop_id || "?"}`;
-        const stopId  = s.gtfs_stop__stop_code || s.gtfs_stop_id || s.stop_id || "";
-        const timeStr = s._time ? fmtTime(s._time) : "—";
-        const seq     = s.order != null ? s.order : "";
-        html += `
-        <div class="stop-row">
-          <span class="stop-seq">${seq}</span>
-          <span class="stop-name">🚏 ${name}${stopId ? ` <span style="color:var(--muted);font-size:.72rem">(${stopId})</span>` : ""}</span>
-          <span class="stop-time">⏰ ${timeStr}</span>
-        </div>`;
-      }
-    }
-
-    panel.innerHTML = html;
-    btn.textContent = "▼ הסתר תחנות";
-  } catch(e) {
-    panel.innerHTML = `<div style="font-size:.82rem;color:var(--red)">❌ שגיאה בטעינת תחנות: ${e.message}</div>`;
-    btn.textContent = "▼ שגיאה";
-  }
-  btn.disabled = false;
+async function toggleBusStops(pid,rideId,btn){
+  const panel=document.getElementById(pid);
+  if(panel.classList.contains("open")){ panel.classList.remove("open"); btn.textContent="▶ תחנות עתידיות"; return; }
+  btn.textContent="⏳ טוען..."; btn.disabled=true; panel.classList.add("open");
+  try{
+    const stops=await fetchFutureStops(rideId);
+    panel.innerHTML=`<div style="font-size:.78rem;color:var(--text3);margin-bottom:6px">${stops.length} תחנות עתידיות</div>`+renderStopsList(stops,false);
+    btn.textContent="▼ הסתר תחנות";
+  }catch(e){ panel.innerHTML=`<div class="msg-box err">❌ ${e.message}</div>`; btn.textContent="שגיאה"; }
+  btn.disabled=false;
 }
 
-// ══════════════════════════════════════════════════════════
-//  Tab 2 — Track bus line + operator → line picker
-// ══════════════════════════════════════════════════════════
-function quickLine(n) { document.getElementById("line-input").value = n; searchLine(); }
+// ── Tab 2: Bus line ───────────────────────────────────────────────────────────
+let _lineTimer=null;
 
-async function loadLinesForOperator() {
-  const opId  = document.getElementById("line-operator").value;
-  const wrap  = document.getElementById("lines-picker-wrap");
-  const picker = document.getElementById("lines-picker");
-  const label  = document.getElementById("lines-picker-label");
-
-  if (!opId) { wrap.style.display = "none"; return; }
-
-  wrap.style.display = "flex";
-  wrap.style.flexDirection = "column";
-  wrap.style.gap = "8px";
-  label.textContent = "טוען קווים...";
-  picker.innerHTML = `<div class="loader"><div class="spinner"></div></div>`;
-
-  const opName = OPERATORS[opId] || opId;
-
-  try {
-    const url = `${OPEN_BUS_BASE}/gtfs_routes/list?operator_refs=${opId}&limit=500&order_by=line_ref asc`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const routes = await r.json();
-
-    if (!routes.length) {
-      label.textContent = `לא נמצאו קווים עבור ${opName}`;
-      picker.innerHTML = "";
-      return;
-    }
-
-    // Deduplicate by line_ref
-    const seen = new Set();
-    const unique = routes.filter(rt => {
-      const key = String(rt.line_ref || rt.route_short_name || rt.route_id || "");
-      if (!key || seen.has(key)) return false;
-      seen.add(key); return true;
-    });
-
-    label.textContent = `${unique.length} קווים עבור ${opName} — לחץ לבחירה:`;
-    picker.innerHTML = unique.map(rt => {
-      const lineRef = String(rt.line_ref || rt.route_short_name || rt.route_id || "?");
-      const longName = rt.route_long_name || rt.route_desc || "";
-      // Extract destination: last segment after " - " or "→" or just show full name
-      let dest = longName;
-      if (longName.includes(" - ")) dest = longName.split(" - ").pop().trim();
-      else if (longName.includes("→"))  dest = longName.split("→").pop().trim();
-      const destHtml = dest && dest !== lineRef
-        ? `<span class="chip-dest">${dest.slice(0,22)}</span>` : "";
-      return `<span class="line-chip" onclick="pickLine('${lineRef}')">
-        <span class="chip-num">קו ${lineRef}</span>${destHtml}
-      </span>`;
-    }).join("");
-  } catch(e) {
-    label.textContent = `❌ שגיאה בטעינת קווים: ${e.message}`;
-    picker.innerHTML = "";
-  }
+function onLineNumberInput(val){
+  clearTimeout(_lineTimer);
+  const wrap=document.getElementById("lines-picker-wrap");
+  const picker=document.getElementById("lines-picker");
+  const label=document.getElementById("lines-picker-label");
+  if(!val){ wrap.style.display="none"; return; }
+  _lineTimer=setTimeout(async()=>{
+    wrap.style.display="block";
+    label.textContent=`מפעילים עם קו ${val}`;
+    picker.innerHTML=`<div class="loader"><div class="spinner"></div></div>`;
+    try{
+      const r=await fetch(`${STRIDE}/gtfs_routes/list?line_refs=${encodeURIComponent(val)}&limit=200`);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const routes=await r.json();
+      const byOp={};
+      for(const rt of routes){ const op=String(rt.operator_ref||rt.agency_id||""); (byOp[op]=byOp[op]||[]).push(rt); }
+      if(!Object.keys(byOp).length){ picker.innerHTML=`<div style="font-size:.82rem;color:var(--text3)">לא נמצאו מפעילים לקו ${val}</div>`; return; }
+      picker.innerHTML=Object.entries(byOp).map(([op,rts])=>{
+        const name=OPERATORS[op]||`מפעיל ${op}`;
+        const dest=rts[0]?.route_long_name||"";
+        return `<span class="line-chip" onclick="selectOperatorLine('${op}','${val}')">
+          <span class="chip-num">${name}</span>
+          ${dest?`<span class="chip-dest">${dest.slice(0,28)}</span>`:""}
+        </span>`;
+      }).join("");
+    }catch(e){ picker.innerHTML=`<div style="font-size:.82rem;color:var(--red)">❌ ${e.message}</div>`; }
+  },400);
 }
 
-function pickLine(lineRef) {
-  document.getElementById("line-input").value = lineRef;
+function selectOperatorLine(opId,lineRef){
+  document.getElementById("line-operator").value=opId;
+  document.getElementById("line-number-input").value=lineRef;
   searchLine();
 }
 
-async function searchLine() {
-  const line = document.getElementById("line-input").value.trim();
-  const opId = document.getElementById("line-operator").value;
-  const out  = document.getElementById("results-line");
-  if (!line) { setMsg(out, "הכנס מספר קו", "warn"); return; }
+async function onOperatorChange(){
+  const opId=document.getElementById("line-operator").value;
+  const wrap=document.getElementById("lines-picker-wrap");
+  const picker=document.getElementById("lines-picker");
+  const label=document.getElementById("lines-picker-label");
+  if(!opId){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  label.textContent=`קווים של ${OPERATORS[opId]||opId}`;
+  picker.innerHTML=`<div class="loader"><div class="spinner"></div></div>`;
+  try{
+    const r=await fetch(`${STRIDE}/gtfs_routes/list?operator_refs=${opId}&limit=500&order_by=line_ref asc`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const routes=await r.json();
+    const seen=new Set();
+    const unique=routes.filter(rt=>{ const k=String(rt.line_ref||rt.route_short_name||""); if(!k||seen.has(k)) return false; seen.add(k); return true; });
+    if(!unique.length){ picker.innerHTML=`<div style="font-size:.82rem;color:var(--text3)">לא נמצאו קווים</div>`; return; }
+    label.textContent=`${unique.length} קווים — ${OPERATORS[opId]||opId}`;
+    picker.innerHTML=unique.map(rt=>{
+      const ln=String(rt.line_ref||rt.route_short_name||"?");
+      const ld=rt.route_long_name||rt.route_desc||"";
+      let dest=ld;
+      if(ld.includes(" - ")) dest=ld.split(" - ").pop().trim();
+      else if(ld.includes("→")) dest=ld.split("→").pop().trim();
+      return `<span class="line-chip" onclick="pickLine('${ln}')">
+        <span class="chip-num">קו ${ln}</span>
+        ${dest&&dest!==ln?`<span class="chip-dest">${dest.slice(0,22)}</span>`:""}
+      </span>`;
+    }).join("");
+  }catch(e){ picker.innerHTML=`<div style="font-size:.82rem;color:var(--red)">❌ ${e.message}</div>`; }
+}
 
+function pickLine(ln){ document.getElementById("line-number-input").value=ln; searchLine(); }
+
+async function searchLine(){
+  const line=document.getElementById("line-number-input").value.trim();
+  const opId=document.getElementById("line-operator").value;
+  const out=document.getElementById("results-line");
+  if(!line){ setMsg(out,"הכנסי מספר קו","warn"); return; }
   setLoading(out);
 
-  let url = `${OPEN_BUS_BASE}/siri_vehicle_locations/list?line_ref=${encodeURIComponent(line)}&limit=100&order_by=id desc`;
-  if (opId) url += `&operator_ref=${opId}`;
+  let url=`${STRIDE}/siri_vehicle_locations/list?line_ref=${encodeURIComponent(line)}&limit=100&order_by=id desc`;
+  if(opId) url+=`&operator_ref=${opId}`;
 
-  let vehicles = [];
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    vehicles = await r.json();
-  } catch(e) {
-    setMsg(out, `❌ שגיאת Open Bus Stride: ${e.message}`, "err"); return;
-  }
+  let vehicles=[];
+  try{
+    const r=await fetch(url);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    vehicles=await r.json();
+  }catch(e){ setMsg(out,`❌ Stride: ${e.message}`,"err"); return; }
 
-  if (!vehicles.length) {
-    setMsg(out, `⚠️ לא נמצאו רכבים פעילים בקו ${line}. ייתכן שהקו אינו פעיל כרגע.`, "warn");
-    return;
-  }
+  if(!vehicles.length){ setMsg(out,`⚠️ אין רכבים פעילים בקו ${line} כרגע.`,"warn"); return; }
 
-  const byDir = {};
-  for (const v of vehicles) {
-    const d = String(v.direction_ref ?? v.direction_id ?? "0");
-    (byDir[d] = byDir[d] || []).push(v);
-  }
+  const byDir={};
+  for(const v of vehicles){ const d=String(v.direction_ref??v.direction_id??"0"); (byDir[d]=byDir[d]||[]).push(v); }
 
-  let html = `<div class="summary">🚌 קו ${line} — ${vehicles.length} רכבים פעילים</div>`;
-  for (const [dir, vlist] of Object.entries(byDir)) {
-    const label = dir === "0" ? "כיוון א׳" : dir === "1" ? "כיוון ב׳" : `כיוון ${dir}`;
-    html += `<div style="font-size:.85rem;font-weight:600;color:var(--cyan);margin:8px 0 4px">${label} (${vlist.length} רכבים)</div>`;
-    for (const v of vlist) {
-      const opName = OPERATORS[String(v.siri_route__operator_ref||v.operator_ref||"")] || `מפעיל ${v.siri_route__operator_ref||v.operator_ref||"?"}`;
-      const dir2   = bearingDir(v.bearing);
-      const spd    = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;` : "";
-      const vid    = v.siri_ride__vehicle_ref ? `🚌 רכב ${v.siri_ride__vehicle_ref} &nbsp;` : "";
-      const coord  = v.lat ? `📍 ${(+v.lat).toFixed(5)}, ${(+v.lon).toFixed(5)}` : "";
-      html += `
-      <div class="v-card">
+  let html=`<div class="summary">🚌 קו ${line} — ${vehicles.length} רכבים פעילים</div>`;
+  let idx=0;
+  for(const [dir,vlist] of Object.entries(byDir)){
+    const dlabel=dir==="0"?"כיוון א׳":dir==="1"?"כיוון ב׳":`כיוון ${dir}`;
+    html+=`<div style="font-size:.85rem;font-weight:700;color:var(--teal);margin:10px 0 4px">${dlabel} · ${vlist.length} רכבים</div>`;
+    for(const v of vlist){
+      const op=OPERATORS[String(v.siri_route__operator_ref||v.operator_ref||"")]||"";
+      const rideId=v.siri_ride__id||v.siri_ride_id||"";
+      const pid=`lsp-${idx++}`;
+      html+=`<div class="v-card">
         <div class="v-header">
-          <span class="line-badge">קו ${v.siri_route__line_ref || v.line_ref || line}</span>
-          <span class="op-name">${opName}</span>
-          <span class="age">${dir2} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
+          <span class="line-badge">קו ${v.siri_route__line_ref||line}</span>
+          ${op?`<span class="op-name">${op}</span>`:""}
+          <span class="age">${ageStr(v.recorded_at_time)} לפני</span>
         </div>
-        <div class="v-row">${coord} &nbsp; ${vid}${spd}</div>
+        <div class="v-row">
+          ${v.lat?`📍 ${(+v.lat).toFixed(4)}, ${(+v.lon).toFixed(4)}`:""}
+          ${v.velocity!=null?`💨 ${(+v.velocity).toFixed(0)} קמ"ש`:""}
+          ${v.siri_ride__vehicle_ref?`🚌 ${v.siri_ride__vehicle_ref}`:""}
+        </div>
+        ${rideId
+          ?`<button class="stops-toggle" onclick="toggleBusStops('${pid}','${rideId}',this)">▶ תחנות עתידיות</button>
+            <div class="stops-panel" id="${pid}"></div>`
+          :`<div style="font-size:.75rem;color:var(--text3)">מזהה נסיעה חסר</div>`}
       </div>`;
     }
   }
-  out.innerHTML = html;
+  out.innerHTML=html;
 }
 
-// ══════════════════════════════════════════════════════════
-//  Tab 3 — Train station board
-// ══════════════════════════════════════════════════════════
-function quickStation(sid) { document.getElementById("station-input").value = sid; searchStation(); }
+// ── Tab 3: Train station board ────────────────────────────────────────────────
+function quickStation(sid){
+  document.getElementById("station-input").value=sid;
+  document.querySelectorAll("#tab-station .station-btn").forEach(b=>{
+    b.classList.toggle("active",b.querySelector(".s-id")?.textContent===sid);
+  });
+  searchStation(sid);
+}
 
-async function searchStation() {
-  const sid  = document.getElementById("station-input").value.trim();
-  const out  = document.getElementById("results-station");
-  if (!sid) { setMsg(out, "הכנס מספר תחנה", "warn"); return; }
-
-  const sName = TRAIN_STATIONS[sid] || `תחנה ${sid}`;
+async function searchStation(sid){
+  sid=sid||document.getElementById("station-input").value.trim();
+  const out=document.getElementById("results-station");
+  if(!sid){ setMsg(out,"הכנסי מספר תחנה","warn"); return; }
+  const sName=TRAIN_STATIONS[sid]||`תחנה ${sid}`;
   setLoading(out);
 
-  const today = new Date().toISOString().slice(0,10);
-  const hour  = new Date().getHours();
-
+  const today=new Date().toISOString().slice(0,10);
+  const hour=new Date().getHours();
   let data;
-  try {
-    const r = await fetch(`${RAIL_BOARD}?stationId=${sid}&date=${today}&hour=${hour}`,
-      { headers: { Accept: "application/json" } });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    data = await r.json();
-  } catch(e) {
-    setMsg(out, `❌ שגיאת Railways API: ${e.message}<br>
-      <small style="color:var(--muted)">הרץ בטרמינל: <code style="color:var(--cyan)">python3 transit_query.py --train-station ${sid}</code></small>`, "err");
+  try{
+    const r=await fetch(`${RAIL_PROXY}?stationId=${sid}&date=${today}&hour=${hour}`,{headers:{Accept:"application/json"}});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    data=await r.json();
+  }catch(e){
+    setMsg(out,`❌ שגיאת Railways API: ${e.message}<br><small style="color:var(--text3)">הרצי: <code>python3 transit_query.py --train-station ${sid}</code></small>`,"err");
     return;
   }
 
-  const trains = data?.result?.trains || data?.Data || data?.trains || [];
-  if (!trains.length) {
-    setMsg(out, `⚠️ אין נסיעות בתחנת ${sName} בשעה הנוכחית.`, "warn");
-    return;
-  }
+  const trains=data?.result?.trains||data?.Data?.Routes||data?.trains||[];
+  if(!trains.length){ setMsg(out,`⚠️ אין נסיעות בתחנת ${sName} כרגע.`,"warn"); return; }
 
-  let html = `<div class="summary">🚆 ${sName} — ${trains.length} נסיעות קרובות</div>`;
-  for (const t of trains.slice(0, 15)) html += renderTrain(t);
-  out.innerHTML = html;
+  let html=`<div class="summary">🚆 ${sName} — ${trains.length} נסיעות קרובות</div>`;
+  for(const t of trains.slice(0,15)) html+=renderTrainCard(t);
+  out.innerHTML=html;
 }
 
-function renderTrain(t) {
-  const trainNum  = t.trainno  || t.TrainNumber  || "—";
-  const schedDep  = t.departureTime       || t.DepartureTime       || "—";
-  const actualDep = t.actualDepartureTime || t.ActualDepartureTime || "";
-  const schedArr  = t.arrivalTime         || t.ArrivalTime         || "";
-  const actualArr = t.actualArrivalTime   || t.ActualArrivalTime   || "";
-  const platform  = t.platform  || t.Platform  || "?";
-  const destId    = String(t.destStation    || t.DestinationStation || "");
-  const origId    = String(t.orignStation   || t.OriginStation      || "");
-  const cancelled = !!(t.isCancelled || t.IsCancelled);
-
-  const destName  = TRAIN_STATIONS[destId]  || `תחנה ${destId}`;
-  const origName  = TRAIN_STATIONS[origId]  || `תחנה ${origId}`;
-
-  let delaySec = null;
-  if (schedDep && schedDep !== "—" && actualDep && actualDep !== schedDep) {
-    try {
-      const toMin = s => { const c = String(s).replace(":",""); return +c.slice(0,2)*60 + +c.slice(2,4); };
-      delaySec = (toMin(actualDep) - toMin(schedDep)) * 60;
-    } catch {}
+function renderTrainCard(t){
+  const tn=t.trainno||t.TrainNumber||"—";
+  const sdep=t.departureTime||t.DepartureTime||"—";
+  const adep=t.actualDepartureTime||t.ActualDepartureTime||"";
+  const sarr=t.arrivalTime||t.ArrivalTime||"";
+  const aarr=t.actualArrivalTime||t.ActualArrivalTime||"";
+  const plat=t.platform||t.Platform||"?";
+  const dest=TRAIN_STATIONS[String(t.destStation||t.DestinationStation||"")]||`תחנה ${t.destStation||"?"}`;
+  const orig=TRAIN_STATIONS[String(t.orignStation||t.OriginStation||"")]||`תחנה ${t.orignStation||"?"}`;
+  const canc=!!(t.isCancelled||t.IsCancelled);
+  const delayed=adep&&adep!==sdep;
+  let delaySec=null;
+  if(sdep!=="—"&&adep&&adep!==sdep){
+    try{ const m=s=>{const c=String(s).replace(":","");return+c.slice(0,2)*60+ +c.slice(2,4);}; delaySec=(m(adep)-m(sdep))*60; }catch{}
   }
-
-  const delayed  = actualDep && actualDep !== schedDep;
-  const delayedA = actualArr && actualArr !== schedArr;
-
-  return `
-  <div class="train-row">
-    <div class="tn">🚆 ${trainNum}</div>
-    <div class="route">${origName} → ${destName}</div>
-    <div class="platform">רציף ${platform}</div>
-    <div class="times">
-      יציאה: <span ${delayed?'style="text-decoration:line-through;color:var(--muted)"':''}>${schedDep}</span>
-      ${delayed ? `<span style="color:var(--orange)"> → ${actualDep}</span>` : ""}
-      &nbsp;|&nbsp; ${statusBadge(delaySec, cancelled)}
-      ${schedArr ? `&nbsp;|&nbsp; הגעה: <span>${schedArr}</span>${delayedA?`<span style="color:var(--orange)"> → ${actualArr}</span>`:""}` : ""}
+  return `<div class="train-row">
+    <div class="train-header">
+      <span class="train-num">🚆 ${tn}</span>
+      <span class="train-route">${orig} → ${dest}</span>
+      <span class="platform-badge">רציף ${plat}</span>
+    </div>
+    <div class="train-times">
+      יציאה: <span class="${delayed?"time-strike":""}">${sdep}</span>
+      ${delayed?`<span class="time-late"> → ${adep}</span>`:""}
+      &nbsp;·&nbsp; ${delayBadge(delaySec,canc)}
+      ${sarr?`&nbsp;·&nbsp; הגעה: <span>${sarr}</span>${aarr&&aarr!==sarr?`<span class="time-late"> → ${aarr}</span>`:""}`:""}
     </div>
   </div>`;
 }
 
-// ══════════════════════════════════════════════════════════
-//  Tab 4 — Track train via Open Bus Stride (operator_ref=2)
-//  Israel Railways API (israelrail.azurewebsites.net) is unreliable.
-//  We use Hasadna Open Bus Stride which reliably covers rail operator 2.
-// ══════════════════════════════════════════════════════════
+// ── Tab 4: Track train ────────────────────────────────────────────────────────
+async function fetchTrainsAtStation(sid,btn){
+  document.querySelectorAll("#train-station-grid .station-btn").forEach(b=>b.classList.remove("active"));
+  if(btn) btn.classList.add("active");
 
-function renderTrainVehicle(v, distM) {
-  const lineRef  = v.siri_route__line_ref  || v.line_ref  || "—";
-  const vref     = v.siri_ride__vehicle_ref || v.vehicle_ref || "—";
-  const spd      = v.velocity != null ? `💨 ${(+v.velocity).toFixed(0)} קמ"ש` : "";
-  const bear     = bearingDir(v.bearing);
-  const lat      = v.lat  ? (+v.lat).toFixed(4)  : "—";
-  const lon      = v.lon  ? (+v.lon).toFixed(4)  : "—";
-  const distTxt  = distM != null ? `📏 ${Math.round(distM / 1000 * 10) / 10} ק"מ מהתחנה` : "";
-  const schedStart = v.siri_ride__scheduled_start_time
-    ? `🕐 יציאה מתוכננת ${v.siri_ride__scheduled_start_time.slice(11,16)}` : "";
-  return `
-  <div class="v-card">
-    <div class="v-header">
-      <span class="line-badge">🚆 קו ${lineRef}</span>
-      <span class="op-name">רכבת ישראל</span>
-      <span class="age">רכב ${vref} &nbsp; ${bear} &nbsp; עדכון: ${ageStr(v.recorded_at_time)}</span>
-    </div>
-    <div class="v-row">📍 ${lat}, ${lon} &nbsp; ${spd} &nbsp; ${distTxt} &nbsp; ${schedStart}</div>
-  </div>`;
-}
-
-async function trackByStation(sid, btn) {
-  // Highlight selected button (btn passed explicitly — avoids event.currentTarget bug)
-  document.querySelectorAll("#train-station-grid .station-btn").forEach(b => b.classList.remove("active"));
-  if (btn) btn.classList.add("active");
-
-  const trainNum  = document.getElementById("train-input").value.trim();
-  const out       = document.getElementById("results-train");
-  const station   = STATION_COORDS[sid];
-  const sName     = station ? station.name : `תחנה ${sid}`;
+  const out=document.getElementById("results-train");
+  const st=STATION_COORDS[sid];
+  const sName=TRAIN_STATIONS[sid]||`תחנה ${sid}`;
   setLoading(out);
 
-  // Fetch all active Israel Railways trains from Open Bus Stride
-  let params = "operator_ref=2&limit=300&order_by=recorded_at_time desc";
-  if (trainNum) params += `&line_ref=${encodeURIComponent(trainNum)}`;
+  let vehicles=[];
+  try{
+    const r=await fetch(`${STRIDE}/siri_vehicle_locations/list?operator_ref=2&limit=500&order_by=recorded_at_time desc`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    vehicles=await r.json();
+  }catch(e){ setMsg(out,`❌ Stride: ${e.message}`,"err"); return; }
 
-  let vehicles = [];
-  try {
-    const r = await fetch(`${OPEN_BUS_BASE}/siri_vehicle_locations/list?${params}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    vehicles = await r.json();
-  } catch(e) {
-    setMsg(out, `❌ שגיאת Open Bus Stride: ${e.message}`, "err"); return;
+  if(!vehicles.length){ setMsg(out,"⚠️ אין רכבות פעילות כרגע.","warn"); return; }
+
+  if(st){
+    vehicles=vehicles
+      .map(v=>({...v,_dist:haversine(st.lat,st.lon,+v.lat,+v.lon)}))
+      .sort((a,b)=>a._dist-b._dist)
+      .filter(v=>v._dist<=200000);
   }
 
-  if (!vehicles.length) {
-    const note = trainNum ? ` (קו ${trainNum})` : "";
-    setMsg(out, `⚠️ אין רכבות פעילות כרגע${note}. נסה שוב בעוד מספר דקות.`, "warn");
-    return;
-  }
+  const byRide={};
+  for(const v of vehicles){ const rid=v.siri_ride__id||v.siri_ride_id||`v_${v.id}`; if(!byRide[rid]) byRide[rid]=v; }
+  const rideList=Object.values(byRide).slice(0,30);
 
-  // If we have station GPS — sort by distance and show closest
-  let results = vehicles;
-  if (station) {
-    results = vehicles
-      .map(v => ({ ...v, _dist: haversine(station.lat, station.lon, +v.lat, +v.lon) }))
-      .sort((a, b) => a._dist - b._dist);
-    // Show trains within 50 km of station (broad — trains move fast)
-    const nearby = results.filter(v => v._dist <= 50000);
-    results = nearby.length ? nearby : results.slice(0, 10);
+  let html=`<div class="summary">🚆 ${sName} — ${rideList.length} רכבות פעילות באזור</div>`;
+  for(let i=0;i<rideList.length;i++){
+    const v=rideList[i];
+    const rideId=v.siri_ride__id||v.siri_ride_id||"";
+    const lineRef=v.siri_route__line_ref||v.line_ref||"—";
+    const dist=v._dist!=null?`${Math.round(v._dist/1000*10)/10} ק"מ`:"";
+    const sched=v.siri_ride__scheduled_start_time?v.siri_ride__scheduled_start_time.slice(11,16):"";
+    const pid=`tr-${i}`;
+    html+=`<div class="train-row" id="tcard-${i}">
+      <div class="train-header">
+        <span class="train-num">🚆 קו ${lineRef}</span>
+        <span class="train-route" id="troute-${i}" style="color:var(--text3)">טוען מסלול...</span>
+        ${dist?`<span style="font-size:.78rem;color:var(--text3)">${dist}</span>`:""}
+      </div>
+      <div class="train-times">
+        ${sched?`יציאה: <span>${sched}</span> &nbsp;·&nbsp;`:""}
+        ${v.velocity!=null?`💨 ${(+v.velocity).toFixed(0)} קמ"ש &nbsp;·&nbsp;`:""}
+        עדכון: ${ageStr(v.recorded_at_time)} לפני
+      </div>
+      ${rideId?`<button class="stops-toggle" onclick="toggleTrainStops('${pid}','${rideId}',this)">▶ תחנות עתידיות</button>
+        <div class="stops-panel" id="${pid}"></div>`:""}
+    </div>`;
   }
+  out.innerHTML=html;
 
-  const filterNote = trainNum ? ` · קו ${trainNum}` : "";
-  let html = `<div class="summary">🚆 ${sName} — ${results.length} רכבות פעילות באזור${filterNote}</div>`;
-  for (const v of results.slice(0, 20)) html += renderTrainVehicle(v, v._dist);
-  out.innerHTML = html;
+  // Enrich route labels async (first → last stop name)
+  for(let i=0;i<rideList.length;i++){
+    const v=rideList[i];
+    const rideId=v.siri_ride__id||v.siri_ride_id||"";
+    if(rideId) enrichRouteLabel(rideId,i);
+  }
 }
 
-async function trackTrain() {
-  const trainNum = document.getElementById("train-input").value.trim();
-  const out      = document.getElementById("results-train");
-  setLoading(out);
-
-  // Clear station highlight
-  document.querySelectorAll("#train-station-grid .station-btn").forEach(b => b.classList.remove("active"));
-
-  let params = "operator_ref=2&limit=200&order_by=recorded_at_time desc";
-  if (trainNum) params += `&line_ref=${encodeURIComponent(trainNum)}`;
-
-  let vehicles = [];
-  try {
-    const r = await fetch(`${OPEN_BUS_BASE}/siri_vehicle_locations/list?${params}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    vehicles = await r.json();
-  } catch(e) {
-    setMsg(out, `❌ שגיאת Open Bus Stride: ${e.message}`, "err"); return;
-  }
-
-  if (!vehicles.length) {
-    const note = trainNum ? `קו ${trainNum}` : "רכבות";
-    setMsg(out, `⚠️ לא נמצאו ${note} פעילות כרגע. נסה שוב בעוד מספר דקות.`, "warn");
-    return;
-  }
-
-  const title = trainNum ? `רכבת קו ${trainNum}` : "כל הרכבות הפעילות";
-  let html = `<div class="summary">🚆 ${title} — ${vehicles.length} רכבות</div>`;
-  for (const v of vehicles.slice(0, 30)) html += renderTrainVehicle(v, null);
-  out.innerHTML = html;
+async function enrichRouteLabel(rideId,idx){
+  const el=document.getElementById(`troute-${idx}`);
+  if(!el) return;
+  try{
+    const r=await fetch(`${STRIDE}/siri_ride_stops/list?siri_ride_id=${rideId}&limit=200&order_by=order asc`);
+    if(!r.ok) return;
+    const stops=await r.json();
+    if(!stops.length) return;
+    const fn=stops[0].gtfs_stop__stop_name||`תחנה ${stops[0].gtfs_stop_id||"?"}`;
+    const ln=stops[stops.length-1].gtfs_stop__stop_name||`תחנה ${stops[stops.length-1].gtfs_stop_id||"?"}`;
+    el.textContent=`${fn} → ${ln}`;
+    el.style.color="var(--text2)";
+  }catch{}
 }
 
-// ══════════════════════════════════════════════════════════
-//  Tab 5 — Service alerts
-// ══════════════════════════════════════════════════════════
-async function loadAlerts() {
-  const out = document.getElementById("results-alerts");
-  setLoading(out);
+async function toggleTrainStops(pid,rideId,btn){
+  const panel=document.getElementById(pid);
+  if(panel.classList.contains("open")){ panel.classList.remove("open"); btn.textContent="▶ תחנות עתידיות"; return; }
+  btn.textContent="⏳ טוען..."; btn.disabled=true; panel.classList.add("open");
+  try{
+    const stops=await fetchFutureStops(rideId);
+    panel.innerHTML=`<div style="font-size:.78rem;color:var(--text3);margin-bottom:6px">${stops.length} תחנות עתידיות</div>`+renderStopsList(stops,true);
+    btn.textContent="▼ הסתר תחנות";
+  }catch(e){ panel.innerHTML=`<div class="msg-box err">❌ ${e.message}</div>`; btn.textContent="שגיאה"; }
+  btn.disabled=false;
+}
 
-  let apiStatus = "";
-  try {
-    const r = await fetch(`${OPEN_BUS_BASE}/siri_vehicle_locations/list?limit=1&order_by=id desc`);
-    if (r.ok) {
-      const data = await r.json();
-      if (data.length) {
-        const age = Math.round((Date.now() - new Date(data[0].recorded_at_time).getTime()) / 60000);
-        apiStatus = `<div class="msg-box ok">✅ Open Bus Stride API פעיל — נתון אחרון מלפני ${age} דקות</div>`;
+// ── Tab 5: Alerts ─────────────────────────────────────────────────────────────
+async function loadAlerts(){
+  const out=document.getElementById("results-alerts");
+  setLoading(out);
+  let apiStatus="";
+  try{
+    const r=await fetch(`${STRIDE}/siri_vehicle_locations/list?limit=1&order_by=id desc`);
+    if(r.ok){
+      const d=await r.json();
+      if(d.length){
+        const age=Math.round((Date.now()-new Date(d[0].recorded_at_time))/60000);
+        apiStatus=`<div class="msg-box ok">✅ Open Bus Stride API פעיל — נתון אחרון מלפני ${age} דקות</div>`;
       }
     }
-  } catch {}
-
-  out.innerHTML = `
-    ${apiStatus}
-    <div class="alert-card">
-      <div class="a-title">🔔 התראות שירות — GTFS-RT ServiceAlerts</div>
-      <div class="a-effect">GTFS-RT הוא פורמט בינארי (protobuf) שאינו ניתן לפענוח ישירות בדפדפן.</div>
-      <div style="font-size:.82rem;color:var(--muted);margin-top:8px;line-height:1.8">
-        להצגת התראות פעילות הרץ בטרמינל:<br>
-        <code style="color:var(--cyan)">python3 transit_query.py --alerts</code>
+  }catch{}
+  out.innerHTML=`${apiStatus}
+    <div class="card" style="border-right:4px solid var(--red)">
+      <div style="font-weight:700;margin-bottom:8px">🔔 GTFS-RT ServiceAlerts</div>
+      <div style="font-size:.84rem;color:var(--text2);line-height:1.8">
+        GTFS-RT הוא פורמט בינארי (protobuf) שאינו ניתן לפענוח ישירות בדפדפן.<br>
+        להצגת התראות הרצי: <code style="color:var(--accent)">python3 transit_query.py --alerts</code>
       </div>
     </div>
-    <div class="alert-card" style="border-right-color:var(--accent)">
-      <div class="a-title">📋 כלי שורת הפקודה — transit_query.py</div>
-      <div style="font-size:.82rem;color:var(--muted);margin-top:6px;line-height:2">
-        <code style="color:var(--cyan)">python3 transit_query.py --buses-near "דיזנגוף 50, ת\"א"</code><br>
-        <code style="color:var(--cyan)">python3 transit_query.py --track-line 89</code><br>
-        <code style="color:var(--cyan)">python3 transit_query.py --train-station 2300</code><br>
-        <code style="color:var(--cyan)">python3 transit_query.py --track-train 145</code><br>
-        <code style="color:var(--cyan)">python3 transit_query.py --alerts</code>
+    <div class="card" style="border-right:4px solid var(--accent)">
+      <div style="font-weight:700;margin-bottom:8px">📋 כלי שורת הפקודה</div>
+      <div style="font-size:.82rem;color:var(--text2);line-height:2.1">
+        <code style="color:var(--accent)">python3 transit_query.py --buses-near "דיזנגוף 50, ת\"א"</code><br>
+        <code style="color:var(--accent)">python3 transit_query.py --track-line 89</code><br>
+        <code style="color:var(--accent)">python3 transit_query.py --train-station 2300</code><br>
+        <code style="color:var(--accent)">python3 transit_query.py --track-train 145</code>
       </div>
     </div>`;
 }
 
-// ── Enter key shortcuts ──────────────────────────────────
-document.getElementById("addr-input").addEventListener("keydown",    e=>{ if(e.key==="Enter") searchNearAddress(); });
-document.getElementById("line-input").addEventListener("keydown",    e=>{ if(e.key==="Enter") searchLine(); });
-document.getElementById("station-input").addEventListener("keydown", e=>{ if(e.key==="Enter") searchStation(); });
-document.getElementById("train-input").addEventListener("keydown",   e=>{ if(e.key==="Enter") trackTrain(); });
-
-// Auto-load alerts when switching to that tab
-document.querySelector('[data-tab="tab-alerts"]').addEventListener("click", () => {
-  if (!document.getElementById("results-alerts").innerHTML) loadAlerts();
-});
+// ── Enter shortcuts ───────────────────────────────────────────────────────────
+document.getElementById("addr-input").addEventListener("keydown",e=>{ if(e.key==="Enter") searchNearAddress(); });
+document.getElementById("line-number-input").addEventListener("keydown",e=>{ if(e.key==="Enter") searchLine(); });
+document.getElementById("station-input").addEventListener("keydown",e=>{ if(e.key==="Enter") searchStation(); });
 </script>
 </body>
 </html>

@@ -112,16 +112,22 @@ if [ ! -d "venv" ]; then
   success "Virtual environment created"
 fi
 
-log "Activating virtual environment and installing libraries..."
 source venv/bin/activate
 
-# Install only if a key package is missing (avoids slow re-resolution on every run)
-if ! python3 -c "import kafka, pandas, boto3, dotenv, geopy; from google.transit import gtfs_realtime_pb2" 2>/dev/null; then
+# Use a marker file: only re-install when requirements.txt changes
+REQ_HASH=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+MARKER="venv/.installed_${REQ_HASH}"
+
+if [ ! -f "$MARKER" ]; then
+  log "Installing Python libraries (requirements.txt changed or first run)..."
   pip install --upgrade pip -q
   pip install -r requirements.txt -q
+  # Remove old markers and write new one
+  rm -f venv/.installed_* 2>/dev/null || true
+  touch "$MARKER"
   success "All libraries installed"
 else
-  success "All libraries already installed — skipping"
+  success "Libraries up to date — skipping install"
 fi
 
 # ─────────────────────────────────────────────────────────────
