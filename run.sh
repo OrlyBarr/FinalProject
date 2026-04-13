@@ -195,7 +195,7 @@ sleep 5
 # Check if topics already exist
 EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
 
-for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors"; do
+for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors" "bus-delays" "train-delays" "bus-delays-historical" "train-delays-historical"; do
   if echo "$EXISTING" | grep -q "^${topic}$"; then
     warn "Topic '${topic}' already exists — skipping"
   else
@@ -443,8 +443,10 @@ echo -e "  ${YELLOW}Manual producer:${NC}   source venv/bin/activate && python3 
 echo ""
 echo -e "${BOLD}  🚌  Project components:${NC}"
   echo -e "  • ${GREEN}5 Producers${NC} fetching data from GTFS-RT, Israel Railways, and HERE Traffic API"
-  echo -e "  • ${GREEN}7 Kafka Topics${NC} for real-time streaming"
+  echo -e "  • ${GREEN}11 Kafka Topics${NC} for real-time streaming (incl. bus/train delay topics)"
 echo -e "  • ${GREEN}5 Airflow DAGs${NC} for ETL scheduling"
 echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
+echo -e "  • ${GREEN}Delay Collectors${NC} (bus, train, historical) → run: bash scripts/start_collectors.sh"
+echo -e "  • ${GREEN}Kibana Dashboard${NC} → import: bash scripts/import_kibana.sh"
 echo ""

@@ -2,6 +2,10 @@
 Configuration for Israel Transit Delay Collectors
 """
 import os
+from dotenv import load_dotenv
+
+# Load .env from the project root (one level up from collectors/)
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # ─── Kafka ────────────────────────────────────────────────────────────────────
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
@@ -43,8 +47,10 @@ ES_INDEX_BUS_DELAYS   = "bus-delays"
 ES_INDEX_TRAIN_DELAYS = "train-delays"
 
 # ─── MinIO ────────────────────────────────────────────────────────────────────
-MINIO_ENDPOINT   = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+# Minio client expects "host:port" without scheme — strip http:// or https:// if present
+_raw_minio = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ENDPOINT   = _raw_minio.removeprefix("https://").removeprefix("http://")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
 MINIO_BUCKET_BUS_DELAYS   = "bus-delays-raw"
 MINIO_BUCKET_TRAIN_DELAYS = "train-delays-raw"
