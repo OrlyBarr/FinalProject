@@ -246,40 +246,52 @@ def cluster_layer(index_pattern_id):
     }
 
 
-def documents_layer(index_pattern_id, query="", name="📍 מיקומי אוטובוסים",
-                    color="#54B399", size=4):
-    """שכבת documents — נקודה לכל רשומה."""
+def all_buses_layer(index_pattern_id):
+    """שכבה אחת — כל האוטובוסים, צבע דינמי לפי מפעיל."""
     return {
-        "id":      f"docs-{name[:8]}",
+        "id":      "all-buses",
         "type":    "GEOJSON_VECTOR",
-        "name":    name,
+        "name":    "🚌 כל האוטובוסים (לפי מפעיל)",
         "visible": True,
         "style": {
             "type": "VECTOR",
             "properties": {
-                "fillColor": {"type": "STATIC", "options": {"color": color}},
-                "lineColor": {"type": "STATIC", "options": {"color": "#41414d"}},
+                "fillColor": {
+                    "type": "DYNAMIC",
+                    "options": {
+                        "field": {
+                            "name":   "operator_name",
+                            "origin": "source",
+                        },
+                        "color":  "Elastic Classic",
+                        "fieldMetaOptions": {
+                            "isEnabled": True,
+                            "sigma":     3,
+                        },
+                    },
+                },
+                "lineColor": {"type": "STATIC", "options": {"color": "#ffffff"}},
                 "lineWidth": {"type": "STATIC", "options": {"size": 1}},
-                "iconSize":  {"type": "STATIC", "options": {"size": size}},
+                "iconSize":  {"type": "STATIC", "options": {"size": 8}},
                 "symbolizeAs": {"options": {"value": "circle"}},
                 "labelText": {"type": "STATIC", "options": {"value": ""}},
             },
         },
-        "query":   {"query": query, "language": "kuery"},
+        "query":   {"query": 'NOT operator_name:"operator_"', "language": "kuery"},
         "filters": [],
         "sourceDescriptor": {
-            "type":           "ES_SEARCH",
-            "id":             f"src-docs-{name[:8]}",
-            "indexPatternId": index_pattern_id,
-            "geoField":       "location",
-            "limit":          2000,
+            "type":              "ES_SEARCH",
+            "id":                "src-all-buses",
+            "indexPatternId":    index_pattern_id,
+            "geoField":          "location",
+            "limit":             10000,
             "filterByMapBounds": True,
             "tooltipProperties": [
                 "vehicle_id", "operator_name", "trip_id",
                 "speed_kmh", "bearing", "_indexed_at",
             ],
-            "sortField":  "_indexed_at",
-            "sortOrder":  "desc",
+            "sortField":   "_indexed_at",
+            "sortOrder":   "desc",
             "scalingType": "LIMIT",
             "applyGlobalQuery":  True,
             "applyGlobalTime":   True,
@@ -339,14 +351,7 @@ def main():
     live_layers = [
         tile_layer(),
         heatmap_layer(ip_id),
-        cluster_layer(ip_id),
-        documents_layer(
-            ip_id,
-            query='NOT operator_name:"operator_"',
-            name="🚌 אוטובוסים מזוהים",
-            color="#00BCD4",
-            size=5,
-        ),
+        all_buses_layer(ip_id),
     ]
 
     map_ok = post_map(
@@ -399,13 +404,43 @@ def main():
 
     route_layers = [
         tile_layer(),
-        documents_layer(
-            ip_id,
-            query=route_query,
-            name=f"🚌 מסלול {best_vehicle or 'רכב'}",
-            color="#E91E63",
-            size=6,
-        ),
+        {
+            "id":      "route-vehicle",
+            "type":    "GEOJSON_VECTOR",
+            "name":    f"🚌 מסלול {best_vehicle or 'רכב'}",
+            "visible": True,
+            "style": {
+                "type": "VECTOR",
+                "properties": {
+                    "fillColor":   {"type": "STATIC", "options": {"color": "#E91E63"}},
+                    "lineColor":   {"type": "STATIC", "options": {"color": "#ffffff"}},
+                    "lineWidth":   {"type": "STATIC", "options": {"size": 1}},
+                    "iconSize":    {"type": "STATIC", "options": {"size": 7}},
+                    "symbolizeAs": {"options": {"value": "circle"}},
+                    "labelText":   {"type": "STATIC", "options": {"value": ""}},
+                },
+            },
+            "query":   {"query": route_query, "language": "kuery"},
+            "filters": [],
+            "sourceDescriptor": {
+                "type":              "ES_SEARCH",
+                "id":                "src-route",
+                "indexPatternId":    ip_id,
+                "geoField":          "location",
+                "limit":             5000,
+                "filterByMapBounds": False,
+                "tooltipProperties": [
+                    "vehicle_id", "operator_name", "trip_id",
+                    "speed_kmh", "bearing", "_indexed_at",
+                ],
+                "sortField":   "_indexed_at",
+                "sortOrder":   "asc",
+                "scalingType": "LIMIT",
+                "applyGlobalQuery":  False,
+                "applyGlobalTime":   True,
+                "applyForceRefresh": True,
+            },
+        },
     ]
 
     map_ok2 = post_map(

@@ -158,6 +158,34 @@ _OPERATOR_NAMES = {
 }
 
 
+def _get_last_stored_records(s3, prefix: str, now_ts: str) -> list:
+    """
+    Fallback: read the most recent raw JSON file from MinIO at *prefix*,
+    update 'fetched_at' to now, add 'fallback': True, and return the records.
+    Returns [] if nothing is stored yet.
+    """
+    try:
+        r = s3.list_objects_v2(Bucket=MAIN_BUCKET, Prefix=prefix, MaxKeys=500)
+        objs = [o for o in r.get("Contents", []) if o["Size"] > 0]
+        if not objs:
+            return []
+        latest_key = max(objs, key=lambda o: o["LastModified"])["Key"]
+        body = s3.get_object(Bucket=MAIN_BUCKET, Key=latest_key)["Body"].read()
+        try:
+            records = json.loads(body)
+        except json.JSONDecodeError:
+            # Try NDJSON (newline-delimited JSON)
+            records = [json.loads(line) for line in body.splitlines() if line.strip()]
+        for rec in records:
+            rec["fetched_at"] = now_ts
+            rec["fallback"]   = True
+        log.info(f"  Fallback: re-using {len(records)} records from {latest_key}")
+        return records
+    except Exception as e:
+        log.warning(f"  Fallback load failed for {prefix}: {e}")
+        return []
+
+
 def fetch_buses() -> list:
     import requests
     log.info("Fetching bus positions from Open Bus Stride...")
@@ -652,6 +680,9 @@ def run(dry_run=False, only=None) -> dict:
     uploaded = []
 
     # ── Bus positions ──────────────────────────────────────────────────────────
+    if not buses:
+        log.warning("No bus positions fetched — trying stored fallback")
+        buses = _get_last_stored_records(s3, "raw/bus-positions/", now.isoformat())
     if buses:
         uploaded.append(upload(s3, buses, "raw/bus-positions",       "buses_raw"))
         try:
@@ -668,10 +699,13 @@ def run(dry_run=False, only=None) -> dict:
             log.warning(f"Bus ETL transform skipped: {e}")
         results["buses"] = len(buses)
     else:
-        log.warning("No bus positions fetched")
+        log.warning("No bus positions fetched (API down, no stored fallback)")
         results["buses"] = 0
 
     # ── Train positions ────────────────────────────────────────────────────────
+    if not trains:
+        log.warning("No train positions fetched — trying stored fallback")
+        trains = _get_last_stored_records(s3, "raw/train-positions/", now.isoformat())
     if trains:
         uploaded.append(upload(s3, trains, "raw/train-positions",       "trains_raw"))
         try:
@@ -683,7 +717,7 @@ def run(dry_run=False, only=None) -> dict:
             log.warning(f"Train ETL transform skipped: {e}")
         results["trains"] = len(trains)
     else:
-        log.warning("No train positions fetched")
+        log.warning("No train positions fetched (API down, no stored fallback)")
         results["trains"] = 0
 
     # ── Traffic ────────────────────────────────────────────────────────────────
@@ -716,8 +750,12 @@ def run(dry_run=False, only=None) -> dict:
         uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
         results["delays"] = len(delays)
     else:
-        log.warning("No delay records fetched (siri_ride_stops endpoint may be slow)")
-        results["delays"] = 0
+        log.warning("No delay records fetched — trying stored fallback")
+        fallback_delays = _get_last_stored_records(s3, "raw/trip-updates/", now.isoformat())
+        if fallback_delays:
+            uploaded.append(upload(s3, fallback_delays, "raw/trip-updates",       "delays_raw"))
+            uploaded.append(upload(s3, fallback_delays, "processed/trip-updates", "delays_processed"))
+        results["delays"] = len(fallback_delays)
 
     # ── Service alerts ─────────────────────────────────────────────────────────
     if alerts:
@@ -767,14 +805,18 @@ def run(dry_run=False, only=None) -> dict:
                 log.info("  Delay events: 0 qualifying records this run")
         results["delay_events"] = len(raw_delay_events)
     else:
-        log.warning("No service alerts derived (API may be down)")
+        log.warning("No service alerts derived — trying stored fallback")
+        fallback_alerts = _get_last_stored_records(s3, "raw/service-alerts/", now.isoformat())
+        if fallback_alerts:
+            uploaded.append(upload(s3, fallback_alerts, "raw/service-alerts",       "alerts_raw"))
+            uploaded.append(upload(s3, fallback_alerts, "processed/service-alerts", "alerts_processed"))
+        results["alerts"] = len(fallback_alerts)
         # Still attempt delay-events from stored data
         fallback_events = _generate_delay_events_from_stored(s3, now)
         if fallback_events:
             uploaded.append(upload(s3, fallback_events, "raw/delay-events",       "delay_events_raw"))
             uploaded.append(upload(s3, fallback_events, "processed/delay-events", "delay_events_processed"))
             log.info(f"  Delay events (fallback): {len(fallback_events)} records written")
-        results["alerts"] = 0
         results["delay_events"] = len(fallback_events)
 
     # ── Summary ────────────────────────────────────────────────────────────────

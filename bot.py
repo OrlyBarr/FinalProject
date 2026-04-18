@@ -4,7 +4,7 @@ Simple REST API bot for Israel Public Transit Monitoring Platform.
 Exposes real-time transit data over HTTP on port 5000.
 
 Endpoints:
-  GET /                - serve index.html (Transit Query Tool)
+  GET /                - serve agent_transit.html (Transit Query Tool)
   GET /health          - health check
   GET /status          - system status
   GET /buses           - latest bus positions from bus_positions.json
@@ -141,9 +141,9 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── Transit Query Tool (index.html) ───────────────────────────────────
+        # ── Transit Query Tool (agent_transit.html) ──────────────────────────
         if path == "/" or path == "/transit":
-            self.send_html(os.path.join(BASE_DIR, "index.html"))
+            self.send_html(os.path.join(BASE_DIR, "agent_transit.html"))
 
         # ── Agent dashboard ───────────────────────────────────────────────────
         elif path == "/agent":
@@ -253,7 +253,7 @@ def main():
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
-    print(f"   /                         → Transit Query Tool (index.html)")
+    print(f"   /                         → Transit Query Tool (agent_transit.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
     print(f"   /health                   → health check")
     print(f"   /status                   → system status")
