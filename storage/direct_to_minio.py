@@ -540,6 +540,8 @@ def run(dry_run=False, only=None) -> dict:
 
     results = {}
 
+    now = now_il()  # single consistent timestamp for this run
+
     # ── Fetch ─────────────────────────────────────────────────────────────────
     buses   = fetch_buses()          if do_buses   else []
     trains  = fetch_trains()         if do_trains  else []
@@ -617,7 +619,7 @@ def run(dry_run=False, only=None) -> dict:
     # ── Trip updates / delays ──────────────────────────────────────────────────
     if delays:
         uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
-        # Processed layer: enrich with a computed is_delayed flag; keep all records
+        # Processed layer: enrich with computed flags; keep all records
         processed_delays = []
         for d in delays:
             delay_sec = d.get("delay_seconds")
@@ -629,9 +631,58 @@ def run(dry_run=False, only=None) -> dict:
             })
         uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
         results["delays"] = len(delays)
+
+        # ── Delay events: subset where delay >= 5 minutes ─────────────────────
+        # delay_seconds may be None when vehicle telemetry is unavailable.
+        # Fall back to elapsed time since scheduled_start as an approximation:
+        # if a ride was scheduled >5 min ago and no actual_time recorded, it is
+        # potentially delayed.
+        DELAY_EVENT_THRESHOLD_SEC = 300  # 5 minutes
+
+        def _effective_delay(d):
+            """Return best-estimate delay in seconds, or 0 if unknown."""
+            ds = d.get("delay_seconds")
+            if ds is not None:
+                return ds
+            # Approximate: time elapsed since scheduled start without arrival
+            if d.get("actual_time") is None:
+                sched = d.get("scheduled_start")
+                if sched:
+                    try:
+                        from datetime import datetime, timezone
+                        sched_dt = datetime.fromisoformat(sched)
+                        if sched_dt.tzinfo is None:
+                            sched_dt = sched_dt.replace(tzinfo=timezone.utc)
+                        elapsed = (now - sched_dt).total_seconds()
+                        return max(0, elapsed)
+                    except Exception:
+                        pass
+            return 0
+
+        raw_delay_events = [
+            d for d in delays
+            if _effective_delay(d) >= DELAY_EVENT_THRESHOLD_SEC
+        ]
+        proc_delay_events = [
+            {
+                **d,
+                "is_delayed":   True,
+                "is_very_late": _effective_delay(d) > 600,
+                "event_type":   "VERY_LATE" if _effective_delay(d) > 600 else "LATE",
+                "effective_delay_seconds": _effective_delay(d),
+                "detected_at":  now.isoformat(),
+            }
+            for d in raw_delay_events
+        ]
+        if raw_delay_events:
+            uploaded.append(upload(s3, raw_delay_events,  "raw/delay-events",       "delay_events_raw"))
+            uploaded.append(upload(s3, proc_delay_events, "processed/delay-events",  "delay_events_processed"))
+            log.info(f"  Delay events: {len(raw_delay_events)} records (>= 5 min late)")
+        results["delay_events"] = len(raw_delay_events)
     else:
         log.warning("No delay records fetched")
         results["delays"] = 0
+        results["delay_events"] = 0
 
     # ── Service alerts ─────────────────────────────────────────────────────────
     if alerts:
