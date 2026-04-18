@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 venv/
 __pycache__/
 *.pyc
@@ -6,27 +5,19 @@ __pycache__/
 .env
 *.json
 !package.json
-=======
 # Python virtual environment
-venv/
 .venv/
 env/
 
 # Python cache
-__pycache__/
 *.py[cod]
-*.pyo
 
-# Byte-compiled files
-*.pyc
 
 # Distribution / packaging
 dist/
 build/
 *.egg-info/
 
-# Environment variables
-.env
 
 # Docker volumes / data
 *.json.bak
@@ -38,12 +29,3 @@ build/
 # Logs
 *.log
 logs/
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> 4cd6561 (fix: use venv python/pip, add .gitignore, fix kafka recovery)
-=======
-buses_with_nearest_stops.json
->>>>>>> b54eebb (align to remote server)
-=======
-
->>>>>>> 89ac181 (final sync after rebase)
