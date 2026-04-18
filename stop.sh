@@ -9,34 +9,34 @@ BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 
 echo -e "${BOLD}${BLUE}"
 echo "  ╔══════════════════════════════════════╗"
-echo "  ║  🛑  עוצר את מערכת ניטור התחבורה   ║"
+echo "  ║  🛑  Stopping Transit Monitoring System ║"
 echo "  ╚══════════════════════════════════════╝"
 echo -e "${NC}"
 
-echo -e "${YELLOW}בחר פעולה:${NC}"
-echo "  1) עצור שירותים (שמור נתונים)"
-echo "  2) עצור ומחק הכל (כולל volumes / נתונים)"
-echo "  3) ביטול"
-read -p "בחירה (1/2/3): " choice
+echo -e "${YELLOW}Choose an action:${NC}"
+echo "  1) Stop services (keep data)"
+echo "  2) Stop and delete everything (including volumes / data)"
+echo "  3) Cancel"
+read -p "Choice (1/2/3): " choice
 
 case $choice in
   1)
-    echo -e "${BLUE}עוצר שירותים...${NC}"
+    echo -e "${BLUE}Stopping services...${NC}"
     docker compose stop
-    echo -e "${GREEN}✅ כל השירותים נעצרו. הנתונים שמורים.${NC}"
-    echo -e "להפעלה מחדש: ${YELLOW}docker compose start${NC}"
+    echo -e "${GREEN}✅ All services stopped. Data is preserved.${NC}"
+    echo -e "To restart: ${YELLOW}docker compose start${NC}"
     ;;
   2)
-    read -p "⚠️  זה ימחק את כל הנתונים! בטוח? (yes): " confirm
+    read -p "⚠️  This will delete all data! Sure? (yes): " confirm
     if [ "$confirm" = "yes" ]; then
-      echo -e "${RED}מוחק הכל...${NC}"
+      echo -e "${RED}Deleting everything...${NC}"
       docker compose down -v --remove-orphans
-      echo -e "${GREEN}✅ הכל נמחק. להרצה מחדש: bash run.sh${NC}"
+      echo -e "${GREEN}✅ Everything deleted. To restart: bash run.sh${NC}"
     else
-      echo "בוטל."
+      echo "Cancelled."
     fi
     ;;
   *)
-    echo "בוטל."
+    echo "Cancelled."
     ;;
 esac

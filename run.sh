@@ -20,16 +20,23 @@ error()   { echo -e "${RED}❌ $1${NC}"; exit 1; }
 step()    { echo -e "\n${BOLD}${CYAN}━━━  Step $1  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 wait_for_service() {
   local name=$1 url=$2 max=$3
+  # Check immediately first — service may already be up
+  if curl -sf "$url" > /dev/null 2>&1; then
+    success "$name is already up!"
+    return 0
+  fi
   log "Waiting for $name to be ready..."
   for i in $(seq 1 $max); do
     if curl -sf "$url" > /dev/null 2>&1; then
+      echo ""
       success "$name is ready!"
       return 0
     fi
     echo -n "."
-    sleep 3
+    sleep 2
   done
-  error "$name did not respond within $(($max * 3)) seconds"
+  echo ""
+  warn "$name did not respond within $(($max * 2)) seconds — continuing anyway"
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -100,23 +107,32 @@ fi
 step "1 — Installing Python libraries"
 
 if [ ! -d "venv" ]; then
-  log "Creating Python virtual environment..."
+  log "Creating virtual environment..."
   python3 -m venv venv
-  success "Virtual environment created"
 fi
 
-log "Activating virtual environment and installing libraries..."
 source venv/bin/activate
 
-# Upgrade pip quietly
-venv/bin/python3 -m pip install --upgrade pip -q
+# Skip entirely if requirements.txt hasn't changed since last install
+REQ_HASH=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+MARKER="venv/.installed_${REQ_HASH}"
 
-# Install only if a key package is missing (avoids slow re-resolution on every run)
-if ! venv/bin/python3 -c "import kafka, pandas, boto3, dotenv, geopy; from google.transit import gtfs_realtime_pb2" 2>/dev/null; then
-  venv/bin/python3 -m pip install -r requirements.txt -q
-  success "All libraries installed"
+if [ -f "$MARKER" ]; then
+  success "Libraries up to date — skipping install"
 else
-  success "All libraries already installed — skipping"
+  log "Installing libraries..."
+  # Use uv (10-100x faster than pip) if available, otherwise fall back to pip
+  if command -v uv &>/dev/null; then
+    uv pip install -r requirements.txt -q
+  else
+    # Install uv for future runs, then use it immediately
+    pip install uv -q 2>/dev/null && \
+      uv pip install -r requirements.txt -q || \
+      pip install -r requirements.txt -q
+  fi
+  rm -f venv/.installed_* 2>/dev/null
+  touch "$MARKER"
+  success "All libraries installed"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -124,45 +140,33 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "2 — Starting Docker services"
 
-log "Pulling required images (may take a few minutes the first time)..."
-docker compose pull --quiet 2>/dev/null || true
+# Check if all core containers are already running — if so, skip teardown entirely
+RUNNING=$(docker compose ps --services --filter status=running 2>/dev/null | wc -l)
+TOTAL=$(docker compose config --services 2>/dev/null | wc -l)
 
-log "Removing old containers that may cause conflicts..."
-docker compose down --remove-orphans 2>/dev/null || true
+if [ "$RUNNING" -ge "$TOTAL" ] 2>/dev/null; then
+  success "All containers already running — skipping teardown"
+else
+  # Only pull images that are not already cached locally
+  log "Checking for missing Docker images..."
+  docker compose pull --quiet --ignore-pull-failures 2>/dev/null || true
 
-# Clean up orphaned containers from previous sessions (hash-prefix names)
-# These arise when a container was first started without container_name set
-log "Cleaning up orphaned containers from previous sessions..."
-for svc in elasticsearch postgres airflow-webserver airflow-scheduler kibana kafka kafka-ui minio zookeeper; do
-  # Find containers with this compose-service label that are NOT named exactly $svc
-  ORPHANS=$(docker ps -a --filter "label=com.docker.compose.service=${svc}" \
-    --format '{{.Names}}' 2>/dev/null | grep -v "^${svc}$" || true)
-  for ORPHAN in $ORPHANS; do
-    warn "Found orphaned container: $ORPHAN — attempting cleanup..."
-    docker stop "$ORPHAN" 2>/dev/null && docker rm "$ORPHAN" 2>/dev/null || \
-      warn "Could not remove $ORPHAN (may need: sudo docker rm -f $ORPHAN)"
+  log "Removing old/stopped containers that may cause conflicts..."
+  # Only tear down stopped/exited containers; leave running ones alone
+  for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
+    STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
+    if [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
+      docker rm -f "$container" 2>/dev/null || true
+    fi
   done
-done
+fi
 
-# Force-remove only STOPPED/EXITED containers with conflicting names (skip running ones)
-for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
-  STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-  if [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
-    warn "Removing stopped container: $container"
-    docker rm -f "$container" 2>/dev/null || true
-  elif [ "$STATUS" = "running" ]; then
-    log "Container $container already running — continuing"
-  fi
-done
-
-log "Starting all services..."
-docker compose up -d 2>&1 || {
-  warn "docker compose up exited with an error — checking container states..."
-  # Start any containers that are still in 'created' state
+log "Starting all services (skips already-running containers)..."
+docker compose up -d --remove-orphans 2>&1 || {
+  warn "docker compose up exited with an error — attempting to start created containers..."
   for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
     if [ "$STATUS" = "created" ]; then
-      log "Starting manually: $container"
       docker start "$container" 2>/dev/null || true
     fi
   done
@@ -193,55 +197,62 @@ echo ""
 # ─────────────────────────────────────────────────────────────
 step "3 — Waiting for services to be ready"
 
-wait_for_service "Kafka UI"  "http://localhost:8080"        30
-wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 20
-log "Waiting for Airflow to initialize its database (may take 2-3 minutes)..."
-sleep 30
-wait_for_service "Airflow"   "http://localhost:8081/health"  120
+wait_for_service "Kafka UI"  "http://localhost:8080"        20
+wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 15
+wait_for_service "Airflow"   "http://localhost:8081/health"  60
 
 # ─────────────────────────────────────────────────────────────
 #  Step 4: Create Kafka Topics
 # ─────────────────────────────────────────────────────────────
 step "4 — Creating Kafka Topics"
 
-log "Waiting for Kafka broker to be ready..."
-sleep 5
-
 # Check if topics already exist
 EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
 
-for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors"; do
+TOPICS_TO_CREATE=""
+for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors" "bus-delays" "train-delays" "bus-delays-historical" "train-delays-historical"; do
   if echo "$EXISTING" | grep -q "^${topic}$"; then
     warn "Topic '${topic}' already exists — skipping"
   else
-    docker exec kafka kafka-topics \
-      --create --if-not-exists \
-      --bootstrap-server localhost:9092 \
-      --partitions 4 \
-      --replication-factor 1 \
-      --topic "$topic" 2>/dev/null
-    success "Topic created: $topic"
+    TOPICS_TO_CREATE="$TOPICS_TO_CREATE $topic"
   fi
 done
+
+# Create all missing topics in minimal docker exec calls
+for topic in $TOPICS_TO_CREATE; do
+  docker exec kafka kafka-topics \
+    --create --if-not-exists \
+    --bootstrap-server localhost:9092 \
+    --partitions 4 \
+    --replication-factor 1 \
+    --topic "$topic" 2>/dev/null && success "Topic created: $topic"
+done
+[ -z "$TOPICS_TO_CREATE" ] && success "All Kafka topics already exist"
 
 # ─────────────────────────────────────────────────────────────
 #  Step 5: Initialize Airflow
 # ─────────────────────────────────────────────────────────────
 step "5 — Initializing Apache Airflow"
 
-log "Initializing Airflow database..."
-docker compose exec -T airflow-webserver airflow db init 2>/dev/null || \
-docker compose exec -T airflow-webserver airflow db migrate 2>/dev/null || \
-warn "Airflow DB already initialized"
+# Check if admin user already exists before running slow airflow init commands
+AF_USER=$(docker compose exec -T airflow-webserver airflow users list 2>/dev/null | grep -c "admin" || echo "0")
+if [ "$AF_USER" -eq 0 ] 2>/dev/null; then
+  log "Initializing Airflow database..."
+  docker compose exec -T airflow-webserver airflow db migrate 2>/dev/null || \
+  docker compose exec -T airflow-webserver airflow db init 2>/dev/null || \
+  warn "Airflow DB already initialized"
 
-log "Creating Airflow admin user..."
-docker compose exec -T airflow-webserver airflow users create \
-  --username admin \
-  --password admin \
-  --firstname Admin \
-  --lastname User \
-  --role Admin \
-  --email admin@transit.il 2>/dev/null || warn "Admin user already exists"
+  log "Creating Airflow admin user..."
+  docker compose exec -T airflow-webserver airflow users create \
+    --username admin \
+    --password admin \
+    --firstname Admin \
+    --lastname User \
+    --role Admin \
+    --email admin@transit.il 2>/dev/null || warn "Admin user already exists"
+else
+  success "Airflow already initialized — skipping DB init"
+fi
 
 success "Airflow is ready"
 
@@ -278,6 +289,7 @@ try:
         'raw/trip-updates/',
         'raw/service-alerts/',
         'raw/traffic-data/',
+        'raw/delay-events/',
         'processed/bus-positions/',
         'processed/train-positions/',
         'processed/trip-updates/',
@@ -320,8 +332,6 @@ fi
 #  Step 8: Enable Airflow DAGs
 # ─────────────────────────────────────────────────────────────
 step "8 — Enabling Airflow DAGs"
-
-sleep 5  # Wait for DAG files to sync
 
 for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer"; do
   docker compose exec -T airflow-webserver \
@@ -458,8 +468,10 @@ echo -e "  ${YELLOW}Manual producer:${NC}   source venv/bin/activate && python3 
 echo ""
 echo -e "${BOLD}  🚌  Project components:${NC}"
   echo -e "  • ${GREEN}5 Producers${NC} fetching data from GTFS-RT, Israel Railways, and HERE Traffic API"
-  echo -e "  • ${GREEN}7 Kafka Topics${NC} for real-time streaming"
+  echo -e "  • ${GREEN}11 Kafka Topics${NC} for real-time streaming (incl. bus/train delay topics)"
 echo -e "  • ${GREEN}5 Airflow DAGs${NC} for ETL scheduling"
 echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
+echo -e "  • ${GREEN}Delay Collectors${NC} (bus, train, historical) → run: bash scripts/start_collectors.sh"
+echo -e "  • ${GREEN}Kibana Dashboard${NC} → import: bash scripts/import_kibana.sh"
 echo ""

@@ -37,7 +37,10 @@ import sys
 import logging
 import argparse
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from pathlib import Path
 
 # Israel time — automatically handles DST (UTC+2 winter / UTC+3 summer)
@@ -162,7 +165,17 @@ def fetch_buses() -> list:
             for rec in records
             if rec.get("lat") is not None and rec.get("lon") is not None
         ]
-        log.info(f"  Buses: {len(result)} vehicle positions fetched")
+        # Filter out stale records — the Hasadna SIRI API uses far-future dates
+        # (e.g. 2038-01-14 = Unix max-int32, 2037-xx-xx = near-sentinel) when
+        # recorded_at_time is unavailable. Those records also have velocity=0 and
+        # a frozen bearing, making them useless for analysis.
+        current_year = now_il().year
+        result = [
+            r for r in result
+            if r.get("recorded_at") and
+               int(r["recorded_at"][:4]) <= current_year
+        ]
+        log.info(f"  Buses: {len(result)} vehicle positions fetched (stale-filtered)")
         return result
     except Exception as e:
         log.error(f"Bus fetch failed: {e}")
@@ -205,7 +218,14 @@ def fetch_trains() -> list:
             for rec in records
             if rec.get("lat") is not None
         ]
-        log.info(f"  Trains: {len(result)} vehicle positions fetched")
+        # Filter out stale records with far-future placeholder timestamps
+        current_year = now_il().year
+        result = [
+            r for r in result
+            if r.get("recorded_at") and
+               int(r["recorded_at"][:4]) <= current_year
+        ]
+        log.info(f"  Trains: {len(result)} vehicle positions fetched (stale-filtered)")
         return result
     except Exception as e:
         log.error(f"Train fetch failed: {e}")
@@ -320,19 +340,20 @@ def fetch_delays() -> list:
     from datetime import timezone as tz
 
     log.info("Fetching stop-level delays from Open Bus Stride...")
+    from datetime import timedelta
     now = now_il()
-    # Look at stops with planned arrival in the last 30 minutes
-    window_start = now.replace(minute=now.minute - 30 if now.minute >= 30 else 0, second=0, microsecond=0)
+    # Look at stops with scheduled start in the last 30 minutes
+    window_start = now - timedelta(minutes=30)
 
     try:
         r = requests.get(
             f"{OPEN_BUS_URL}/siri_ride_stops/list",
             params={
-                "gtfs_ride_stop__arrival_time_from": window_start.strftime("%Y-%m-%dT%H:%M:%S"),
-                "gtfs_ride_stop__arrival_time_to":   now.strftime("%Y-%m-%dT%H:%M:%S"),
+                "siri_ride__scheduled_start_time_from": window_start.isoformat(),
+                "siri_ride__scheduled_start_time_to":   now.isoformat(),
                 "nearest_siri_vehicle_location__distance_from_siri_ride_stop_meters__lte": 200,
                 "limit": 500,
-                "order_by": "gtfs_ride_stop__arrival_time desc",
+                "order_by": "id desc",
             },
             timeout=20,
         )
@@ -348,20 +369,32 @@ def fetch_delays() -> list:
     for rec in records:
         planned_str = rec.get("gtfs_ride_stop__arrival_time") or rec.get("gtfs_ride_stop__departure_time")
         actual_str  = rec.get("nearest_siri_vehicle_location__recorded_at_time")
-        if not planned_str or not actual_str:
-            continue
+        delay_sec   = None
+        delay_min   = None
+        planned_iso = None
+        actual_iso  = None
+        status      = "unknown"
 
-        try:
-            # Parse ISO timestamps (may be UTC or offset-aware)
-            def _parse(s):
-                s = s.replace("Z", "+00:00")
-                return datetime.fromisoformat(s).astimezone(IL_TZ)
+        if planned_str and actual_str:
+            try:
+                def _parse(s):
+                    s = s.replace("Z", "+00:00")
+                    return datetime.fromisoformat(s).astimezone(IL_TZ)
 
-            planned_dt = _parse(planned_str)
-            actual_dt  = _parse(actual_str)
-            delay_sec  = int((actual_dt - planned_dt).total_seconds())
-        except Exception:
-            continue
+                planned_dt = _parse(planned_str)
+                actual_dt  = _parse(actual_str)
+                delay_sec  = int((actual_dt - planned_dt).total_seconds())
+                delay_min  = round(delay_sec / 60, 1)
+                planned_iso = planned_dt.isoformat()
+                actual_iso  = actual_dt.isoformat()
+                status = (
+                    "early"    if delay_sec < -60  else
+                    "on_time"  if delay_sec <= 180 else
+                    "late"     if delay_sec <= 600 else
+                    "very_late"
+                )
+            except Exception:
+                pass
 
         dist_m = rec.get("nearest_siri_vehicle_location__distance_from_siri_ride_stop_meters")
 
@@ -371,23 +404,19 @@ def fetch_delays() -> list:
             "stop_name":        rec.get("gtfs_stop__name", ""),
             "stop_city":        rec.get("gtfs_stop__city", ""),
             "stop_sequence":    rec.get("gtfs_ride_stop__stop_sequence"),
-            "line_ref":         rec.get("siri_route__line_ref", ""),
-            "operator_ref":     rec.get("siri_route__operator_ref", ""),
+            "line_ref":         rec.get("siri_route__line_ref", "") or rec.get("gtfs_route__line_ref", ""),
+            "operator_ref":     rec.get("siri_route__operator_ref", "") or rec.get("gtfs_route__operator_ref", ""),
             "route_short_name": rec.get("gtfs_route__route_short_name", ""),
             "agency_name":      rec.get("gtfs_route__agency_name", ""),
-            "planned_arrival":  planned_dt.isoformat(),
-            "actual_time":      actual_dt.isoformat(),
+            "scheduled_start":  rec.get("siri_ride__scheduled_start_time"),
+            "planned_arrival":  planned_iso,
+            "actual_time":      actual_iso,
             "delay_seconds":    delay_sec,
-            "delay_minutes":    round(delay_sec / 60, 1),
+            "delay_minutes":    delay_min,
             "distance_m":       dist_m,
-            "status": (
-                "early"   if delay_sec < -60  else
-                "on_time" if delay_sec <= 180 else
-                "late"    if delay_sec <= 600 else
-                "very_late"
-            ),
-            "fetched_at": fetched_at,
-            "source": "hasadna-siri-ride-stops",
+            "status":           status,
+            "fetched_at":       fetched_at,
+            "source":           "hasadna-siri-ride-stops",
         })
 
     log.info(f"  Delays: {len(result)} stop-delay records fetched")
@@ -408,14 +437,15 @@ def fetch_service_alerts() -> list:
     log.info("Fetching service alerts (delayed/cancelled rides) from Open Bus Stride...")
     now = now_il()
     # Rides that started (or will start) within the last hour
-    from_time = now.replace(minute=0, second=0, microsecond=0)
+    from datetime import timedelta as _td
+    from_time = now - _td(hours=1)
 
     try:
         r = requests.get(
             f"{OPEN_BUS_URL}/siri_rides/list",
             params={
-                "scheduled_start_time_from": from_time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "scheduled_start_time_to":   now.strftime("%Y-%m-%dT%H:%M:%S"),
+                "scheduled_start_time_from": from_time.isoformat(),
+                "scheduled_start_time_to":   now.isoformat(),
                 "limit": 500,
                 "order_by": "scheduled_start_time desc",
             },
@@ -431,40 +461,46 @@ def fetch_service_alerts() -> list:
     fetched_at = now.isoformat()
 
     for rec in records:
-        planned_dur  = rec.get("duration_minutes") or 0
+        planned_dur  = rec.get("duration_minutes")
         updated_dur  = rec.get("updated_duration_minutes")
-        if updated_dur is None:
-            continue
 
-        delay_added = updated_dur - planned_dur
+        # Compute alert fields only when both values are available
+        delay_added   = None
+        is_cancelled  = False
+        is_delayed    = False
+        alert_type    = "NORMAL"
+        severity      = "INFO"
+        description   = ""
 
-        # Significant delay: >10 min added, or possible cancellation
-        is_cancelled = (planned_dur > 0 and updated_dur == 0)
-        is_delayed   = (delay_added >= 10)
-
-        if not (is_cancelled or is_delayed):
-            continue
+        if planned_dur is not None and updated_dur is not None:
+            delay_added = updated_dur - (planned_dur or 0)
+            is_cancelled = (planned_dur > 0 and updated_dur == 0)
+            is_delayed   = (delay_added >= 10)
+            if is_cancelled:
+                alert_type  = "CANCELLATION"
+                severity    = "CRITICAL"
+                description = f"Route {rec.get('gtfs_route__route_short_name','?')} cancelled"
+            elif is_delayed:
+                alert_type  = "SIGNIFICANT_DELAY"
+                severity    = "HIGH" if delay_added >= 20 else "MEDIUM"
+                description = f"Route {rec.get('gtfs_route__route_short_name','?')} delayed by {delay_added} minutes"
 
         sched = rec.get("scheduled_start_time", "")
         alerts.append({
-            "ride_id":            rec.get("id"),
-            "line_ref":           rec.get("siri_route__line_ref", ""),
-            "operator_ref":       rec.get("siri_route__operator_ref", ""),
-            "route_short_name":   rec.get("gtfs_route__route_short_name", ""),
-            "agency_name":        rec.get("gtfs_route__agency_name", ""),
-            "scheduled_start":    sched,
+            "ride_id":               rec.get("id"),
+            "line_ref":              rec.get("siri_route__line_ref", ""),
+            "operator_ref":          rec.get("siri_route__operator_ref", ""),
+            "route_short_name":      rec.get("gtfs_route__route_short_name", ""),
+            "agency_name":           rec.get("gtfs_route__agency_name", ""),
+            "scheduled_start":       sched,
             "planned_duration_min":  planned_dur,
             "updated_duration_min":  updated_dur,
-            "extra_delay_min":    delay_added,
-            "alert_type":         "CANCELLATION" if is_cancelled else "SIGNIFICANT_DELAY",
-            "severity":           "CRITICAL" if is_cancelled else ("HIGH" if delay_added >= 20 else "MEDIUM"),
-            "description": (
-                f"הקו {rec.get('gtfs_route__route_short_name','?')} בוטל"
-                if is_cancelled else
-                f"הקו {rec.get('gtfs_route__route_short_name','?')} מאחר ב-{delay_added} דקות"
-            ),
-            "fetched_at": fetched_at,
-            "source": "hasadna-siri-rides",
+            "extra_delay_min":       delay_added,
+            "alert_type":            alert_type,
+            "severity":              severity,
+            "description":           description,
+            "fetched_at":            fetched_at,
+            "source":                "hasadna-siri-rides",
         })
 
     log.info(f"  Alerts: {len(alerts)} service alert records derived")
@@ -503,6 +539,8 @@ def run(dry_run=False, only=None) -> dict:
     do_alerts  = only in (None, "alerts")
 
     results = {}
+
+    now = now_il()  # single consistent timestamp for this run
 
     # ── Fetch ─────────────────────────────────────────────────────────────────
     buses   = fetch_buses()          if do_buses   else []
@@ -580,23 +618,85 @@ def run(dry_run=False, only=None) -> dict:
 
     # ── Trip updates / delays ──────────────────────────────────────────────────
     if delays:
-        uploaded.append(upload(s3, delays, "raw/trip-updates",       "delays_raw"))
-        # Simple processed layer: only late/very_late records
-        processed_delays = [d for d in delays if d.get("status") in ("late", "very_late")]
-        if processed_delays:
-            uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
+        uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
+        # Processed layer: enrich with computed flags; keep all records
+        processed_delays = []
+        for d in delays:
+            delay_sec = d.get("delay_seconds")
+            processed_delays.append({
+                **d,
+                "is_delayed":   delay_sec is not None and delay_sec > 180,
+                "is_very_late": delay_sec is not None and delay_sec > 600,
+                "is_early":     delay_sec is not None and delay_sec < -60,
+            })
+        uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
         results["delays"] = len(delays)
+
+        # ── Delay events: subset where delay >= 5 minutes ─────────────────────
+        # delay_seconds may be None when vehicle telemetry is unavailable.
+        # Fall back to elapsed time since scheduled_start as an approximation:
+        # if a ride was scheduled >5 min ago and no actual_time recorded, it is
+        # potentially delayed.
+        DELAY_EVENT_THRESHOLD_SEC = 300  # 5 minutes
+
+        def _effective_delay(d):
+            """Return best-estimate delay in seconds, or 0 if unknown."""
+            ds = d.get("delay_seconds")
+            if ds is not None:
+                return ds
+            # Approximate: time elapsed since scheduled start without arrival
+            if d.get("actual_time") is None:
+                sched = d.get("scheduled_start")
+                if sched:
+                    try:
+                        from datetime import datetime, timezone
+                        sched_dt = datetime.fromisoformat(sched)
+                        if sched_dt.tzinfo is None:
+                            sched_dt = sched_dt.replace(tzinfo=timezone.utc)
+                        elapsed = (now - sched_dt).total_seconds()
+                        return max(0, elapsed)
+                    except Exception:
+                        pass
+            return 0
+
+        raw_delay_events = [
+            d for d in delays
+            if _effective_delay(d) >= DELAY_EVENT_THRESHOLD_SEC
+        ]
+        proc_delay_events = [
+            {
+                **d,
+                "is_delayed":   True,
+                "is_very_late": _effective_delay(d) > 600,
+                "event_type":   "VERY_LATE" if _effective_delay(d) > 600 else "LATE",
+                "effective_delay_seconds": _effective_delay(d),
+                "detected_at":  now.isoformat(),
+            }
+            for d in raw_delay_events
+        ]
+        if raw_delay_events:
+            uploaded.append(upload(s3, raw_delay_events,  "raw/delay-events",       "delay_events_raw"))
+            uploaded.append(upload(s3, proc_delay_events, "processed/delay-events",  "delay_events_processed"))
+            log.info(f"  Delay events: {len(raw_delay_events)} records (>= 5 min late)")
+        results["delay_events"] = len(raw_delay_events)
     else:
         log.warning("No delay records fetched")
         results["delays"] = 0
+        results["delay_events"] = 0
 
     # ── Service alerts ─────────────────────────────────────────────────────────
     if alerts:
-        uploaded.append(upload(s3, alerts, "raw/service-alerts",       "alerts_raw"))
-        # Processed: CRITICAL alerts only
-        critical = [a for a in alerts if a.get("severity") == "CRITICAL"]
-        if critical:
-            uploaded.append(upload(s3, critical, "processed/service-alerts", "alerts_critical"))
+        uploaded.append(upload(s3, alerts, "raw/service-alerts", "alerts_raw"))
+        # Processed layer: enrich with a severity score; keep all records
+        processed_alerts = []
+        for a in alerts:
+            delay_added = a.get("extra_delay_min")
+            processed_alerts.append({
+                **a,
+                "is_significant": delay_added is not None and delay_added >= 10,
+                "is_critical":    a.get("alert_type") in ("CANCELLATION", "SIGNIFICANT_DELAY"),
+            })
+        uploaded.append(upload(s3, processed_alerts, "processed/service-alerts", "alerts_processed"))
         results["alerts"] = len(alerts)
     else:
         log.warning("No service alerts derived")

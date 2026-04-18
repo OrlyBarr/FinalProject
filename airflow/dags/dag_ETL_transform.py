@@ -17,7 +17,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import sys
-sys.path.append("/opt/airflow")
+sys.path.insert(0, "/opt/airflow")
 
 default_args = {
     "owner":            "transit-team",
@@ -202,6 +202,10 @@ def detect_and_publish_delay_events(**context):
     from storage.s3_writer import S3Writer
     import json, os
     from datetime import datetime, timezone
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
 
     DELAY_THRESHOLD_MIN = 5  # only flag delays >= 5 minutes as events
 
@@ -238,7 +242,7 @@ def detect_and_publish_delay_events(**context):
                 raw_rec["_kafka_offset"] = msg.offset
                 raw_events.append(raw_rec)
 
-                transformed["detected_at"] = datetime.now(timezone.utc).isoformat()
+                transformed["detected_at"] = datetime.now(ZoneInfo("Asia/Jerusalem")).isoformat()
                 processed_events.append(transformed)
         except Exception as e:
             print(f"Delay transform error: {e}")

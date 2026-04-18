@@ -4,13 +4,15 @@ Simple REST API bot for Israel Public Transit Monitoring Platform.
 Exposes real-time transit data over HTTP on port 5000.
 
 Endpoints:
+  GET /                - serve index.html (Transit Query Tool)
   GET /health          - health check
   GET /status          - system status
   GET /buses           - latest bus positions from bus_positions.json
   GET /stops           - bus stops with nearest stop info
   GET /agent           - serve agent_transit.html dashboard
   GET /geocode         - address → GPS (Nominatim proxy, bypasses CORS)
-  GET /proxy/hasadna   - proxy to Hasadna Open Bus Stride API (bypasses CORS)
+  GET /proxy/stride/*  - proxy to Hasadna Open Bus Stride API (bypasses CORS)
+  GET /proxy/hasadna/* - alias for /proxy/stride (backwards compat)
   GET /proxy/rail      - proxy to Israel Railways API (bypasses CORS)
 """
 
@@ -25,7 +27,6 @@ import urllib.parse
 import urllib.request
 import urllib.error
 
-# Ensure stdout uses UTF-8 so emoji / Hebrew text print correctly on Windows
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -33,14 +34,14 @@ BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 RAIL_BOARD_URL = "https://israelrail.azurewebsites.net/stations/GetStationBoard"
 HASADNA_URL    = "https://open-bus-stride-api.hasadna.org.il"
 NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
+BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 
 
-# ── Background auto-refresh ──────────────────────────────────────────────────
+# ── Background auto-refresh ───────────────────────────────────────────────────
 
 def _refresh_buses_loop(interval_seconds: int = 120) -> None:
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-    script      = os.path.join(project_dir, "extractdata.py")
-    python_bin  = os.path.join(project_dir, "venv", "bin", "python3")
+    script     = os.path.join(BASE_DIR, "extractdata.py")
+    python_bin = os.path.join(BASE_DIR, "venv", "bin", "python3")
     if not os.path.exists(python_bin):
         python_bin = "python3"
 
@@ -49,7 +50,7 @@ def _refresh_buses_loop(interval_seconds: int = 120) -> None:
         try:
             result = subprocess.run(
                 [python_bin, script],
-                cwd=project_dir, timeout=60,
+                cwd=BASE_DIR, timeout=60,
                 capture_output=True, text=True,
             )
             if result.returncode == 0:
@@ -63,7 +64,7 @@ def _refresh_buses_loop(interval_seconds: int = 120) -> None:
 
 
 def load_json(filename):
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+    path = os.path.join(BASE_DIR, filename)
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -97,10 +98,10 @@ class BotHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         except FileNotFoundError:
-            self.send_json({"error": "HTML file not found"}, status=404)
+            self.send_json({"error": f"HTML file not found: {filepath}"}, status=404)
 
     def _proxy(self, target_url):
-        """Generic server-side proxy — forwards request, adds CORS headers."""
+        """Generic server-side proxy — forwards GET, adds CORS headers."""
         try:
             req = urllib.request.Request(
                 target_url,
@@ -109,7 +110,7 @@ class BotHandler(BaseHTTPRequestHandler):
                     "User-Agent": "IsraelTransitBot/1.0",
                 },
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=20) as resp:
                 body   = resp.read()
                 status = resp.status
             self.send_response(status)
@@ -140,47 +141,51 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── health ───────────────────────────────────────────────────────────
-        if path == "/health":
+        # ── Transit Query Tool (index.html) ───────────────────────────────────
+        if path == "/" or path == "/transit":
+            self.send_html(os.path.join(BASE_DIR, "index.html"))
+
+        # ── Agent dashboard ───────────────────────────────────────────────────
+        elif path == "/agent":
+            self.send_html(os.path.join(BASE_DIR, "agent_transit.html"))
+
+        # ── health ────────────────────────────────────────────────────────────
+        elif path == "/health":
             self.send_json({"status": "ok", "service": "Israel Transit Bot", "port": BOT_PORT})
 
-        # ── dashboard ────────────────────────────────────────────────────────
-        elif path in ("/", "/agent"):
-            html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_transit.html")
-            self.send_html(html_path)
-
-        # ── status ───────────────────────────────────────────────────────────
+        # ── status ────────────────────────────────────────────────────────────
         elif path == "/status":
             self.send_json({
                 "status": "running",
                 "service": "Israel Public Transit Monitoring Platform",
                 "endpoints": {
-                    "Agent Dashboard": f"http://localhost:{BOT_PORT}/agent",
-                    "Airflow UI":      "http://localhost:8081",
-                    "Kafka UI":        "http://localhost:8080",
-                    "MinIO Console":   "http://localhost:9001",
-                    "Kibana":          "http://localhost:5601",
-                    "Bot API":         f"http://localhost:{BOT_PORT}",
+                    "Transit Query Tool": f"http://localhost:{BOT_PORT}/",
+                    "Agent Dashboard":    f"http://localhost:{BOT_PORT}/agent",
+                    "Airflow UI":         "http://localhost:8081",
+                    "Kafka UI":           "http://localhost:8080",
+                    "MinIO Console":      "http://localhost:9001",
+                    "Kibana":             "http://localhost:5601",
+                    "Bot API":            f"http://localhost:{BOT_PORT}",
                 }
             })
 
-        # ── buses ────────────────────────────────────────────────────────────
+        # ── buses ─────────────────────────────────────────────────────────────
         elif path == "/buses":
             data = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
             self.send_json(data[:100])
 
-        # ── stops ────────────────────────────────────────────────────────────
+        # ── stops ─────────────────────────────────────────────────────────────
         elif path == "/stops":
             data = load_json("buses_with_nearest_stops.json")
             self.send_json(data[:100])
 
-        # ── geocode proxy → Nominatim ─────────────────────────────────────────
+        # ── geocode → Nominatim proxy ─────────────────────────────────────────
         elif path == "/geocode":
             address = urllib.parse.unquote_plus((qs.get("q") or [""])[0]).strip()
             if not address:
-                self.send_json({"error": "נדרש ?q=כתובת"}, status=400)
+                self.send_json({"error": "?q=address parameter required"}, status=400)
                 return
-            q = address if ("ישראל" in address or "israel" in address.lower()) else address + ", Israel"
+            q = address if "israel" in address.lower() else address + ", Israel"
             target = NOMINATIM_URL + "?" + urllib.parse.urlencode({
                 "q": q, "format": "json", "limit": 1,
                 "countrycodes": "il", "accept-language": "he",
@@ -193,7 +198,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     results = json.loads(resp.read())
                 if not results:
-                    self.send_json({"error": f"כתובת לא נמצאה: {address}"}, status=404)
+                    self.send_json({"error": f"Address not found: {address}"}, status=404)
                     return
                 r = results[0]
                 self.send_json({
@@ -204,21 +209,33 @@ class BotHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": f"geocoding error: {e}"}, status=500)
 
-        # ── Hasadna Open Bus Stride proxy ─────────────────────────────────────
-        # GET /proxy/hasadna/gtfs_stops/list?...
-        # GET /proxy/hasadna/gtfs_stop_times/list?...
-        # GET /proxy/hasadna/siri_vehicle_locations/list?...
-        elif path.startswith("/proxy/hasadna/"):
-            api_path = path[len("/proxy/hasadna"):]   # e.g. /gtfs_stops/list
-            target   = HASADNA_URL + api_path
+        # ── Stride proxy: /proxy/stride/<api_path>?<query> ────────────────────
+        # מטפל בכל ה-Stride API calls מה-frontend:
+        #   /proxy/stride/siri_vehicle_locations/list?...
+        #   /proxy/stride/siri_ride_stops/list?...
+        #   /proxy/stride/gtfs_routes/list?...
+        elif path.startswith("/proxy/stride"):
+            api_path = path[len("/proxy/stride"):]   # e.g. /siri_vehicle_locations/list
+            if not api_path.startswith("/"):
+                api_path = "/" + api_path
+            target = HASADNA_URL + api_path
+            if parsed.query:
+                target += "?" + parsed.query
+            self._proxy(target)
+
+        # ── Hasadna alias (backwards compat) ──────────────────────────────────
+        elif path.startswith("/proxy/hasadna"):
+            api_path = path[len("/proxy/hasadna"):]
+            if not api_path.startswith("/"):
+                api_path = "/" + api_path
+            target = HASADNA_URL + api_path
             if parsed.query:
                 target += "?" + parsed.query
             self._proxy(target)
 
         # ── Israel Railways proxy ─────────────────────────────────────────────
         elif path.startswith("/proxy/rail"):
-            params = parsed.query
-            target = f"{RAIL_BOARD_URL}?{params}" if params else RAIL_BOARD_URL
+            target = f"{RAIL_BOARD_URL}?{parsed.query}" if parsed.query else RAIL_BOARD_URL
             self._proxy(target)
 
         else:
@@ -236,13 +253,14 @@ def main():
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
+    print(f"   /                         → Transit Query Tool (index.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
     print(f"   /health                   → health check")
     print(f"   /status                   → system status")
     print(f"   /buses                    → bus positions")
     print(f"   /stops                    → buses + nearest stops")
-    print(f"   /geocode?q=כתובת         → address → GPS (Nominatim proxy)")
-    print(f"   /proxy/hasadna/<path>?... → Hasadna Open Bus API proxy")
+    print(f"   /geocode?q=address        → address → GPS (Nominatim proxy)")
+    print(f"   /proxy/stride/<path>?...  → Hasadna Open Bus Stride API proxy")
     print(f"   /proxy/rail?...           → Israel Railways API proxy")
     try:
         server.serve_forever()

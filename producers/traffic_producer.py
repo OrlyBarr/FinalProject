@@ -14,7 +14,13 @@ Coverage: Israel bounding box (29.4–33.4 lat, 34.2–35.9 lon)
 
 import requests
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 import sys
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 sys.path.append("..")
 from config.settings import HERE_API_KEY, KAFKA_TOPICS
 from producers.base_producer import BaseProducer
@@ -111,7 +117,7 @@ class TrafficProducer(BaseProducer):
 
     def _normalize(self, result: dict, tile_name: str) -> dict:
         """Normalize a HERE traffic flow result into a flat record."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(IL_TZ)
 
         # Location info
         location    = result.get("location", {})

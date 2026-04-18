@@ -7,6 +7,10 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import sys
@@ -33,7 +37,7 @@ class BaseProducer(ABC):
     def _wrap(self, data: dict) -> dict:
         return {
             "source":      self.source_name,
-            "fetched_at":  datetime.now(timezone.utc).isoformat(),
+            "fetched_at":  datetime.now(ZoneInfo("Asia/Jerusalem")).isoformat(),
             "data":        data,
         }
 
@@ -66,7 +70,7 @@ class BaseProducer(ABC):
                     "source": self.source_name,
                     "error":  error_msg,
                     "data":   data,
-                    "ts":     datetime.now(timezone.utc).isoformat(),
+                    "ts":     datetime.now(ZoneInfo("Asia/Jerusalem")).isoformat(),
                 }).encode("utf-8")
             )
         except Exception:

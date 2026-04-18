@@ -15,7 +15,13 @@ FIXES:
 
 import logging
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from typing import Optional
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 
 logger = logging.getLogger("etl.transformers")
 
@@ -60,12 +66,12 @@ def classify_time_period(hour: int) -> str:
     FIX: labels standardised to match traffic_transformer.py
          (was "morning_rush"/"evening_rush" here vs "morning_peak"/"evening_peak" there)
     """
-    if 6  <= hour < 9:  return "morning_rush"   # פיק בוקר
+    if 6  <= hour < 9:  return "morning_rush"   # morning peak
     if 9  <= hour < 12: return "mid_morning"
     if 12 <= hour < 15: return "midday"
-    if 15 <= hour < 19: return "evening_rush"   # פיק ערב
+    if 15 <= hour < 19: return "evening_rush"   # evening peak
     if 19 <= hour < 23: return "evening"
-    return "off_peak"                            # לילה / מוקדם
+    return "off_peak"                            # night / early morning
 
 
 def extract_route_name(route_id: str) -> str:
@@ -80,7 +86,7 @@ def extract_route_name(route_id: str) -> str:
     return parts[1] if len(parts) > 1 else route_id[:10]
 
 
-def parse_time_field(value: Optional[str]) -> Optional[str]:
+def parse_time_field(value) -> Optional[str]:
     """
     Normalise a time string to ISO 8601 or return None.
     Handles HH:MM, HH:MM:SS, and ISO formats from Israel Railways API.
@@ -92,7 +98,7 @@ def parse_time_field(value: Optional[str]) -> Optional[str]:
     if "T" in value or len(value) > 10:
         return value
     # HH:MM or HH:MM:SS — prefix with today's date so downstream can cast properly
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(IL_TZ).strftime("%Y-%m-%d")
     return f"{today}T{value}+00:00"
 
 
@@ -106,7 +112,7 @@ class BusPositionTransformer:
     def transform(self, data: dict) -> dict:
         lat = data.get("latitude", 0)
         lon = data.get("longitude", 0)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(IL_TZ)
 
         return {
             "vehicle_id":        self._clean_id(data.get("vehicle_id", "")),
@@ -121,11 +127,12 @@ class BusPositionTransformer:
             "longitude":         lon,
             "is_valid_location": self._is_in_israel(lat, lon),
             "bearing":           self._clamp(data.get("bearing"), 0, 360),      # FIX: validated
-            "speed_kmh":         max(0, float(data.get("speed_kmh") or 0)),     # FIX: floor at 0
-            "speed_category":    self._speed_category(data.get("speed_kmh")),
+            "speed_kmh":         max(0, float(data.get("speed_kmh") or data.get("velocity") or 0)),  # FIX: SIRI API uses "velocity" not "speed_kmh"
+            "speed_category":    self._speed_category(data.get("speed_kmh") or data.get("velocity")),
+            "is_moving":         (float(data.get("speed_kmh") or data.get("velocity") or 0) > 0),
             "stop_id":           data.get("stop_id", ""),
             "current_status":    data.get("current_status", "unknown"),
-            "timestamp":         data.get("timestamp"),
+            "timestamp":         data.get("timestamp") or data.get("recorded_at"),  # FIX: SIRI API uses "recorded_at" not "timestamp"
             "hour_of_day":       now.hour,
             "time_period":       classify_time_period(now.hour),
             "day_of_week":       now.strftime("%A"),
@@ -158,7 +165,7 @@ class TripUpdateTransformer:
 
     def transform(self, data: dict) -> dict:
         delay_sec = data.get("delay_seconds", 0) or 0
-        now       = datetime.now(timezone.utc)
+        now       = datetime.now(IL_TZ)
 
         return {
             "trip_id":               data.get("trip_id", ""),
@@ -200,7 +207,7 @@ class TrainPositionTransformer:
         delay_min = data.get("delay_minutes") or 0
         # FIX: prefer raw seconds from source; fall back to deriving from minutes
         delay_sec = data.get("delay_seconds") or int(delay_min * 60)
-        now       = datetime.now(timezone.utc)
+        now       = datetime.now(IL_TZ)
 
         # NOTE: station fields (origin_station_id, dest_station_id, platform,
         # scheduled/actual departure/arrival) are NOT included because the Hasadna
@@ -216,6 +223,7 @@ class TrainPositionTransformer:
             "lon":              data.get("lon"),
             "bearing":          data.get("bearing"),
             "velocity":         data.get("velocity"),
+            "is_moving":        (float(data.get("velocity") or 0) > 0),
             # Schedule
             "scheduled_start":  data.get("scheduled_start", ""),
             "recorded_at":      data.get("recorded_at", ""),
@@ -245,7 +253,7 @@ class ServiceAlertTransformer:
     """Transforms and enriches service alert records."""
 
     def transform(self, data: dict) -> dict:
-        now    = datetime.now(timezone.utc)
+        now    = datetime.now(IL_TZ)
         now_ts = int(now.timestamp())
 
         active_start = data.get("active_start")

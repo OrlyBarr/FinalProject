@@ -16,6 +16,12 @@ import os
 import sys
 import logging
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 from pathlib import Path
 
 # ── Allow running from project root ──────────────────────────────────────────
@@ -72,7 +78,7 @@ def ensure_bucket(s3):
 
 def upload_json(s3, data: list, prefix: str, label: str) -> str:
     """Serialize data to JSON and upload to MinIO under a time-partitioned key."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IL_TZ)
     key = (
         f"{prefix}/"
         f"year={now.year}/month={now.month:02d}/"

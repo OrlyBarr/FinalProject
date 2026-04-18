@@ -13,8 +13,15 @@ Indices created:
 
 import json
 import os
+from typing import Optional
 import logging
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 
 from kafka import KafkaConsumer
 from elasticsearch import Elasticsearch, helpers
@@ -120,7 +127,7 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
         payload = msg.value
         # Payload is {"data": {...}, "fetched_at": "...", "topic": "..."}
         doc = payload.get("data", payload)
-        doc["_indexed_at"] = datetime.now(timezone.utc).isoformat()
+        doc["_indexed_at"] = datetime.now(IL_TZ).isoformat()
         doc = _add_geo_point(doc)
         actions.append({
             "_index": index_name,
@@ -218,7 +225,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
                 for doc in records:
                     doc = _add_geo_point(doc)
                     doc["_minio_source"] = key
-                    doc["_indexed_at"]   = datetime.now(timezone.utc).isoformat()
+                    doc["_indexed_at"]   = datetime.now(IL_TZ).isoformat()
                     actions.append({"_index": index_name, "_source": doc})
                 if actions:
                     success, _ = helpers.bulk(es, actions, raise_on_error=False)
@@ -256,7 +263,7 @@ def set_last_indexed_key(topic_key: str, date_prefix: str, last_key: str = "done
     es  = get_es_client()
     doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
     try:
-        es.index(index=_TRACKER_INDEX, id=doc_id, document={"last_key": last_key, "updated_at": datetime.now(timezone.utc).isoformat()})
+        es.index(index=_TRACKER_INDEX, id=doc_id, document={"last_key": last_key, "updated_at": datetime.now(IL_TZ).isoformat()})
     except Exception as e:
         log.warning(f"Could not save indexer state: {e}")
 

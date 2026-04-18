@@ -10,7 +10,13 @@ Primary source: https://open-bus-stride-api.hasadna.org.il/siri_vehicle_location
 
 import requests
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 import sys
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 sys.path.append("..")
 from config.settings import OPEN_BUS_API_URL, KAFKA_TOPICS, OPERATORS
 from producers.base_producer import BaseProducer
@@ -49,12 +55,18 @@ class BusPositionsProducer(BaseProducer):
             return []
 
         records = []
+        skipped = 0
         for item in items:
             record = self._normalize(item)
             if record:
                 records.append(record)
+            else:
+                skipped += 1
 
-        self.logger.info(f"Fetched {len(records)} bus positions from Hasadna SIRI")
+        self.logger.info(
+            f"Fetched {len(records)} moving bus positions from Hasadna SIRI "
+            f"(skipped {skipped} parked/invalid vehicles)"
+        )
         return records
 
     def _parse_timestamp(self, raw_ts: str) -> str:
@@ -64,22 +76,24 @@ class BusPositionsProducer(BaseProducer):
         when the vehicle has not reported a real timestamp.
         Fall back to current UTC time in that case.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(IL_TZ)
         if not raw_ts:
             return now.isoformat()
         try:
             dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-            dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            dt_il = dt.astimezone(IL_TZ).replace(tzinfo=None)
             now_naive = now.replace(tzinfo=None)
             # Any timestamp more than 1 day in the future is a sentinel value
-            if (dt_utc - now_naive).days > 1:
+            if (dt_il - now_naive).days > 1:
                 return now.isoformat()
-            return raw_ts
+            return dt.astimezone(IL_TZ).isoformat()
         except Exception:
             return now.isoformat()
 
     def _normalize(self, item: dict) -> dict:
-        """Normalize Hasadna SIRI vehicle location to flat dict."""
+        """Normalize Hasadna SIRI vehicle location to flat dict.
+        Only returns records for actively moving vehicles (velocity > 0).
+        """
         try:
             lat = item.get("lat")
             lon = item.get("lon")
@@ -87,6 +101,11 @@ class BusPositionsProducer(BaseProducer):
             if not lat or not lon:
                 return None
             if not (29.5 <= lat <= 33.3 and 34.2 <= lon <= 35.9):
+                return None
+
+            # Skip parked / stationary buses — only include moving vehicles
+            velocity = item.get("velocity")
+            if velocity is None or float(velocity) <= 0:
                 return None
 
             # FIX: API returns singular siri_route__ / siri_ride__ (not plural)

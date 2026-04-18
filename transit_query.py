@@ -38,75 +38,75 @@ RAIL_API_URL = "https://israelrail.azurewebsites.net"
 NOMINATIM    = "https://nominatim.openstreetmap.org/search"
 
 OPERATORS = {
-    "3":   "דן",
-    "5":   "אגד",
-    "6":   "אגד תעבורה",
-    "7":   "קוופרטיב",
-    "10":  "מטרופולין",
-    "14":  "קווים",
-    "15":  "נתיב אקספרס",
-    "16":  "ירושלים",
-    "18":  "גולן",
+    "3":   "Dan",
+    "5":   "Egged",
+    "6":   "Egged Tavura",
+    "7":   "Cooperative",
+    "10":  "Metropoline",
+    "14":  "Kavim",
+    "15":  "Nateev Express",
+    "16":  "Jerusalem",
+    "18":  "Golan",
     "20":  "Kavim",
-    "21":  "מועצה אזורית",
-    "23":  "חיפה",
-    "25":  "נצרת",
-    "31":  "גן שמואל",
-    "32":  "אפיקים",
-    "34":  "ניר שחק",
-    "37":  "מחוז הדרום",
+    "21":  "Regional Council",
+    "23":  "Haifa",
+    "25":  "Nazareth",
+    "31":  "Gan Shmuel",
+    "32":  "Afikim",
+    "34":  "Nir Shahak",
+    "37":  "Southern District",
     "41":  "Veolia",
     "42":  "Extra",
     "44":  "Egged Tavura",
-    "91":  "ישראל רכבת",
+    "91":  "Israel Railways",
 }
 
 TRAIN_STATIONS = {
-    "1500": "תל אביב - סבידור מרכז",
-    "1600": "תל אביב - השלום",
-    "1700": "תל אביב - הרכבת",
-    "1800": "תל אביב - פרדס חנה",
-    "2100": "רחובות",
-    "2200": "נס ציונה - מכון וייצמן",
-    "2300": "ראשון לציון - משה דיין",
-    "2400": "ראשון לציון הוישן",
-    "2500": "בת ים קוממיות",
-    "2600": "בת ים יוספטל",
-    "3100": "ירושלים - יצחק נבון",
-    "3200": "ירושלים - ביג",
-    "3300": "בית שמש",
-    "3400": "נוה שאנן",
-    "3500": "לוד",
-    "3600": "רמלה",
-    "3700": "בן גוריון",
-    "4100": "חיפה - מרכז הכרמל",
-    "4200": "חיפה - בת גלים",
-    "4250": "חיפה - חוף הכרמל",
-    "4600": "נהריה",
-    "4640": "עכו",
-    "4680": "קריית מוצקין",
-    "4700": "קריית ים",
-    "4900": "חדרה מערב",
-    "5000": "נתניה",
-    "5200": "פתח תקווה - קריית אריה",
-    "5300": "פתח תקווה - סגולה",
-    "5410": "כפר סבא - נורדאו",
-    "5900": "הוד השרון - סוקולוב",
-    "6300": "ראש העין - אריאל שרון",
-    "6700": "רעננה ב",
-    "6900": "כפר סבא - ספיר",
-    "7000": "הרצליה",
-    "7100": "בני ברק",
-    "7200": "קריית גת",
-    "7300": "באר שבע - מרכז",
-    "7400": "דימונה",
-    "7500": "אשדוד - עד הלום",
-    "7600": "אשקלון",
-    "8600": "מודיעין - יצחק נבון",
-    "8700": "ביה\"ס אורט בראודה",
-    "9200": "כרמיאל",
-    "9300": "עכו",
-    "9600": "נהריה - גברעם",
+    "1500": "Tel Aviv - Savidor Center",
+    "1600": "Tel Aviv - HaShalom",
+    "1700": "Tel Aviv - HaRakevet",
+    "1800": "Tel Aviv - Pardes Hanna",
+    "2100": "Rehovot",
+    "2200": "Nes Ziona - Weizmann",
+    "2300": "Rishon LeZion - Moshe Dayan",
+    "2400": "Rishon LeZion HaYashan",
+    "2500": "Bat Yam Komemiyut",
+    "2600": "Bat Yam Yoseftal",
+    "3100": "Jerusalem - Yitzhak Navon",
+    "3200": "Jerusalem - Big",
+    "3300": "Beit Shemesh",
+    "3400": "Neve Sha'anan",
+    "3500": "Lod",
+    "3600": "Ramla",
+    "3700": "Ben Gurion Airport",
+    "4100": "Haifa - Merkaz HaKarmel",
+    "4200": "Haifa - Bat Galim",
+    "4250": "Haifa - Hof HaKarmel",
+    "4600": "Nahariya",
+    "4640": "Akko",
+    "4680": "Kiryat Motzkin",
+    "4700": "Kiryat Yam",
+    "4900": "Hadera West",
+    "5000": "Netanya",
+    "5200": "Petah Tikva - Kiryat Arye",
+    "5300": "Petah Tikva - Segula",
+    "5410": "Kfar Saba - Nordau",
+    "5900": "Hod HaSharon - Sokolov",
+    "6300": "Rosh HaAyin - Ariel Sharon",
+    "6700": "Ra'anana B",
+    "6900": "Kfar Saba - Sapir",
+    "7000": "Herzliya",
+    "7100": "Bnei Brak",
+    "7200": "Kiryat Gat",
+    "7300": "Beer Sheva - Center",
+    "7400": "Dimona",
+    "7500": "Ashdod - Ad Halom",
+    "7600": "Ashkelon",
+    "8600": "Modi'in - Yitzhak Navon",
+    "8700": "ORT Braude College",
+    "9200": "Karmiel",
+    "9300": "Akko",
+    "9600": "Nahariya - Gav-Yam",
 }
 
 # ── Utilities ────────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ def geocode(address: str) -> tuple[float, float]:
 
 
 def operator_name(op_ref: str) -> str:
-    return OPERATORS.get(str(op_ref), f"מפעיל {op_ref}")
+    return OPERATORS.get(str(op_ref), f"Operator {op_ref}")
 
 
 def delay_label(minutes) -> str:
@@ -148,7 +148,7 @@ def delay_label(minutes) -> str:
         return ""
     m = int(minutes)
     if m <= 0:
-        return "  בזמן"
+        return "  on time"
     if m < 5:
         return f"  +{m}′"
     if m < 15:
@@ -159,9 +159,9 @@ def delay_label(minutes) -> str:
 
 def cmd_buses_near(address: str, radius_m: int = 500) -> None:
     """Find buses currently within radius_m metres of the given address."""
-    print(f"\n🔍 מגדיר מיקום: {address} …")
+    print(f"\n🔍 Locating address: {address} ...")
     lat, lon = geocode(address)
-    print(f"   📍 קואורדינטות: {lat:.5f}, {lon:.5f}")
+    print(f"   📍 Coordinates: {lat:.5f}, {lon:.5f}")
 
     # Bounding box slightly wider than radius
     deg = radius_m / 111_000
@@ -205,20 +205,20 @@ def cmd_buses_near(address: str, radius_m: int = 500) -> None:
     nearby.sort(key=lambda v: v["_dist_m"])
 
     if not nearby:
-        print(f"\n⚠️  לא נמצאו אוטובוסים בטווח {radius_m}מ' מהכתובת.")
+        print(f"\n⚠️  No buses found within {radius_m}m of the address.")
         return
 
-    print(f"\n🚌 {len(nearby)} אוטובוסים בטווח {radius_m}מ':\n")
+    print(f"\n🚌 {len(nearby)} buses within {radius_m}m:\n")
     for v in nearby[:20]:
         op   = operator_name(v.get("siri_routes__operator_ref") or v.get("operator_ref") or "")
         line = v.get("siri_routes__line_ref") or v.get("line_ref") or "?"
         dist = v["_dist_m"]
-        print(f"  קו {line:>4}  ({op:15})  {dist:>4}מ' ממך")
+        print(f"  Line {line:>4}  ({op:15})  {dist:>4}m away")
 
 
 def cmd_track_line(line_ref: str) -> None:
     """Show all active vehicles on a bus line, grouped by direction."""
-    print(f"\n🚌 מעקב אחרי קו {line_ref} …\n")
+    print(f"\n🚌 Tracking line {line_ref} ...\n")
     params = {
         "siri_routes__line_ref": line_ref,
         "limit": 200,
@@ -229,7 +229,7 @@ def cmd_track_line(line_ref: str) -> None:
     items = resp.json()
 
     if not items:
-        print(f"  ⚠️  לא נמצאו כלי רכב פעילים בקו {line_ref}")
+        print(f"  ⚠️  No active vehicles found on line {line_ref}")
         return
 
     by_dir: dict[str, list] = {}
@@ -238,26 +238,26 @@ def cmd_track_line(line_ref: str) -> None:
         by_dir.setdefault(d, []).append(v)
 
     for direction, vehicles in sorted(by_dir.items()):
-        label = "כיוון א'" if direction == "1" else ("כיוון ב'" if direction == "2" else f"כיוון {direction}")
+        label = "Direction A" if direction == "1" else ("Direction B" if direction == "2" else f"Direction {direction}")
         op    = operator_name(vehicles[0].get("siri_routes__operator_ref") or "")
         print(f"  {'─'*50}")
-        print(f"  {label}  |  {op}  |  {len(vehicles)} אוטובוסים")
+        print(f"  {label}  |  {op}  |  {len(vehicles)} buses")
         print(f"  {'─'*50}")
         for v in vehicles[:10]:
             lat  = v.get("lat", "?")
             lon  = v.get("lon", "?")
             t    = (v.get("recorded_at_time") or "")[:19].replace("T", " ")
             vid  = v.get("vehicle_ref") or v.get("id") or "?"
-            print(f"    רכב {str(vid):>8}   📍 {lat}, {lon}   ⏰ {t}")
+            print(f"    Vehicle {str(vid):>8}   📍 {lat}, {lon}   ⏰ {t}")
         if len(vehicles) > 10:
-            print(f"    … ועוד {len(vehicles) - 10} רכבים")
+            print(f"    ... and {len(vehicles) - 10} more vehicles")
         print()
 
 
 def cmd_train_station(station_id: str) -> None:
     """Show the departure board for a train station."""
-    name = TRAIN_STATIONS.get(station_id, f"תחנה {station_id}")
-    print(f"\n🚆 לוח נסיעות — {name} (תחנה {station_id})\n")
+    name = TRAIN_STATIONS.get(station_id, f"Station {station_id}")
+    print(f"\n🚆 Departures Board — {name} (Station {station_id})\n")
 
     today = datetime.now().strftime("%Y-%m-%d")
     hour  = datetime.now().hour
@@ -271,7 +271,7 @@ def cmd_train_station(station_id: str) -> None:
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        print(f"  ❌ שגיאה: {e}")
+        print(f"  ❌ Error: {e}")
         return
 
     trains = (data.get("result", {}).get("trains")
@@ -280,10 +280,10 @@ def cmd_train_station(station_id: str) -> None:
               or [])
 
     if not trains:
-        print(f"  ⚠️  אין נסיעות בתחנת {name} בשעה הנוכחית.")
+        print(f"  ⚠️  No departures at {name} at this time.")
         return
 
-    print(f"  {'קו':>5}  {'יעד':20}  {'מתוכנן':8}  {'מציאות':8}  {'עיכוב':8}  {'רציף':>6}")
+    print(f"  {'Line':>5}  {'Dest':20}  {'Planned':8}  {'Actual':8}  {'Delay':8}  {'Platform':>8}")
     print(f"  {'─'*65}")
     for t in trains[:15]:
         line    = str(t.get("trainno") or t.get("LineNumber") or "?")
@@ -298,7 +298,7 @@ def cmd_train_station(station_id: str) -> None:
 
 def cmd_track_train(train_number: str) -> None:
     """Scan stations to find a train by number and show its current status."""
-    print(f"\n🔎 מחפש רכבת מספר {train_number} …\n")
+    print(f"\n🔎 Searching for train number {train_number} ...\n")
 
     today      = datetime.now().strftime("%Y-%m-%d")
     hour       = datetime.now().hour
@@ -330,10 +330,10 @@ def cmd_track_train(train_number: str) -> None:
             continue
 
     if not found:
-        print(f"  ⚠️  לא נמצאה רכבת {train_number} בתחנות שנסרקו.")
+        print(f"  ⚠️  Train {train_number} not found at scanned stations.")
         return
 
-    print(f"  ✅ נמצאה רכבת {train_number} ב-{len(found)} תחנות:")
+    print(f"  ✅ Found train {train_number} at {len(found)} stations:")
     print()
     for t in found:
         station  = t["_station_name"]
@@ -342,7 +342,7 @@ def cmd_track_train(train_number: str) -> None:
         delay    = t.get("delay") or t.get("Delay") or 0
         platform = str(t.get("platform") or t.get("Platform") or "?")
         dl       = delay_label(delay)
-        print(f"  📍 {station:30} | יציאה {planned} ({actual:5}) {dl} | רציף {platform}")
+        print(f"  📍 {station:30} | Departs {planned} ({actual:5}) {dl} | Platform {platform}")
 
 
 def cmd_alerts() -> None:
@@ -353,38 +353,38 @@ def cmd_alerts() -> None:
     topic 'service-alerts' is populated by the platform's ServiceAlertsProducer
     when it manages to fetch data.
     """
-    print("\n⚠️  התראות שירות (Service Alerts)\n")
-    print("  מקור: MOT GTFS-RT — gtfs.mot.gov.il/gtfsfiles/Alerts.pb")
+    print("\n⚠️  Service Alerts\n")
+    print("  Source: MOT GTFS-RT — gtfs.mot.gov.il/gtfsfiles/Alerts.pb")
     print()
-    print("  ❌ שרת ה-GTFS-RT של משרד התחבורה אינו מגיב (מחזיר עמוד HTML).")
-    print("     לא ניתן לאחזר התראות שירות בזמן אמת בשיטה זו.")
+    print("  ❌ The MOT GTFS-RT server is not responding (returns HTML page).")
+    print("     Cannot fetch service alerts in real time via this method.")
     print()
-    print("  💡 חלופות:")
-    print("     1. בדוק את topic 'service-alerts' ב-Kafka UI: http://localhost:8080")
-    print("     2. בדוק מדד transit-service-alerts ב-Kibana: http://localhost:5601")
-    print("     3. בדוק עדכונים ב-Waze / Moovit / אתר רכבת ישראל")
+    print("  💡 Alternatives:")
+    print("     1. Check topic 'service-alerts' in Kafka UI: http://localhost:8080")
+    print("     2. Check index transit-service-alerts in Kibana: http://localhost:5601")
+    print("     3. Check updates on Waze / Moovit / Israel Railways website")
 
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Israel Public Transit CLI — שאל על תחבורה ציבורית",
+        description="Israel Public Transit CLI",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="\nדוגמאות:\n"
-               "  python3 transit_query.py --buses-near 'תל אביב, דיזנגוף 50'\n"
+        epilog="\nExamples:\n"
+               "  python3 transit_query.py --buses-near 'Tel Aviv, Dizengoff 50'\n"
                "  python3 transit_query.py --track-line 480\n"
                "  python3 transit_query.py --train-station 3700\n"
                "  python3 transit_query.py --track-train 123\n"
                "  python3 transit_query.py --alerts\n",
     )
-    parser.add_argument("--buses-near",    metavar="ADDRESS",      help="מצא אוטובוסים ליד כתובת")
+    parser.add_argument("--buses-near",    metavar="ADDRESS",      help="Find buses near an address")
     parser.add_argument("--radius",        metavar="METRES", type=int, default=500,
-                        help="רדיוס חיפוש במטרים (ברירת מחדל: 500)")
-    parser.add_argument("--track-line",    metavar="LINE_REF",     help="עקוב אחרי קו אוטובוס")
-    parser.add_argument("--train-station", metavar="STATION_ID",   help="לוח נסיעות לתחנת רכבת")
-    parser.add_argument("--track-train",   metavar="TRAIN_NUMBER", help="מצא רכבת לפי מספר")
-    parser.add_argument("--alerts",        action="store_true",    help="הצג התראות שירות")
+                        help="Search radius in metres (default: 500)")
+    parser.add_argument("--track-line",    metavar="LINE_REF",     help="Track a bus line")
+    parser.add_argument("--train-station", metavar="STATION_ID",   help="Departures board for a train station")
+    parser.add_argument("--track-train",   metavar="TRAIN_NUMBER", help="Find a train by number")
+    parser.add_argument("--alerts",        action="store_true",    help="Show service alerts")
 
     args = parser.parse_args()
 

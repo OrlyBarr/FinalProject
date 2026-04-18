@@ -20,6 +20,12 @@ import sys
 import logging
 import argparse
 from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -92,7 +98,7 @@ def fetch_tile(session, tile_name: str, lat_min, lat_max, lon_min, lon_max) -> l
 
 
 def _normalize(result: dict, tile_name: str) -> dict:
-    now          = datetime.now(timezone.utc)
+    now          = datetime.now(IL_TZ)
     location     = result.get("location", {})
     description  = location.get("description", "")
     shape        = location.get("shape", {})
@@ -175,27 +181,27 @@ def fetch_all_israel() -> list:
 def _sample_traffic_data() -> list:
     """Generate realistic sample traffic data for all Israel tiles."""
     import random
-    now  = datetime.now(timezone.utc)
+    now  = datetime.now(IL_TZ)
     hour = now.hour
     # Rush hours have more congestion
     is_rush = 7 <= hour <= 9 or 16 <= hour <= 19
 
     SAMPLE_ROADS = [
-        ("tel_aviv",  "Ayalon Highway / נתיב האיילון",  32.07, 34.79),
-        ("tel_aviv",  "Geha Road / כביש גהה",            32.08, 34.85),
-        ("tel_aviv",  "Begin Road / כביש בגין",           32.06, 34.78),
-        ("tel_aviv",  "Ibn Gabirol / אבן גבירול",         32.08, 34.78),
-        ("tel_aviv",  "Dizengoff Street / דיזנגוף",      32.08, 34.77),
-        ("center",    "Route 1 / כביש 1",                31.97, 34.90),
-        ("center",    "Route 4 / כביש 4",                31.95, 34.87),
-        ("center",    "Route 40 / כביש 40",              31.80, 34.72),
-        ("jerusalem", "Route 1 Jerusalem / כביש 1 ירושלים", 31.79, 35.20),
-        ("jerusalem", "Begin Boulevard / שדרות בגין",    31.77, 35.21),
-        ("haifa",     "Route 2 Haifa / כביש 2 חיפה",    32.82, 34.99),
-        ("haifa",     "Route 22 / כביש 22",              32.78, 35.02),
-        ("galil_west","Route 85 / כביש 85",              32.90, 35.12),
-        ("south_west","Route 6 / כביש 6",                31.50, 34.78),
-        ("beer_sheva","Route 40 South / כביש 40 דרום",  31.25, 34.80),
+        ("tel_aviv",  "Ayalon Highway",  32.07, 34.79),
+        ("tel_aviv",  "Geha Road",            32.08, 34.85),
+        ("tel_aviv",  "Begin Road",           32.06, 34.78),
+        ("tel_aviv",  "Ibn Gabirol Street",         32.08, 34.78),
+        ("tel_aviv",  "Dizengoff Street",      32.08, 34.77),
+        ("center",    "Route 1",                31.97, 34.90),
+        ("center",    "Route 4",                31.95, 34.87),
+        ("center",    "Route 40",              31.80, 34.72),
+        ("jerusalem", "Route 1 Jerusalem", 31.79, 35.20),
+        ("jerusalem", "Begin Boulevard",    31.77, 35.21),
+        ("haifa",     "Route 2 Haifa",    32.82, 34.99),
+        ("haifa",     "Route 22",              32.78, 35.02),
+        ("galil_west","Route 85",              32.90, 35.12),
+        ("south_west","Route 6",                31.50, 34.78),
+        ("beer_sheva","Route 40 South",  31.25, 34.80),
     ]
 
     records = []
@@ -266,7 +272,7 @@ def ensure_bucket(s3, bucket: str):
 
 def upload_records(s3, records: list, prefix: str, label: str) -> str:
     """Upload records as a single JSON file under time-partitioned path."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IL_TZ)
     partition = (
         f"year={now.year}/month={now.month:02d}/"
         f"day={now.day:02d}/hour={now.hour:02d}"

@@ -52,7 +52,15 @@ GTFS_RT_ALERTS_URL   = os.getenv("GTFS_RT_ALERTS_URL",
                         "https://gtfs.mot.gov.il/gtfsfiles/ServiceAlerts.pb")
 
 # HERE Traffic API
-HERE_API_KEY         = os.getenv("HERE_API_KEY", "")
+# Primary: environment variable (set in docker-compose env_file/.env)
+# Fallback: Airflow Variable (allows injection without container restart)
+HERE_API_KEY = os.getenv("HERE_API_KEY", "")
+if not HERE_API_KEY:
+    try:
+        from airflow.models import Variable
+        HERE_API_KEY = Variable.get("HERE_API_KEY", default_var="")
+    except Exception:
+        pass
 
 # Open Bus Stride - hasadna (public, REST API)
 OPEN_BUS_API_URL     = os.getenv("OPEN_BUS_API_URL",
