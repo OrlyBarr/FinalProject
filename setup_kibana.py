@@ -41,7 +41,7 @@ ALL_VIZ_IDS = [
     "pie-operator", "pie-status",
     "top-routes", "top-operators",
     "top-bus-veh", "top-train-veh",
-    "bearing-hist",
+    "bearing-hist", "top-stops",
 ]
 
 
@@ -53,9 +53,16 @@ def wait_for_kibana():
         try:
             r = requests.get(f"{KIBANA}/api/status", timeout=5)
             if r.status_code == 200:
-                lvl = (r.json().get("status") or {}).get("overall", {}).get("level", "")
-                if lvl in ("available", "green"):
-                    print("✅ Kibana ready"); return True
+                d = r.json()
+                # Kibana 8.8: ה-JSON מכיל "overall" ישירות (לא תחת "status")
+                lvl = (
+                    d.get("overall", {}).get("level") or          # Kibana 8.8
+                    (d.get("status") or {}).get("overall", {}).get("level") or  # גרסאות ישנות
+                    "available"
+                )
+                if lvl == "available" or r.status_code == 200:
+                    print(f"✅ Kibana ready (level={lvl})")
+                    return True
         except Exception:
             pass
         print(f"  {i+1}/30..."); time.sleep(3)
@@ -357,10 +364,11 @@ def create_visualizations():
         TRAIN,
     ), 32, 0, 8, 5)
 
+    # cardinality על trip_id שהוא keyword ישיר
     add("kpi-train-vehicles", viz(
-        "kpi-train-vehicles", "🚆 רכבות ייחודיות",
-        metric_vs("רכבות ייחודיות",
-                  a_card("vehicle_id", "רכבות"), "vehicle IDs",
+        "kpi-train-vehicles", "🚆 נסיעות רכבת ייחודיות",
+        metric_vs("נסיעות ייחודיות",
+                  a_card("trip_id", "נסיעות"), "trip IDs",
                   schema="Blues"),
         TRAIN,
     ), 40, 0, 8, 5)
@@ -374,6 +382,7 @@ def create_visualizations():
         BUS,
     ), 0, 5, 24, 10)
 
+    # train משתמש ב-_indexed_at (recorded_at = 2037, לא תקין)
     add("tl-train", viz(
         "tl-train", "📈 פעילות רכבות לאורך זמן",
         line_vs("פעילות רכבות לאורך זמן",
@@ -392,13 +401,14 @@ def create_visualizations():
         BUS, "speed_kmh > 0",
     ), 0, 15, 24, 10)
 
+    # velocity קיים ב-train אך רוב הערכים 0 — מציג גם velocity=0
     add("spd-hist-train", viz(
         "spd-hist-train", "💨 התפלגות מהירות רכבות",
         hist_vs("התפלגות מהירות רכבות",
                 a_count("רכבות"),
-                a_hist("velocity", 10, 0, 160, "מהירות (קמ\"ש)"),
+                a_hist("velocity", 5, 0, 160, "מהירות (קמ\"ש)"),
                 "מספר רכבות"),
-        TRAIN, "velocity > 0",
+        TRAIN,
     ), 24, 15, 24, 10)
 
     # ══ ROW 4 — Speed over time (y=25, h=10) ════════════════════════════════
@@ -411,49 +421,93 @@ def create_visualizations():
         BUS, "speed_kmh > 0",
     ), 0, 25, 24, 10)
 
+    # עיכוד רכבות לאורך זמן (delay_minutes קיים ב-train)
     add("spd-time-train", viz(
-        "spd-time-train", "📉 מהירות ממוצעת רכבות לאורך זמן",
-        line_vs("מהירות ממוצעת רכבות לאורך זמן",
-                a_avg("velocity", "מהירות (קמ\"ש)"),
-                "קמ\"ש"),
-        TRAIN, "velocity > 0",
+        "spd-time-train", "⏱️ עיכוד ממוצע רכבות לאורך זמן",
+        line_vs("עיכוד ממוצע רכבות לאורך זמן",
+                a_avg("delay_minutes", "עיכוד (דקות)"),
+                "דקות"),
+        TRAIN,
     ), 24, 25, 24, 10)
 
     # ══ ROW 5 — Pie charts (y=35, h=10) ══════════════════════════════════════
 
     add("pie-operator", viz(
-        "pie-operator", "🏢 פילוח לפי מפעיל",
-        pie_vs("פילוח לפי מפעיל",
-               a_terms("operator_name.keyword", 12, "מפעיל")),
-        BUS,
+        "pie-operator", "🏢 מפעילים מזוהים (ללא operator_)",
+        hbar_vs("מפעילים מזוהים",
+                a_count("רשומות"),
+                a_terms("operator_name", 10, "מפעיל"),
+                "מספר רשומות"),
+        BUS, 'NOT operator_name:"operator_"',
     ), 0, 35, 24, 10)
 
+    # גרף קו רכבת — line_ref הוא keyword ישיר
     add("pie-status", viz(
-        "pie-status", "🟢 פילוח לפי סטטוס",
-        pie_vs("פילוח לפי סטטוס",
-               a_terms("current_status.keyword", 5, "סטטוס")),
-        BUS,
+        "pie-status", "🚆 פילוח לפי קו רכבת",
+        pie_vs("פילוח לפי קו רכבת",
+               a_terms("line_ref", 10, "קו רכבת")),
+        TRAIN,
     ), 24, 35, 24, 10)
 
     # ══ ROW 6 — Top routes + operators (y=45, h=12) ══════════════════════════
 
+    # פעילות לפי שעה — date_histogram על _indexed_at עם interval שעה
     add("top-routes", viz(
-        "top-routes", "🛣️ Top 15 קווים פעילים",
-        hbar_vs("Top קווים פעילים",
-                a_count("רשומות"),
-                a_terms("route_id.keyword", 15, "קו (route_id)"),
-                "מספר רשומות"),
+        "top-routes", "🕐 פעילות אוטובוסים לפי שעה ביום",
+        {
+            "title": "פעילות אוטובוסים לפי שעה ביום",
+            "type": "line",
+            "params": {
+                "type": "line",
+                "grid": {"categoryLines": False},
+                "addLegend": False, "addTooltip": True,
+                "addTimeMarker": False,
+                "categoryAxes": [{"id": "CategoryAxis-1", "type": "category",
+                                  "position": "bottom", "show": True,
+                                  "labels": {"show": True, "filter": True, "truncate": 100},
+                                  "title": {}, "style": {}, "scale": {"type": "linear"}}],
+                "valueAxes": [{"id": "ValueAxis-1", "name": "LeftAxis-1",
+                               "type": "value", "position": "left", "show": True,
+                               "title": {"text": "מספר רשומות"},
+                               "style": {}, "scale": {"type": "linear", "mode": "normal"},
+                               "labels": {"show": True, "rotate": 0, "filter": False, "truncate": 100}}],
+                "seriesParams": [{"show": True, "type": "histogram", "mode": "stacked",
+                                  "data": {"label": "רשומות", "id": "1"},
+                                  "valueAxis": "ValueAxis-1",
+                                  "drawLinesBetweenPoints": True,
+                                  "lineWidth": 2, "showCircles": True}],
+                "times": [], "legendPosition": "right",
+                "thresholdLine": {"show": False, "value": 10, "width": 1,
+                                  "style": "full", "color": "#E7664C"},
+            },
+            "aggs": [
+                {"id": "1", "enabled": True, "type": "count", "schema": "metric",
+                 "params": {"customLabel": "רשומות"}},
+                {"id": "2", "enabled": True, "type": "date_histogram",
+                 "schema": "segment",
+                 "params": {
+                     "field": "_indexed_at",
+                     "interval": "1h",
+                     "min_doc_count": 1,
+                     "useNormalizedEsInterval": True,
+                     "drop_partials": False,
+                     "extended_bounds": {},
+                     "customLabel": "שעה",
+                 }},
+            ],
+        },
         BUS,
-    ), 0, 45, 24, 12)
+    ), 0, 45, 48, 12)
 
+    # top line_ref ב-train — y=57 כי top-routes תפס שורה שלמה (48 רוחב)
     add("top-operators", viz(
-        "top-operators", "🏢 Top מפעילים לפי פעילות",
-        hbar_vs("Top מפעילים",
+        "top-operators", "🚆 Top 15 קווי רכבת פעילים",
+        hbar_vs("Top קווי רכבת",
                 a_count("רשומות"),
-                a_terms("operator_name.keyword", 15, "מפעיל"),
+                a_terms("line_ref", 15, "קו רכבת (line_ref)"),
                 "מספר רשומות"),
-        BUS,
-    ), 24, 45, 24, 12)
+        TRAIN,
+    ), 0, 57, 24, 12)
 
     # ══ ROW 7 — Top vehicles (y=57, h=12) ════════════════════════════════════
 
@@ -461,30 +515,38 @@ def create_visualizations():
         "top-bus-veh", "🚌 Top 15 אוטובוסים פעילים",
         hbar_vs("Top אוטובוסים פעילים",
                 a_count("רשומות"),
-                a_terms("vehicle_id.keyword", 15, "vehicle_id"),
+                a_terms("vehicle_id", 15, "vehicle_id"),
                 "מספר רשומות"),
         BUS,
-    ), 0, 57, 24, 12)
-
-    add("top-train-veh", viz(
-        "top-train-veh", "🚆 Top 15 רכבות פעילות",
-        hbar_vs("Top רכבות פעילות",
-                a_count("רשומות"),
-                a_terms("vehicle_id.keyword", 15, "vehicle_id"),
-                "מספר רשומות"),
-        TRAIN,
     ), 24, 57, 24, 12)
 
-    # ══ ROW 8 — Bearing (y=69, h=10) ═════════════════════════════════════════
+    # trip_id הוא keyword ישיר ב-train
+    add("top-train-veh", viz(
+        "top-train-veh", "🚆 Top 15 נסיעות רכבת פעילות",
+        hbar_vs("Top נסיעות רכבת",
+                a_count("רשומות"),
+                a_terms("trip_id", 15, "trip_id"),
+                "מספר רשומות"),
+        TRAIN,
+    ), 0, 69, 24, 12)
 
     add("bearing-hist", viz(
-        "bearing-hist", "🧭 התפלגות כיוון נסיעה (Bearing 0°–360°)",
+        "bearing-hist", "🧭 התפלגות כיוון נסיעה — אוטובוסים",
         hist_vs("התפלגות כיוון נסיעה",
                 a_count("רשומות"),
                 a_hist("bearing", 10, 0, 360, "כיוון (מעלות)"),
                 "מספר רשומות"),
         BUS,
-    ), 0, 69, 48, 10)
+    ), 24, 69, 24, 12)
+
+    add("top-stops", viz(
+        "top-stops", "🚏 Top 15 תחנות עמוסות",
+        hbar_vs("Top תחנות",
+                a_count("רשומות"),
+                a_terms("stop_id", 15, "תחנה (stop_id)"),
+                "מספר רשומות"),
+        BUS,
+    ), 0, 81, 48, 12)
 
     return done
 
@@ -513,7 +575,7 @@ def create_dashboard(viz_list):
             "description": "ניטור אוטובוסים ורכבות בישראל | bus-positions + train-positions",
             "hits": 0,
             "timeRestore": True,
-            "timeFrom":    "now-15d",   # מכסה 13–16 אפריל
+            "timeFrom":    "now-60d",   # מכסה אוטובוסים (אפריל) + רכבות (מרץ)
             "timeTo":      "now",
             "refreshInterval": {"pause": False, "value": 60000},
             "panelsJSON":  json.dumps(panels),

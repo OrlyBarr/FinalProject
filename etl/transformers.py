@@ -118,7 +118,7 @@ class BusPositionTransformer:
             "vehicle_id":        self._clean_id(data.get("vehicle_id", "")),
             "trip_id":           self._clean_id(data.get("trip_id", "")),
             "route_id":          data.get("route_id", ""),
-            "route_short_name":  extract_route_name(data.get("route_id", "")),  # FIX: shared fn
+            "route_short_name":  data.get("route_short_name") or extract_route_name(data.get("route_id", "")),
             "operator_id":       data.get("operator_id", ""),
             "operator_name":     data.get("operator_name", ""),
             # NOTE: direction_id omitted — Hasadna SIRI API does not provide it;

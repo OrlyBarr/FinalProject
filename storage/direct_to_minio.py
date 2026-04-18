@@ -135,6 +135,29 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
 
 # ── Bus positions (Open Bus Stride SIRI) ─────────────────────────────────────
 
+# Israeli public transit operator codes → human-readable names
+_OPERATOR_NAMES = {
+    "3":  "Dan",
+    "4":  "Egged",
+    "5":  "Egged",
+    "6":  "Egged Taavura",
+    "7":  "Metropoline",
+    "14": "Nateev Express",
+    "15": "Nateev Express",
+    "16": "Kavim",
+    "18": "Galim",
+    "23": "Superbus",
+    "25": "Egged",
+    "31": "Nadan",
+    "32": "KBS",
+    "34": "Afikim",
+    "37": "Electra Afikim",
+    "42": "Malam",
+    "44": "GB Tours",
+    "52": "Gush Dan Bus",
+}
+
+
 def fetch_buses() -> list:
     import requests
     log.info("Fetching bus positions from Open Bus Stride...")
@@ -149,18 +172,20 @@ def fetch_buses() -> list:
         now = now_il().isoformat()
         result = [
             {
-                "vehicle_id":   str(rec.get("id", "")),
-                "route_id":     str(rec.get("siri_snapshot_id", "")),
-                "trip_id":      str(rec.get("siri_ride_stop_id", "")),
-                "line_ref":     str(rec.get("siri_route__line_ref") or rec.get("line_ref") or ""),
-                "operator_ref": str(rec.get("siri_route__operator_ref") or ""),
-                "lat":          rec.get("lat"),
-                "lon":          rec.get("lon"),
-                "bearing":      rec.get("bearing"),
-                "velocity":     rec.get("velocity"),
-                "recorded_at":  rec.get("recorded_at_time"),
-                "fetched_at":   now,
-                "source":       "hasadna-siri",
+                "vehicle_id":       str(rec.get("id", "")),
+                "route_id":         str(rec.get("siri_route_id") or rec.get("siri_route__id") or ""),
+                "trip_id":          str(rec.get("siri_ride_id") or ""),
+                "line_ref":         str(rec.get("siri_route__line_ref") or ""),
+                "route_short_name": str(rec.get("siri_route__line_ref") or ""),
+                "operator_id":      str(rec.get("siri_route__operator_ref") or ""),
+                "operator_name":    _OPERATOR_NAMES.get(str(rec.get("siri_route__operator_ref") or ""), ""),
+                "lat":              rec.get("lat"),
+                "lon":              rec.get("lon"),
+                "bearing":          rec.get("bearing"),
+                "velocity":         rec.get("velocity"),
+                "recorded_at":      rec.get("recorded_at_time"),
+                "fetched_at":       now,
+                "source":           "hasadna-siri",
             }
             for rec in records
             if rec.get("lat") is not None and rec.get("lon") is not None
@@ -202,8 +227,14 @@ def fetch_trains() -> list:
         now = now_il().isoformat()
         result = [
             {
+                "vehicle_id":      str(rec.get("id") or ""),
                 "train_number":    str(rec.get("siri_ride__vehicle_ref") or rec.get("vehicle_ref") or ""),
-                "line_ref":        str(rec.get("siri_route__line_ref") or rec.get("line_ref") or ""),
+                "route_id":        str(rec.get("siri_route_id") or rec.get("siri_route__id") or ""),
+                "trip_id":         str(rec.get("siri_ride_id") or ""),
+                "line_ref":        str(rec.get("siri_route__line_ref") or ""),
+                "route_short_name": str(rec.get("siri_route__line_ref") or ""),
+                "operator_id":     "2",
+                "operator_name":   "Israel Railways",
                 "operator":        "israel_railways",
                 "operator_ref":    "2",
                 "lat":             rec.get("lat"),
@@ -351,11 +382,10 @@ def fetch_delays() -> list:
             params={
                 "siri_ride__scheduled_start_time_from": window_start.isoformat(),
                 "siri_ride__scheduled_start_time_to":   now.isoformat(),
-                "nearest_siri_vehicle_location__distance_from_siri_ride_stop_meters__lte": 200,
                 "limit": 500,
                 "order_by": "id desc",
             },
-            timeout=20,
+            timeout=60,
         )
         r.raise_for_status()
         records = r.json()
@@ -449,7 +479,7 @@ def fetch_service_alerts() -> list:
                 "limit": 500,
                 "order_by": "scheduled_start_time desc",
             },
-            timeout=20,
+            timeout=30,
         )
         r.raise_for_status()
         records = r.json()
@@ -525,6 +555,60 @@ def transform_records(records: list, transformer_cls) -> list:
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
+
+def _generate_delay_events_from_stored(s3, now) -> list:
+    """
+    Fallback: read the latest raw/service-alerts file from MinIO and derive
+    delay-events using elapsed time since scheduled_start.
+    A ride that started >= 10 minutes ago and is still in the active window
+    is treated as a potential delay event.
+    """
+    try:
+        r = s3.list_objects_v2(Bucket=MAIN_BUCKET, Prefix="raw/service-alerts/", MaxKeys=100)
+        objects = sorted(
+            [o for o in r.get("Contents", []) if o["Size"] > 0],
+            key=lambda o: o["LastModified"],
+            reverse=True,
+        )
+        if not objects:
+            return []
+        body = s3.get_object(Bucket=MAIN_BUCKET, Key=objects[0]["Key"])["Body"].read()
+        records = json.loads(body)
+    except Exception as e:
+        log.warning(f"Could not read stored service-alerts for delay-event fallback: {e}")
+        return []
+
+    delay_events = []
+    for rec in records:
+        sched_str = rec.get("scheduled_start")
+        if not sched_str:
+            continue
+        try:
+            from datetime import timezone as _tz
+            sched_dt = datetime.fromisoformat(sched_str)
+            if sched_dt.tzinfo is None:
+                sched_dt = sched_dt.replace(tzinfo=_tz.utc)
+            elapsed_sec = (now - sched_dt).total_seconds()
+        except Exception:
+            continue
+        # Flag rides that started >= 10 min ago as potential delay events
+        ELAPSED_THRESHOLD_SEC = 600
+        if elapsed_sec < ELAPSED_THRESHOLD_SEC:
+            continue
+        extra_min = rec.get("extra_delay_min")
+        delay_events.append({
+            **rec,
+            "is_delayed":    True,
+            "is_very_late":  elapsed_sec > 1200 or (extra_min is not None and extra_min >= 20),
+            "event_type":    rec.get("alert_type", "LATE") if rec.get("alert_type") != "NORMAL" else "LATE",
+            "delay_seconds": int(extra_min * 60) if extra_min is not None else int(elapsed_sec),
+            "detected_at":   now.isoformat(),
+            "delay_source":  "elapsed_time",
+        })
+
+    log.info(f"  Delay events (elapsed-time fallback): {len(delay_events)} records from stored alerts")
+    return delay_events
+
 
 def run(dry_run=False, only=None) -> dict:
     log.info("=" * 60)
@@ -631,58 +715,9 @@ def run(dry_run=False, only=None) -> dict:
             })
         uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
         results["delays"] = len(delays)
-
-        # ── Delay events: subset where delay >= 5 minutes ─────────────────────
-        # delay_seconds may be None when vehicle telemetry is unavailable.
-        # Fall back to elapsed time since scheduled_start as an approximation:
-        # if a ride was scheduled >5 min ago and no actual_time recorded, it is
-        # potentially delayed.
-        DELAY_EVENT_THRESHOLD_SEC = 300  # 5 minutes
-
-        def _effective_delay(d):
-            """Return best-estimate delay in seconds, or 0 if unknown."""
-            ds = d.get("delay_seconds")
-            if ds is not None:
-                return ds
-            # Approximate: time elapsed since scheduled start without arrival
-            if d.get("actual_time") is None:
-                sched = d.get("scheduled_start")
-                if sched:
-                    try:
-                        from datetime import datetime, timezone
-                        sched_dt = datetime.fromisoformat(sched)
-                        if sched_dt.tzinfo is None:
-                            sched_dt = sched_dt.replace(tzinfo=timezone.utc)
-                        elapsed = (now - sched_dt).total_seconds()
-                        return max(0, elapsed)
-                    except Exception:
-                        pass
-            return 0
-
-        raw_delay_events = [
-            d for d in delays
-            if _effective_delay(d) >= DELAY_EVENT_THRESHOLD_SEC
-        ]
-        proc_delay_events = [
-            {
-                **d,
-                "is_delayed":   True,
-                "is_very_late": _effective_delay(d) > 600,
-                "event_type":   "VERY_LATE" if _effective_delay(d) > 600 else "LATE",
-                "effective_delay_seconds": _effective_delay(d),
-                "detected_at":  now.isoformat(),
-            }
-            for d in raw_delay_events
-        ]
-        if raw_delay_events:
-            uploaded.append(upload(s3, raw_delay_events,  "raw/delay-events",       "delay_events_raw"))
-            uploaded.append(upload(s3, proc_delay_events, "processed/delay-events",  "delay_events_processed"))
-            log.info(f"  Delay events: {len(raw_delay_events)} records (>= 5 min late)")
-        results["delay_events"] = len(raw_delay_events)
     else:
-        log.warning("No delay records fetched")
+        log.warning("No delay records fetched (siri_ride_stops endpoint may be slow)")
         results["delays"] = 0
-        results["delay_events"] = 0
 
     # ── Service alerts ─────────────────────────────────────────────────────────
     if alerts:
@@ -698,9 +733,49 @@ def run(dry_run=False, only=None) -> dict:
             })
         uploaded.append(upload(s3, processed_alerts, "processed/service-alerts", "alerts_processed"))
         results["alerts"] = len(alerts)
+
+        # ── Delay events: derived from service-alerts (reliable siri_rides endpoint)
+        # Any ride with >= 5 min extra delay, or a cancellation, is a delay event.
+        DELAY_EVENT_MIN = 5
+        raw_delay_events = [
+            a for a in alerts
+            if (a.get("extra_delay_min") or 0) >= DELAY_EVENT_MIN
+            or a.get("alert_type") == "CANCELLATION"
+        ]
+        if raw_delay_events:
+            proc_delay_events = [
+                {
+                    **a,
+                    "is_delayed":            True,
+                    "is_very_late":          (a.get("extra_delay_min") or 0) >= 20,
+                    "event_type":            a.get("alert_type", "LATE"),
+                    "delay_seconds":         int((a.get("extra_delay_min") or 0) * 60),
+                    "detected_at":           now.isoformat(),
+                }
+                for a in raw_delay_events
+            ]
+            uploaded.append(upload(s3, raw_delay_events,  "raw/delay-events",       "delay_events_raw"))
+            uploaded.append(upload(s3, proc_delay_events, "processed/delay-events",  "delay_events_processed"))
+            log.info(f"  Delay events: {len(raw_delay_events)} records (>= 5 min delay or cancellation)")
+        else:
+            # Fallback: derive from stored alert data using elapsed time
+            raw_delay_events = _generate_delay_events_from_stored(s3, now)
+            if raw_delay_events:
+                uploaded.append(upload(s3, raw_delay_events, "raw/delay-events",      "delay_events_raw"))
+                uploaded.append(upload(s3, raw_delay_events, "processed/delay-events", "delay_events_processed"))
+            else:
+                log.info("  Delay events: 0 qualifying records this run")
+        results["delay_events"] = len(raw_delay_events)
     else:
-        log.warning("No service alerts derived")
+        log.warning("No service alerts derived (API may be down)")
+        # Still attempt delay-events from stored data
+        fallback_events = _generate_delay_events_from_stored(s3, now)
+        if fallback_events:
+            uploaded.append(upload(s3, fallback_events, "raw/delay-events",       "delay_events_raw"))
+            uploaded.append(upload(s3, fallback_events, "processed/delay-events", "delay_events_processed"))
+            log.info(f"  Delay events (fallback): {len(fallback_events)} records written")
         results["alerts"] = 0
+        results["delay_events"] = len(fallback_events)
 
     # ── Summary ────────────────────────────────────────────────────────────────
     log.info("=" * 60)
