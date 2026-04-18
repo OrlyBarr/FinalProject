@@ -85,7 +85,10 @@ def index_minio_backfill(**context):
     from storage.es_indexer import index_from_minio, get_last_indexed_key, set_last_indexed_key
     from datetime import datetime
 
-    from zoneinfo import ZoneInfo
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
     today = datetime.now(ZoneInfo("Asia/Jerusalem")).strftime("year=%Y/month=%m/day=%d")
 
     try:

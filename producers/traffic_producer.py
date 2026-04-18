@@ -14,7 +14,10 @@ Coverage: Israel bounding box (29.4–33.4 lat, 34.2–35.9 lon)
 
 import requests
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 import sys
 
 IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)

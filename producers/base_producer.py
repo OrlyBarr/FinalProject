@@ -7,7 +7,10 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import sys

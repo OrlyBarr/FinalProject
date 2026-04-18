@@ -37,7 +37,10 @@ import sys
 import logging
 import argparse
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 from pathlib import Path
 
 # Israel time — automatically handles DST (UTC+2 winter / UTC+3 summer)

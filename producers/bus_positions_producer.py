@@ -10,7 +10,10 @@ Primary source: https://open-bus-stride-api.hasadna.org.il/siri_vehicle_location
 
 import requests
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 import sys
 
 IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
