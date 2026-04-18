@@ -140,52 +140,34 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "2 — Starting Docker services"
 
-# Check if all core containers are already running — if so, skip teardown entirely
-RUNNING=$(docker compose ps --services --filter status=running 2>/dev/null | wc -l)
-TOTAL=$(docker compose config --services 2>/dev/null | wc -l)
+log "Pulling required images (may take a few minutes the first time)..."
+docker compose pull --quiet 2>/dev/null || true
 
-if [ "$RUNNING" -ge "$TOTAL" ] 2>/dev/null; then
-  success "All containers already running — skipping teardown"
-else
-  # Only pull images that are not already cached locally
-  log "Checking for missing Docker images..."
-  docker compose pull --quiet --ignore-pull-failures 2>/dev/null || true
+log "Stopping and removing old containers..."
+docker compose down --remove-orphans 2>/dev/null || true
 
-  log "Removing old/stopped containers that may cause conflicts..."
-  # Only tear down stopped/exited containers; leave running ones alone
-  for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-    if [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
-      docker rm -f "$container" 2>/dev/null || true
-    fi
+# Clean up orphaned containers from previous sessions (hash-prefix names)
+log "Cleaning up orphaned containers from previous sessions..."
+for svc in elasticsearch postgres airflow-webserver airflow-scheduler kibana kafka kafka-ui minio zookeeper; do
+  ORPHANS=$(docker ps -a --filter "label=com.docker.compose.service=${svc}" \
+    --format '{{.Names}}' 2>/dev/null | grep -v "^${svc}$" || true)
+  for ORPHAN in $ORPHANS; do
+    warn "Found orphaned container: $ORPHAN — removing..."
+    docker rm -f "$ORPHAN" 2>/dev/null || true
   done
-fi
+done
 
-log "Starting all services (skips already-running containers)..."
-docker compose up -d --remove-orphans 2>&1 || {
-  warn "docker compose up exited with an error — attempting to start created containers..."
-  for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-    if [ "$STATUS" = "created" ]; then
-      docker start "$container" 2>/dev/null || true
-    fi
-  done
-}
+# Always wipe kafka and zookeeper data volumes before starting.
+# This prevents InconsistentClusterIdException (mismatched cluster IDs between
+# the two volumes after a restart). Topics are recreated in step 4, so this is safe.
+log "Resetting Kafka/Zookeeper data volumes to prevent cluster ID mismatch..."
+for vol in $(docker volume ls --format '{{.Name}}' | grep -E 'kafka_data|zookeeper_data' || true); do
+  log "Removing volume: $vol"
+  docker volume rm "$vol" 2>/dev/null || true
+done
 
-# Recover from Kafka/Zookeeper cluster ID mismatch by resetting only their data volumes.
-KAFKA_STATUS=$(docker inspect --format '{{.State.Status}}' "kafka" 2>/dev/null || echo "")
-if [ "$KAFKA_STATUS" = "exited" ] && docker logs kafka 2>&1 | grep -q "InconsistentClusterIdException"; then
-  warn "Kafka cluster ID mismatch detected. Resetting Kafka and Zookeeper data volumes..."
-  docker compose down --remove-orphans 2>/dev/null || true
-
-  for vol in $(docker volume ls --format '{{.Name}}' | grep -E '(^|_)kafka_data$|(^|_)zookeeper_data$' || true); do
-    warn "Removing volume: $vol"
-    docker volume rm "$vol" 2>/dev/null || true
-  done
-
-  log "Recreating containers after Kafka reset..."
-  docker compose up -d
-fi
+log "Starting all services..."
+docker compose up -d 2>&1 || true
 
 success "All containers started"
 echo ""
