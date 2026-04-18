@@ -107,27 +107,32 @@ fi
 step "1 — Installing Python libraries"
 
 if [ ! -d "venv" ]; then
-  log "Creating Python virtual environment..."
+  log "Creating virtual environment..."
   python3 -m venv venv
-  success "Virtual environment created"
 fi
 
 source venv/bin/activate
 
-# Use a marker file: only re-install when requirements.txt changes
+# Skip entirely if requirements.txt hasn't changed since last install
 REQ_HASH=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
 MARKER="venv/.installed_${REQ_HASH}"
 
-if [ ! -f "$MARKER" ]; then
-  log "Installing Python libraries (requirements.txt changed or first run)..."
-  pip install --upgrade pip -q
-  pip install -r requirements.txt -q
-  # Remove old markers and write new one
-  rm -f venv/.installed_* 2>/dev/null || true
+if [ -f "$MARKER" ]; then
+  success "Libraries up to date — skipping install"
+else
+  log "Installing libraries..."
+  # Use uv (10-100x faster than pip) if available, otherwise fall back to pip
+  if command -v uv &>/dev/null; then
+    uv pip install -r requirements.txt -q
+  else
+    # Install uv for future runs, then use it immediately
+    pip install uv -q 2>/dev/null && \
+      uv pip install -r requirements.txt -q || \
+      pip install -r requirements.txt -q
+  fi
+  rm -f venv/.installed_* 2>/dev/null
   touch "$MARKER"
   success "All libraries installed"
-else
-  success "Libraries up to date — skipping install"
 fi
 
 # ─────────────────────────────────────────────────────────────

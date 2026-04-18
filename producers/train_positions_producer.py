@@ -13,7 +13,10 @@ Note: israelrail.azurewebsites.net was taken over, www.rail.co.il is blocked by 
 
 import requests
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import sys
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 sys.path.append("..")
 from config.settings import OPEN_BUS_API_URL, KAFKA_TOPICS, DELAY_THRESHOLD_SECONDS
 from producers.base_producer import BaseProducer
@@ -32,7 +35,7 @@ class TrainPositionsProducer(BaseProducer):
         return KAFKA_TOPICS["train_positions"]
 
     def fetch_data(self) -> list:
-        """Fetch active train vehicles from Open Bus Stride."""
+        """Fetch active (moving) train vehicles from Open Bus Stride."""
         try:
             resp = requests.get(
                 f"{self.api_url}/siri_vehicle_locations/list",
@@ -46,8 +49,19 @@ class TrainPositionsProducer(BaseProducer):
             )
             resp.raise_for_status()
             vehicles = resp.json()
-            records = [self._normalize(v) for v in vehicles if v.get("lat")]
-            self.logger.info(f"Fetched {len(records)} train vehicles from Open Bus Stride")
+
+            total = len(vehicles)
+            # Only include trains that have a valid position AND are moving
+            records = [
+                self._normalize(v) for v in vehicles
+                if v.get("lat")
+                and v.get("velocity") is not None
+                and float(v.get("velocity", 0)) > 0
+            ]
+            self.logger.info(
+                f"Fetched {len(records)} moving train vehicles from Open Bus Stride "
+                f"(skipped {total - len(records)} parked/no-position vehicles)"
+            )
             return records
         except Exception as e:
             self.logger.warning(f"Train fetch failed: {e}")
@@ -67,7 +81,7 @@ class TrainPositionsProducer(BaseProducer):
             "recorded_at":      v.get("recorded_at_time", ""),
             "is_delayed":       False,
             "delay_minutes":    0,
-            "timestamp":        int(datetime.now(timezone.utc).timestamp()),
+            "timestamp":        int(datetime.now(IL_TZ).timestamp()),
         }
 
 

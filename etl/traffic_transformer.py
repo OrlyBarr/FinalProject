@@ -15,6 +15,9 @@ FIXES:
 """
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 import logging
 
 logger = logging.getLogger("etl.traffic_transformer")
@@ -105,7 +108,7 @@ class TrafficTransformer:
     """Transforms HERE Traffic Flow records for S3/Redshift storage."""
 
     def transform(self, data: dict) -> dict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(IL_TZ)
 
         lat = data.get("lat")
         lon = data.get("lon")

@@ -20,6 +20,9 @@ import time
 import logging
 import argparse
 from datetime import datetime, timedelta, timezone, date
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 from typing import Iterator
 
 import requests
@@ -95,7 +98,7 @@ def iter_historical_bus_delays(
             yield {
                 "source":         "gtfs_ride_stop_historical",
                 "transport_type": "bus",
-                "collected_at":   datetime.now(timezone.utc).isoformat(),
+                "collected_at":   datetime.now(IL_TZ).isoformat(),
                 "gtfs_ride_id":   raw.get("gtfs_ride_id"),
                 "gtfs_stop_id":   raw.get("gtfs_stop_id"),
                 "planned_arrival":  raw.get("planned_arrival_time"),
@@ -153,7 +156,7 @@ def iter_historical_bus_vehicle_monitoring(
             yield {
                 "source":          "siri_vehicle_monitoring_historical",
                 "transport_type":  "bus",
-                "collected_at":    datetime.now(timezone.utc).isoformat(),
+                "collected_at":    datetime.now(IL_TZ).isoformat(),
                 "vehicle_ref":     raw.get("vehicle_ref"),
                 "line_ref":        raw.get("line_ref"),
                 "operator_ref":    raw.get("operator_ref"),
@@ -225,7 +228,7 @@ def iter_historical_train_delays(
                 yield {
                     "source":            "rail_api_delays_historical",
                     "transport_type":    "train",
-                    "collected_at":      datetime.now(timezone.utc).isoformat(),
+                    "collected_at":      datetime.now(IL_TZ).isoformat(),
                     "train_number":      raw.get("Train"),
                     "station_id":        raw.get("Station"),
                     "route_origin":      origin,
@@ -245,7 +248,7 @@ def iter_historical_train_delays(
                         yield {
                             "source":            "rail_api_stops_historical",
                             "transport_type":    "train",
-                            "collected_at":      datetime.now(timezone.utc).isoformat(),
+                            "collected_at":      datetime.now(IL_TZ).isoformat(),
                             "train_number":      train_no,
                             "station_id":        stop.get("StationId"),
                             "route_origin":      origin,
@@ -308,14 +311,14 @@ def main():
     args = parser.parse_args()
 
     # Calculate date range
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IL_TZ)
     if args.date_from:
-        dt_from = datetime.fromisoformat(args.date_from).replace(tzinfo=timezone.utc)
+        dt_from = datetime.fromisoformat(args.date_from).replace(tzinfo=IL_TZ)
     else:
         dt_from = now - timedelta(days=args.days)
 
     if args.date_to:
-        dt_to = datetime.fromisoformat(args.date_to).replace(tzinfo=timezone.utc)
+        dt_to = datetime.fromisoformat(args.date_to).replace(tzinfo=IL_TZ)
     else:
         dt_to = now
 

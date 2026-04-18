@@ -19,6 +19,9 @@ import time
 import logging
 import argparse
 from datetime import datetime, timezone, date
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 
 import requests
 from kafka import KafkaProducer
@@ -109,7 +112,7 @@ def normalize_delay_record(raw_delay: dict, route_meta: dict) -> dict:
     return {
         "source":         "rail_api_delays",
         "transport_type": "train",
-        "collected_at":   datetime.now(timezone.utc).isoformat(),
+        "collected_at":   datetime.now(IL_TZ).isoformat(),
         # Identification
         "train_number":   raw_delay.get("Train"),
         "station_id":     raw_delay.get("Station"),
@@ -147,7 +150,7 @@ def normalize_position_record(raw_pos: dict, route_meta: dict) -> dict:
     return {
         "source":         "rail_api_positions",
         "transport_type": "train",
-        "collected_at":   datetime.now(timezone.utc).isoformat(),
+        "collected_at":   datetime.now(IL_TZ).isoformat(),
         # Identification
         "train_number":      str(raw_pos.get("TrainNumber")),
         "current_station":   raw_pos.get("CurrentStation"),

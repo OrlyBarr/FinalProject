@@ -23,6 +23,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
+    restart: unless-stopped
     networks: [transit_net]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -40,6 +41,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: kafka
+    restart: unless-stopped
     networks: [transit_net]
     depends_on:
       zookeeper:
@@ -68,6 +70,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
+    restart: unless-stopped
     networks: [transit_net]
     depends_on:
       kafka:
@@ -111,6 +114,7 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
+    restart: unless-stopped
     networks: [transit_net]
     environment:
       POSTGRES_USER: airflow
@@ -129,6 +133,7 @@ services:
   airflow-webserver:
     image: apache/airflow:2.7.0
     container_name: airflow-webserver
+    restart: unless-stopped
     networks: [transit_net]
     env_file: .env
     depends_on:
@@ -187,6 +192,7 @@ services:
   airflow-scheduler:
     image: apache/airflow:2.7.0
     container_name: airflow-scheduler
+    restart: unless-stopped
     networks: [transit_net]
     env_file: .env
     depends_on:
@@ -228,6 +234,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
+    restart: unless-stopped
     networks: [transit_net]
     ports:
       - "9000:9000"

@@ -9,6 +9,9 @@ import json
 import logging
 import boto3
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 import sys
 sys.path.append("..")
 from config.settings import (
@@ -56,7 +59,7 @@ class S3Writer:
 
     def _build_partition(self) -> str:
         """Hour-level partitioning for transit peak-hour analysis."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(IL_TZ)
         return (f"year={now.year}/month={now.month:02d}/"
                 f"day={now.day:02d}/hour={now.hour:02d}")
 
@@ -69,7 +72,7 @@ class S3Writer:
         if not partition:
             partition = self._build_partition()
 
-        ts  = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        ts  = datetime.now(IL_TZ).strftime("%Y%m%d_%H%M%S_%f")
         key = f"{self.prefix}/{partition}/{ts}.json"
 
         content = "\n".join(json.dumps(r, ensure_ascii=False) for r in self._buffer)

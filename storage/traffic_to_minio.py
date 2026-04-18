@@ -20,6 +20,9 @@ import sys
 import logging
 import argparse
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -92,7 +95,7 @@ def fetch_tile(session, tile_name: str, lat_min, lat_max, lon_min, lon_max) -> l
 
 
 def _normalize(result: dict, tile_name: str) -> dict:
-    now          = datetime.now(timezone.utc)
+    now          = datetime.now(IL_TZ)
     location     = result.get("location", {})
     description  = location.get("description", "")
     shape        = location.get("shape", {})
@@ -175,7 +178,7 @@ def fetch_all_israel() -> list:
 def _sample_traffic_data() -> list:
     """Generate realistic sample traffic data for all Israel tiles."""
     import random
-    now  = datetime.now(timezone.utc)
+    now  = datetime.now(IL_TZ)
     hour = now.hour
     # Rush hours have more congestion
     is_rush = 7 <= hour <= 9 or 16 <= hour <= 19
@@ -266,7 +269,7 @@ def ensure_bucket(s3, bucket: str):
 
 def upload_records(s3, records: list, prefix: str, label: str) -> str:
     """Upload records as a single JSON file under time-partitioned path."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IL_TZ)
     partition = (
         f"year={now.year}/month={now.month:02d}/"
         f"day={now.day:02d}/hour={now.hour:02d}"

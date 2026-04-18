@@ -85,7 +85,8 @@ def index_minio_backfill(**context):
     from storage.es_indexer import index_from_minio, get_last_indexed_key, set_last_indexed_key
     from datetime import datetime
 
-    today = datetime.utcnow().strftime("year=%Y/month=%m/day=%d")
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Asia/Jerusalem")).strftime("year=%Y/month=%m/day=%d")
 
     try:
         last_key = get_last_indexed_key("bus_positions", today)

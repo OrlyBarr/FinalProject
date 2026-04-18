@@ -19,6 +19,9 @@ import logging
 import argparse
 import threading
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 from collections import defaultdict
 
 from kafka import KafkaConsumer
@@ -146,7 +149,7 @@ def save_batch_to_minio(minio: Minio, records: list[dict]):
         bucket = get_minio_bucket(rec)
         by_bucket[bucket].append(rec)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(IL_TZ)
     path_prefix = now.strftime("%Y/%m/%d/%H")
     timestamp   = now.strftime("%Y%m%d_%H%M%S_%f")
 

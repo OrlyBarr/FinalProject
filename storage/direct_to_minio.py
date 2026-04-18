@@ -162,7 +162,17 @@ def fetch_buses() -> list:
             for rec in records
             if rec.get("lat") is not None and rec.get("lon") is not None
         ]
-        log.info(f"  Buses: {len(result)} vehicle positions fetched")
+        # Filter out stale records — the Hasadna SIRI API uses far-future dates
+        # (e.g. 2038-01-14 = Unix max-int32, 2037-xx-xx = near-sentinel) when
+        # recorded_at_time is unavailable. Those records also have velocity=0 and
+        # a frozen bearing, making them useless for analysis.
+        current_year = now_il().year
+        result = [
+            r for r in result
+            if r.get("recorded_at") and
+               int(r["recorded_at"][:4]) <= current_year
+        ]
+        log.info(f"  Buses: {len(result)} vehicle positions fetched (stale-filtered)")
         return result
     except Exception as e:
         log.error(f"Bus fetch failed: {e}")
@@ -205,7 +215,14 @@ def fetch_trains() -> list:
             for rec in records
             if rec.get("lat") is not None
         ]
-        log.info(f"  Trains: {len(result)} vehicle positions fetched")
+        # Filter out stale records with far-future placeholder timestamps
+        current_year = now_il().year
+        result = [
+            r for r in result
+            if r.get("recorded_at") and
+               int(r["recorded_at"][:4]) <= current_year
+        ]
+        log.info(f"  Trains: {len(result)} vehicle positions fetched (stale-filtered)")
         return result
     except Exception as e:
         log.error(f"Train fetch failed: {e}")

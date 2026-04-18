@@ -238,7 +238,7 @@ def detect_and_publish_delay_events(**context):
                 raw_rec["_kafka_offset"] = msg.offset
                 raw_events.append(raw_rec)
 
-                transformed["detected_at"] = datetime.now(timezone.utc).isoformat()
+                transformed["detected_at"] = datetime.now(ZoneInfo("Asia/Jerusalem")).isoformat()
                 processed_events.append(transformed)
         except Exception as e:
             print(f"Delay transform error: {e}")

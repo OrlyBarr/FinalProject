@@ -18,6 +18,9 @@ import time
 import logging
 import argparse
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+IL_TZ = ZoneInfo("Asia/Jerusalem")  # UTC+2 winter / UTC+3 summer (DST-aware)
 
 import requests
 from kafka import KafkaProducer
@@ -115,7 +118,7 @@ def normalize_vehicle_record(raw: dict) -> dict:
     return {
         "source":          "siri_vehicle_monitoring",
         "transport_type":  "bus",
-        "collected_at":    datetime.now(timezone.utc).isoformat(),
+        "collected_at":    datetime.now(IL_TZ).isoformat(),
         # זיהוי
         "vehicle_ref":     raw.get("vehicle_ref"),
         "line_ref":        raw.get("line_ref"),
@@ -145,7 +148,7 @@ def normalize_ride_stop_record(raw: dict) -> dict:
     return {
         "source":         "gtfs_ride_stop",
         "transport_type": "bus",
-        "collected_at":   datetime.now(timezone.utc).isoformat(),
+        "collected_at":   datetime.now(IL_TZ).isoformat(),
         # Identification
         "gtfs_ride_id":   raw.get("gtfs_ride_id"),
         "gtfs_stop_id":   raw.get("gtfs_stop_id"),
