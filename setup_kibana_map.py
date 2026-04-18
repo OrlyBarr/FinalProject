@@ -60,15 +60,15 @@ def upsert_pattern():
     print(f"{'✅' if r.status_code in (200,201) else '❌'} index-pattern: {BUS}")
 
 
-def post_map(map_id, title, description, layers, time_from="now-24h"):
+def post_map(map_id, title, description, layers, time_from="now-60d"):
     """יוצר Kibana Map saved object."""
     body = {
         "attributes": {
             "title":       title,
             "description": description,
             "mapStateJSON": json.dumps({
-                "zoom":   7,
-                "center": {"lat": 31.8, "lon": 34.9},  # מרכז ישראל
+                "zoom":   8,
+                "center": {"lat": 32.1, "lon": 34.85},  # מרכז ישראל — גוש דן
                 "timeFilters": {
                     "from": time_from,
                     "to":   "now",
@@ -76,17 +76,17 @@ def post_map(map_id, title, description, layers, time_from="now-24h"):
                 "query":   {"query": "", "language": "kuery"},
                 "filters": [],
                 "settings": {
-                    "initialLocation": "FIXED_LOCATION",
-                    "fixedLocation":   {"lat": 31.8, "lon": 34.9, "zoom": 7},
-                    "browserLocation": {"zoom": 3},
+                    "initialLocation":   "FIXED_LOCATION",
+                    "fixedLocation":     {"lat": 32.1, "lon": 34.85, "zoom": 8},
+                    "browserLocation":   {"zoom": 3},
                     "autoFitToDataBounds": True,
                     "backgroundColor":    "#ffffff",
                     "disableInteractive": False,
-                    "disableTooltipControl": False,
-                    "hideToolbarOverlay":    False,
-                    "hideLayerControl":      False,
-                    "hideViewControl":       False,
-                    "initialZoomLevel":      None,
+                    "disableTooltipControl":  False,
+                    "hideToolbarOverlay":     False,
+                    "hideLayerControl":       False,
+                    "hideViewControl":        False,
+                    "initialZoomLevel":       None,
                     "maxZoom": 24, "minZoom": 0,
                 },
             }),
@@ -104,7 +104,7 @@ def post_map(map_id, title, description, layers, time_from="now-24h"):
     return ok
 
 
-def post_dashboard(dash_id, title, description, map_id, time_from="now-24h"):
+def post_dashboard(dash_id, title, description, map_id, time_from="now-60d"):
     """יוצר dashboard עם מפה אחת."""
     panels = [{
         "version":    "8.8.0",
@@ -354,7 +354,7 @@ def main():
         "🚌 Live Bus Map — אוטובוסים פעילים",
         "מפה חיה של כל האוטובוסים הפעילים בישראל",
         live_layers,
-        time_from="now-2h",
+        time_from="now-60d",
     )
 
     if map_ok:
@@ -363,7 +363,7 @@ def main():
             "🚌 Live Bus Map — אוטובוסים פעילים",
             "מפה חיה עם heat map וקלאסטרים",
             "map-live-buses",
-            time_from="now-2h",
+            time_from="now-60d",
         )
 
     # ════════════════════════════════════════════════════════

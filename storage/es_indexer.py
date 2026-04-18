@@ -57,12 +57,14 @@ INDEX_SETTINGS = {
             "longitude":     {"type": "float"},
             "location":      {"type": "geo_point"},
             "delay_minutes": {"type": "float"},
-            "operator_name": {"type": "keyword"},
-            "route_id":      {"type": "keyword"},
-            "vehicle_id":    {"type": "keyword"},
-            "line_ref":      {"type": "keyword"},
-            "trip_id":       {"type": "keyword"},
-            "stop_id":       {"type": "keyword"},
+            "operator_name":     {"type": "keyword"},
+            "operator_id":       {"type": "keyword"},
+            "route_id":          {"type": "keyword"},
+            "route_short_name":  {"type": "keyword"},
+            "vehicle_id":        {"type": "keyword"},
+            "line_ref":          {"type": "keyword"},
+            "trip_id":           {"type": "keyword"},
+            "stop_id":           {"type": "keyword"},
         }
     }
 }
