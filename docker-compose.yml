@@ -149,7 +149,7 @@ services:
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
         python-dotenv>=1.0 gtfs-realtime-bindings==2.0.0
-        geopy>=2.3 elasticsearch>=8.0,<9.0
+        geopy>=2.3 elasticsearch>=8.0,<9.0 backports.zoneinfo
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
@@ -207,7 +207,7 @@ services:
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
         python-dotenv>=1.0 gtfs-realtime-bindings==2.0.0
-        geopy>=2.3 elasticsearch>=8.0,<9.0
+        geopy>=2.3 elasticsearch>=8.0,<9.0 backports.zoneinfo
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

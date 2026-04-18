@@ -202,6 +202,10 @@ def detect_and_publish_delay_events(**context):
     from storage.s3_writer import S3Writer
     import json, os
     from datetime import datetime, timezone
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
 
     DELAY_THRESHOLD_MIN = 5  # only flag delays >= 5 minutes as events
 

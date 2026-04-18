@@ -274,6 +274,7 @@ try:
         'raw/trip-updates/',
         'raw/service-alerts/',
         'raw/traffic-data/',
+        'raw/delay-events/',
         'processed/bus-positions/',
         'processed/train-positions/',
         'processed/trip-updates/',
