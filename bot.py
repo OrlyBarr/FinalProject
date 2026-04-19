@@ -32,11 +32,24 @@ if hasattr(sys.stdout, "reconfigure"):
 
 BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 # israelrail.azurewebsites.net is hijacked — disabled
-# Train data served via Open Bus Stride with operator_ref=2
-RAIL_BOARD_URL = ""   # dead — see /proxy/rail handler below
+RAIL_BOARD_URL = ""
 HASADNA_URL    = "https://open-bus-stride-api.hasadna.org.il"
 NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+
+# ── גוש דן ותל אביב — Bounding Box ──────────────────────────────────────────
+GUSH_DAN = {
+    "lat_min": 31.97, "lat_max": 32.19,
+    "lon_min": 34.73, "lon_max": 34.93,
+}
+
+def _in_gush_dan(lat, lon) -> bool:
+    """בדיקה אם נקודה נמצאת בגוש דן / תל אביב."""
+    try:
+        return (GUSH_DAN["lat_min"] <= float(lat) <= GUSH_DAN["lat_max"] and
+                GUSH_DAN["lon_min"] <= float(lon) <= GUSH_DAN["lon_max"])
+    except (TypeError, ValueError):
+        return False
 
 
 # ── Background auto-refresh ───────────────────────────────────────────────────
@@ -102,40 +115,104 @@ class BotHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_json({"error": f"HTML file not found: {filepath}"}, status=404)
 
+    def _fetch_url(self, target_url, timeout=8):
+        """Fetch URL, return (status_int, bytes_body). Raises on error."""
+        req = urllib.request.Request(
+            target_url,
+            headers={"Accept": "application/json", "User-Agent": "IsraelTransitBot/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+
+    def _send_raw(self, status, body):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", len(body))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _proxy(self, target_url):
-        """Generic server-side proxy — forwards GET, adds CORS headers."""
+        """Generic server-side proxy — 8 s timeout, no fallback."""
         try:
-            req = urllib.request.Request(
-                target_url,
-                headers={
-                    "Accept":     "application/json",
-                    "User-Agent": "IsraelTransitBot/1.0",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                body   = resp.read()
-                status = resp.status
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", len(body))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            status, body = self._fetch_url(target_url)
+            self._send_raw(status, body)
         except urllib.error.HTTPError as e:
             body = e.read() or json.dumps({"error": str(e)}).encode()
-            self.send_response(e.code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", len(body))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            self._send_raw(e.code, body)
         except Exception as e:
             self.send_json({"error": f"proxy error: {e}"}, status=502)
+
+    def _proxy_with_fallback(self, target_url, fallback_fn):
+        """Try live proxy; on any failure serve fallback_fn() as local JSON."""
+        try:
+            status, body = self._fetch_url(target_url)
+            self._send_raw(status, body)
+        except Exception as e:
+            print(f"[BOT-proxy] upstream failed ({e}), serving local fallback")
+            data = fallback_fn()
+            self.send_json(data)
+
+    # ── Local Stride-format fallback ──────────────────────────────────────────
+
+    def _stride_local(self, api_path, qs):
+        """Return local cached data in Stride API response format."""
+        buses = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
+
+        if "gtfs_routes" in api_path:
+            line_filters = set(filter(None, (qs.get("line_refs") or [""])[0].split(",")))
+            op_filters   = set(filter(None, (qs.get("operator_refs") or [""])[0].split(",")))
+            seen, routes = set(), []
+            for b in buses:
+                lr = str(b.get("line_ref") or b.get("route_short_name") or "")
+                op = str(b.get("operator_id") or "")
+                if not lr: continue
+                if line_filters and lr not in line_filters: continue
+                if op_filters   and op not in op_filters:   continue
+                key = (lr, op)
+                if key in seen: continue
+                seen.add(key)
+                routes.append({
+                    "line_ref":         lr,
+                    "route_short_name": lr,
+                    "operator_ref":     op,
+                    "route_long_name":  b.get("operator_name", ""),
+                })
+            routes.sort(key=lambda r: r["line_ref"])
+            return routes
+
+        if "siri_vehicle_locations" in api_path:
+            lr_filter = (qs.get("line_ref") or [""])[0]
+            op_filter = (qs.get("operator_ref") or [""])[0]
+            result = []
+            for b in buses:
+                lr = str(b.get("line_ref") or "")
+                op = str(b.get("operator_id") or "")
+                if lr_filter and lr != lr_filter: continue
+                if op_filter and op != op_filter: continue
+                if not _in_gush_dan(b.get("lat"), b.get("lon")): continue
+                result.append({
+                    "siri_route__line_ref":    lr,
+                    "siri_route__operator_ref": op,
+                    "lat":                     b.get("lat"),
+                    "lon":                     b.get("lon"),
+                    "velocity":                b.get("velocity"),
+                    "bearing":                 b.get("bearing"),
+                    "recorded_at_time":        b.get("timestamp"),
+                    "direction_ref":           "0",
+                    "siri_ride__id":           b.get("trip_id"),
+                    "siri_ride__vehicle_ref":  b.get("vehicle_id"),
+                    "operator_name":           b.get("operator_name"),
+                })
+            return result[:100]
+
+        return []
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
 
     def do_GET(self):
@@ -166,7 +243,12 @@ class BotHandler(BaseHTTPRequestHandler):
         elif path == "/status":
             self.send_json({
                 "status": "running",
-                "service": "Israel Public Transit Monitoring Platform",
+                "service": "Israel Public Transit Monitoring — גוש דן ותל אביב",
+                "area": {
+                    "name": "גוש דן ותל אביב",
+                    "lat": f"{GUSH_DAN['lat_min']}–{GUSH_DAN['lat_max']}",
+                    "lon": f"{GUSH_DAN['lon_min']}–{GUSH_DAN['lon_max']}",
+                },
                 "endpoints": {
                     "Transit Query Tool": f"http://localhost:{BOT_PORT}/",
                     "Agent Dashboard":    f"http://localhost:{BOT_PORT}/agent",
@@ -178,15 +260,30 @@ class BotHandler(BaseHTTPRequestHandler):
                 }
             })
 
-        # ── buses ─────────────────────────────────────────────────────────────
+        # ── buses — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/buses":
-            data = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
-            self.send_json(data[:100])
+            all_data = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
+            # סינון לגוש דן בלבד
+            filtered = [
+                b for b in all_data
+                if _in_gush_dan(
+                    b.get("lat") or b.get("latitude"),
+                    b.get("lon") or b.get("longitude")
+                )
+            ]
+            self.send_json(filtered[:200])
 
-        # ── stops ─────────────────────────────────────────────────────────────
+        # ── stops — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/stops":
-            data = load_json("buses_with_nearest_stops.json")
-            self.send_json(data[:100])
+            all_data = load_json("buses_with_nearest_stops.json")
+            filtered = [
+                b for b in all_data
+                if _in_gush_dan(
+                    b.get("lat") or b.get("latitude"),
+                    b.get("lon") or b.get("longitude")
+                )
+            ]
+            self.send_json(filtered[:200])
 
         # ── geocode → Nominatim proxy ─────────────────────────────────────────
         elif path == "/geocode":
@@ -218,38 +315,53 @@ class BotHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": f"geocoding error: {e}"}, status=500)
 
-        # ── Stride proxy: /proxy/stride/<api_path>?<query> ────────────────────
-        # מטפל בכל ה-Stride API calls מה-frontend:
-        #   /proxy/stride/siri_vehicle_locations/list?...
-        #   /proxy/stride/siri_ride_stops/list?...
-        #   /proxy/stride/gtfs_routes/list?...
+        # ── Stride proxy — מסנן לגוש דן ותל אביב ────────────────────────────
         elif path.startswith("/proxy/stride"):
-            api_path = path[len("/proxy/stride"):]   # e.g. /siri_vehicle_locations/list
+            api_path = path[len("/proxy/stride"):]
             if not api_path.startswith("/"):
                 api_path = "/" + api_path
-            target = HASADNA_URL + api_path
-            if parsed.query:
-                target += "?" + parsed.query
-            self._proxy(target)
+            target = HASADNA_URL.rstrip("/") + api_path
 
-        # ── Hasadna alias (backwards compat) ──────────────────────────────────
+            # הוסף פרמטרי bbox לגוש דן לכל קריאת siri_vehicle_locations
+            query = parsed.query
+            if "siri_vehicle_locations" in api_path:
+                bbox_params = (
+                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
+                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                )
+                query = f"{query}&{bbox_params}" if query else bbox_params
+
+            if query:
+                target += "?" + query
+            self._proxy_with_fallback(target, lambda: self._stride_local(api_path, qs))
+
+        # ── Hasadna alias ─────────────────────────────────────────────────────
         elif path.startswith("/proxy/hasadna"):
             api_path = path[len("/proxy/hasadna"):]
             if not api_path.startswith("/"):
                 api_path = "/" + api_path
-            target = HASADNA_URL + api_path
-            if parsed.query:
-                target += "?" + parsed.query
-            self._proxy(target)
+            target = HASADNA_URL.rstrip("/") + api_path
+            query  = parsed.query
+            if "siri_vehicle_locations" in api_path:
+                bbox_params = (
+                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
+                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                )
+                query = f"{query}&{bbox_params}" if query else bbox_params
+            if query:
+                target += "?" + query
+            self._proxy_with_fallback(target, lambda: self._stride_local(api_path, qs))
 
-        # ── Israel Railways proxy → Stride (israelrail.azurewebsites.net is dead) ──
-        # מפנה ל-Open Bus Stride עם operator_ref=2 (רכבת ישראל)
+        # ── Israel Railways → Stride (israelrail.azurewebsites.net is dead) ──
         elif path.startswith("/proxy/rail"):
-            station_id = urllib.parse.parse_qs(parsed.query).get("stationId", [""])[0]
-            # בנה query ל-Stride
-            stride_params = "operator_ref=2&limit=100&order_by=recorded_at_time+desc"
-            target = f"{HASADNA_URL}/siri_vehicle_locations/list?{stride_params}"
-            self._proxy(target)
+            stride_params = (
+                f"siri_route__operator_ref=2&limit=100&order_by=id+desc"
+                f"&lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
+                f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+            )
+            target = f"{HASADNA_URL.rstrip('/')}/siri_vehicle_locations/list?{stride_params}"
+            rail_api_path = "/siri_vehicle_locations/list"
+            self._proxy_with_fallback(target, lambda: self._stride_local(rail_api_path, qs))
 
         else:
             self.send_json({"error": "Not found", "path": self.path}, status=404)
@@ -264,6 +376,7 @@ def main():
     ).start()
     print("🔄 Background bus refresh started (every 2 min)")
 
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
     print(f"   /                         → Transit Query Tool (agent_transit.html)")
