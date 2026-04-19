@@ -418,7 +418,8 @@ EOF
 # ─────────────────────────────────────────────────────────────
 step "10.5 — Pipeline resilience health check"
 
-python3 - <<'EOF'
+# Run health check from the HOST — always use localhost endpoints (not Docker-internal hostnames)
+MINIO_ENDPOINT=http://localhost:9000 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 python3 - <<'EOF'
 import sys, json
 sys.path.insert(0, '.')
 try:
@@ -497,7 +498,6 @@ echo -e "${BOLD}  🚌  Project components:${NC}"
   echo -e "  • ${GREEN}11 Kafka Topics${NC} for real-time streaming (incl. bus/train delay topics)"
 echo -e "  • ${GREEN}8 Airflow DAGs${NC} for ETL scheduling (3 direct-to-MinIO + 5 Kafka-based)"
 echo -e "  • ${GREEN}Resilient Pipeline${NC} — Kafka buffer + MinIO retry + exponential backoff on all DAGs"
-echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
 echo -e "  • ${GREEN}Delay Collectors${NC} (bus, train, historical) → run: bash scripts/start_collectors.sh"

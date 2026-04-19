@@ -114,31 +114,46 @@ class BusPositionTransformer:
         lon = data.get("longitude", 0)
         now = datetime.now(IL_TZ)
 
+        # ── מהירות — אופציונלי ב-SIRI, יכול להיות None ─────────────────────
+        # הproducer שולח speed_kmh=None כשה-API לא מדווח מהירות.
+        # float(None) יזרוק TypeError — לכן מטפלים בנפרד.
+        raw_speed = data.get("speed_kmh") if data.get("speed_kmh") is not None \
+                    else data.get("velocity")
+        try:
+            speed_kmh = float(raw_speed) if raw_speed is not None else None
+        except (TypeError, ValueError):
+            speed_kmh = None
+
+        # is_moving מגיע מה-producer — אם קיים, משתמשים בו
+        # אחרת מחשבים מ-speed_kmh
+        is_moving = data.get("is_moving")
+        if is_moving is None:
+            is_moving = speed_kmh is not None and speed_kmh > 0
+
         return {
-            "vehicle_id":        self._clean_id(data.get("vehicle_id", "")),
-            "trip_id":           self._clean_id(data.get("trip_id", "")),
-            "route_id":          data.get("route_id", ""),
-            "route_short_name":  data.get("route_short_name") or extract_route_name(data.get("route_id", "")),
-            "operator_id":       data.get("operator_id", ""),
-            "operator_name":     data.get("operator_name", ""),
-            # NOTE: direction_id omitted — Hasadna SIRI API does not provide it;
-            # removing avoids a persistent null column in every processed record.
-            "latitude":          lat,
-            "longitude":         lon,
-            "is_valid_location": self._is_in_israel(lat, lon),
-            "bearing":           self._clamp(data.get("bearing"), 0, 360),      # FIX: validated
-            "speed_kmh":         max(0, float(data.get("speed_kmh") or data.get("velocity") or 0)),  # FIX: SIRI API uses "velocity" not "speed_kmh"
-            "speed_category":    self._speed_category(data.get("speed_kmh") or data.get("velocity")),
-            "is_moving":         (float(data.get("speed_kmh") or data.get("velocity") or 0) > 0),
-            "stop_id":           data.get("stop_id", ""),
-            "current_status":    data.get("current_status", "unknown"),
-            "timestamp":         data.get("timestamp") or data.get("recorded_at"),  # FIX: SIRI API uses "recorded_at" not "timestamp"
-            "hour_of_day":       now.hour,
-            "time_period":       classify_time_period(now.hour),
-            "day_of_week":       now.strftime("%A"),
-            "is_weekend":        now.weekday() in (4, 5),  # FIX: was >= 4 (wrongly included Sunday)
-            "processed_at":      now.isoformat(),
-        }
+                "vehicle_id":        self._clean_id(data.get("vehicle_id", "")),
+                "trip_id":           self._clean_id(data.get("trip_id", "")),
+                "route_id":          data.get("route_id", ""),
+                "route_short_name":  data.get("route_short_name") or extract_route_name(data.get("route_id", "")),
+                "operator_id":       data.get("operator_id", ""),
+                "operator_name":     data.get("operator_name", ""),
+                "latitude":          lat,
+                "longitude":         lon,
+                "is_valid_location": self._is_in_israel(lat, lon),
+                "bearing":           self._clamp(data.get("bearing"), 0, 360),
+                "speed_kmh":         speed_kmh,                     # None אם לא מדווח
+                "speed_category":    self._speed_category(speed_kmh),
+                "is_moving":         is_moving,
+                "stop_id":           data.get("stop_id", ""),
+                "current_status":    data.get("current_status", "unknown"),
+                "timestamp":         data.get("timestamp") or data.get("recorded_at"),
+                "hour_of_day":       now.hour,
+                "time_period":       classify_time_period(now.hour),
+                "day_of_week":       now.strftime("%A"),
+                "is_weekend":        now.weekday() in (4, 5),
+                "area":              data.get("area", ""),
+                "processed_at":      now.isoformat(),
+            }
 
     def _clean_id(self, val: str) -> str:
         return str(val).strip() if val else ""
@@ -205,35 +220,38 @@ class TrainPositionTransformer:
 
     def transform(self, data: dict) -> dict:
         delay_min = data.get("delay_minutes") or 0
-        # FIX: prefer raw seconds from source; fall back to deriving from minutes
         delay_sec = data.get("delay_seconds") or int(delay_min * 60)
         now       = datetime.now(IL_TZ)
 
-        # NOTE: station fields (origin_station_id, dest_station_id, platform,
-        # scheduled/actual departure/arrival) are NOT included because the Hasadna
-        # SIRI API does not provide this information. Fields were removed to avoid
-        # persistent null columns in MinIO and Redshift.
+        # velocity — אופציונלי, Israel Railways לא תמיד מדווחת
+        raw_vel = data.get("velocity")
+        try:
+            velocity = float(raw_vel) if raw_vel is not None else None
+        except (TypeError, ValueError):
+            velocity = None
+
+        is_moving = data.get("is_moving")
+        if is_moving is None:
+            is_moving = velocity is not None and velocity > 0
+
         return {
             "train_number":     data.get("train_number", ""),
             "line_ref":         data.get("line_ref", ""),
             "operator":         "israel_railways",
             "operator_ref":     data.get("operator_ref", "2"),
-            # Position — from Hasadna SIRI API
             "lat":              data.get("lat"),
             "lon":              data.get("lon"),
             "bearing":          data.get("bearing"),
-            "velocity":         data.get("velocity"),
-            "is_moving":        (float(data.get("velocity") or 0) > 0),
-            # Schedule
+            "velocity":         velocity,        # None אם לא מדווח
+            "is_moving":        is_moving,
             "scheduled_start":  data.get("scheduled_start", ""),
             "recorded_at":      data.get("recorded_at", ""),
-            # Delay
             "delay_minutes":    round(delay_min, 1),
             "delay_seconds":    delay_sec,
             "delay_category":   self._delay_category(delay_min),
             "is_delayed":       data.get("is_delayed", False),
             "is_cancelled":     data.get("is_cancelled", False),
-            # Time dimensions
+            "area":             data.get("area", ""),
             "hour_of_day":      now.hour,
             "time_period":      classify_time_period(now.hour),
             "day_of_week":      now.strftime("%A"),

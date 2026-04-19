@@ -79,37 +79,33 @@ class TrainPositionsProducer(BaseProducer):
             return []
 
         records      = []
-        skipped_parked  = 0
         skipped_outside = 0
+        skipped_nopos   = 0
 
         for v in vehicles:
             lat = v.get("lat")
             lon = v.get("lon")
-            vel = v.get("velocity")
 
             # רק עם מיקום תקין
             if not lat or not lon:
-                skipped_parked += 1
+                skipped_nopos += 1
                 continue
 
-            # סינון גיאוגרפי — מרכז ישראל
+            # סינון גיאוגרפי — גוש דן ותל אביב
             if not self._in_center(float(lat), float(lon)):
                 skipped_outside += 1
                 continue
 
-            # רק רכבות נוסעות
-            if vel is None or float(vel) <= 0:
-                skipped_parked += 1
-                continue
-
+            # velocity — לא מסננים! Israel Railways לא תמיד מדווחת
             rec = self._normalize(v)
             if rec:
                 records.append(rec)
 
+        moving = sum(1 for r in records if r.get("is_moving"))
         self.logger.info(
-            f"Fetched {len(records)} moving trains in center Israel | "
-            f"skipped: {skipped_parked} parked/no-pos, "
-            f"{skipped_outside} outside center"
+            f"Fetched {len(records)} trains in Gush Dan "
+            f"({moving} moving, {len(records)-moving} no-speed-data) | "
+            f"skipped: {skipped_outside} outside bbox, {skipped_nopos} no-position"
         )
         return records
 
@@ -121,8 +117,19 @@ class TrainPositionsProducer(BaseProducer):
         )
 
     def _normalize(self, v: dict) -> dict:
-        """Normalize Hasadna SIRI train record."""
+        """Normalize Hasadna SIRI train record.
+        velocity אופציונלי — Israel Railways לא תמיד מדווחת מהירות.
+        """
         try:
+            # velocity — אופציונלי, לא מסננים לפיו
+            velocity = v.get("velocity")
+            try:
+                speed = float(velocity) if velocity is not None else None
+            except (TypeError, ValueError):
+                speed = None
+
+            is_moving = speed is not None and speed > 0
+
             # ── Train number: fallback chain ──────────────────────────────────
             train_number = (
                 str(v.get("siri_ride__vehicle_ref") or "").strip() or
@@ -136,7 +143,6 @@ class TrainPositionsProducer(BaseProducer):
                 str(v.get("line_ref") or "").strip()
             )
 
-            # ── Scheduled start ───────────────────────────────────────────────
             scheduled_start = (
                 v.get("siri_ride__scheduled_start_time") or
                 v.get("scheduled_start_time") or ""
@@ -150,12 +156,13 @@ class TrainPositionsProducer(BaseProducer):
                 "lat":             round(float(v.get("lat")), 6),
                 "lon":             round(float(v.get("lon")), 6),
                 "bearing":         v.get("bearing"),
-                "velocity":        float(v.get("velocity") or 0),
+                "velocity":        speed,           # None אם לא מדווח
+                "is_moving":       is_moving,        # True רק אם velocity > 0
                 "scheduled_start": scheduled_start,
                 "recorded_at":     v.get("recorded_at_time", ""),
                 "is_delayed":      False,
                 "delay_minutes":   0,
-                "area":            "center",
+                "area":            "gush_dan",
                 "timestamp":       datetime.now(IL_TZ).isoformat(),
             }
         except Exception as e:

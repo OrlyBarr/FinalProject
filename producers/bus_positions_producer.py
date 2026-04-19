@@ -79,33 +79,29 @@ class BusPositionsProducer(BaseProducer):
             return []
 
         records = []
-        skipped_parked   = 0
-        skipped_outside  = 0
-        skipped_invalid  = 0
+        skipped_outside = 0
+        skipped_invalid = 0
 
         for item in items:
             record = self._normalize(item)
             if record is None:
-                # קבע סיבת דחייה ללוג
                 lat = item.get("lat")
                 lon = item.get("lon")
-                vel = item.get("velocity")
                 if not lat or not lon:
                     skipped_invalid += 1
                 elif not self._in_center(float(lat), float(lon)):
                     skipped_outside += 1
-                elif vel is None or float(vel) <= 0:
-                    skipped_parked += 1
                 else:
                     skipped_invalid += 1
             else:
                 records.append(record)
 
+        moving  = sum(1 for r in records if r.get("is_moving"))
+        parked  = len(records) - moving
         self.logger.info(
-            f"Fetched {len(records)} moving buses in center Israel | "
-            f"skipped: {skipped_parked} parked, "
-            f"{skipped_outside} outside center, "
-            f"{skipped_invalid} invalid"
+            f"Fetched {len(records)} buses in Gush Dan "
+            f"({moving} moving, {parked} parked/unknown-speed) | "
+            f"skipped: {skipped_outside} outside bbox, {skipped_invalid} invalid"
         )
         return records
 
@@ -138,10 +134,12 @@ class BusPositionsProducer(BaseProducer):
     def _normalize(self, item: dict):
         """
         Normalize Hasadna SIRI record.
-        מחזיר None אם:
-          - אין lat/lon
-          - לא באזור המרכז
-          - velocity <= 0 (חונה)
+        מחזיר None רק אם:
+          - אין lat/lon תקין
+          - לא בגוש דן/תל אביב
+
+        הערה: לא מסנן לפי velocity — SIRI לא תמיד מדווח מהירות
+        גם כלי רכב ללא velocity מקבלים is_moving=False ונשמרים.
         """
         try:
             lat = item.get("lat")
@@ -150,18 +148,21 @@ class BusPositionsProducer(BaseProducer):
             if not lat or not lon:
                 return None
 
-            # סינון גיאוגרפי — מרכז ישראל בלבד
+            # סינון גיאוגרפי — גוש דן ותל אביב בלבד
             if not self._in_center(float(lat), float(lon)):
                 return None
 
-            # רק כלי רכב נוסעים
+            # velocity — אופציונלי ב-SIRI, לא תמיד מדווח
             velocity = item.get("velocity")
-            if velocity is None or float(velocity) <= 0:
-                return None
+            try:
+                speed_kmh = float(velocity) if velocity is not None else None
+            except (TypeError, ValueError):
+                speed_kmh = None
+
+            # is_moving: True רק אם velocity ידוע וחיובי
+            is_moving = speed_kmh is not None and speed_kmh > 0
 
             # ── Operator: fallback chain ──────────────────────────────────────
-            # siri_route__operator_ref — שדה ראשי מה-Stride API
-            # operator_ref             — fallback ברמת ה-item
             operator_ref = (
                 str(item.get("siri_route__operator_ref") or "").strip() or
                 str(item.get("operator_ref") or "").strip()
@@ -195,13 +196,14 @@ class BusPositionsProducer(BaseProducer):
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
                 "bearing":          item.get("bearing"),
-                "speed_kmh":        float(velocity),   # velocity > 0 מובטח
+                "speed_kmh":        speed_kmh,          # None אם לא מדווח
+                "is_moving":        is_moving,           # True רק אם velocity > 0
                 "current_stop_seq": item.get("current_stop_sequence"),
                 "stop_id":          str(item.get("siri_ride_stop_id") or ""),
-                "current_status":   "in_transit",
+                "current_status":   "in_transit" if is_moving else "unknown",
                 "timestamp":        timestamp,
                 "congestion_level": 0,
-                "area":             "center",           # תיוג לסינון
+                "area":             "gush_dan",
             }
         except Exception as e:
             self.logger.warning(f"Failed to normalize record {item.get('id')}: {e}")
