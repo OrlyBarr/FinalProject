@@ -10,7 +10,21 @@ import io
 import pandas as pd
 from google.transit import gtfs_realtime_pb2
 from geopy.distance import geodesic
-from datetime import datetime
+from datetime import datetime, timezone
+
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent))
+try:
+    from config.setting import OPERATORS as _OPERATORS
+except Exception:
+    _OPERATORS = {}
+
+# Fallback operator name map (covers the most common Israeli transit operators)
+_OP_NAMES = {
+    "1": "Egged", "2": "Israel Railways", "3": "Dan", "4": "Kavim",
+    "5": "Metropoline", "6": "NTA (Metro)", "7": "Superbus", "8": "GB Tours",
+    "14": "Nateev Express", "15": "Bus.co.il", "18": "Afikim", "25": "Connex",
+    **_OPERATORS,
+}
 
 # Hasadna Open Bus SIRI API (primary — always available)
 HASADNA_SIRI_URL = "https://open-bus-stride-api.hasadna.org.il/siri_vehicle_locations/list"
@@ -36,7 +50,7 @@ def fetch_bus_positions():
         print("📡 Trying Hasadna Open Bus SIRI API...")
         resp = requests.get(
             HASADNA_SIRI_URL,
-            params={"limit": 200, "order_by": "recorded_at_time desc"},
+            params={"limit": 200, "order_by": "id desc"},
             timeout=15
         )
         resp.raise_for_status()
@@ -48,16 +62,32 @@ def fetch_bus_positions():
             lon = rec.get("lon")
             if lat is None or lon is None:
                 continue
+            # Skip sentinel timestamps (2037+)
+            ts = rec.get("recorded_at_time", "")
+            if ts and ts[:4] >= "2037":
+                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+            operator_id = str(rec.get("siri_route__operator_ref") or "").strip()
+            line_ref     = str(rec.get("siri_route__line_ref") or "").strip()
+            route_short  = (
+                str(rec.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                or line_ref
+            )
+
             rows.append({
-                "vehicle_id":  str(rec.get("id", "")),
-                "trip_id":     str(rec.get("siri_ride_stop_id", "")),
-                "route_id":    str(rec.get("siri_snapshot_id", "")),
-                "lat":         float(lat),
-                "lon":         float(lon),
-                "bearing":     rec.get("bearing"),
-                "velocity":    rec.get("velocity"),
-                "timestamp":   rec.get("recorded_at_time"),
-                "source":      "hasadna-siri",
+                "vehicle_id":       str(rec.get("siri_ride__vehicle_ref") or rec.get("id") or ""),
+                "trip_id":          str(rec.get("siri_ride__id") or ""),
+                "route_id":         line_ref,
+                "line_ref":         line_ref,
+                "route_short_name": route_short,
+                "operator_id":      operator_id,
+                "operator_name":    _OP_NAMES.get(operator_id, operator_id or "Unknown"),
+                "lat":              float(lat),
+                "lon":              float(lon),
+                "bearing":          rec.get("bearing"),
+                "velocity":         rec.get("velocity"),
+                "timestamp":        ts,
+                "source":           "hasadna-siri",
             })
 
         if rows:
@@ -200,24 +230,40 @@ def find_nearest_stop(bus_row, stops_df):
 
 
 def create_sample_bus_data():
-    """Creates sample vehicle position data for demonstration"""
-    from datetime import datetime, timedelta
+    """Creates sample vehicle position data for demonstration — mirrors real schema."""
     import random
-    
-    # Sample data for Tel Aviv area
+
+    # Real Israeli operator codes + sample route numbers
+    sample_operators = [
+        ("3",  "Dan",          ["5", "51", "89", "240"]),
+        ("1",  "Egged",        ["480", "900", "16", "37"]),
+        ("5",  "Metropoline",  ["63", "67", "189", "545"]),
+        ("4",  "Kavim",        ["10", "20", "30", "40"]),
+        ("18", "Afikim",       ["350", "400", "420", "430"]),
+    ]
+    # Sample stops around Tel Aviv / Gush Dan
     base_lat, base_lon = 32.0853, 34.7818
-    
+
     rows = []
     for i in range(20):
+        op_id, op_name, routes = random.choice(sample_operators)
+        route = random.choice(routes)
         rows.append({
-            "vehicle_id": f"BUS_{1000 + i}",
-            "trip_id": f"TRIP_{5000 + i}",
-            "route_id": f"ROUTE_{random.randint(1, 50)}",
-            "lat": base_lat + random.uniform(-0.1, 0.1),
-            "lon": base_lon + random.uniform(-0.1, 0.1),
-            "timestamp": (datetime.now() - timedelta(minutes=random.randint(0, 30))).isoformat()
+            "vehicle_id":       f"VEH_{7000000 + i}",
+            "trip_id":          f"{8000000 + i}",
+            "route_id":         route,
+            "line_ref":         route,
+            "route_short_name": route,
+            "operator_id":      op_id,
+            "operator_name":    op_name,
+            "lat":              base_lat + random.uniform(-0.1, 0.1),
+            "lon":              base_lon + random.uniform(-0.1, 0.1),
+            "bearing":          random.randint(0, 359),
+            "velocity":         random.uniform(5, 60),
+            "timestamp":        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+            "source":           "sample-fallback",
         })
-    
+
     return pd.DataFrame(rows)
 
 

@@ -18,8 +18,14 @@ KAFKA_TOPIC_TRAIN_HISTORICAL = "train-delays-historical"
 STRIDE_API_BASE = "https://open-bus-stride-api.hasadna.org.il"
 # Seconds to wait between polling cycles
 BUS_POLL_INTERVAL_SECONDS = 30
-# Records to fetch per request
-BUS_FETCH_LIMIT = 100
+# Records to fetch per request — מוקטן ל-50 (גוש דן בלבד)
+BUS_FETCH_LIMIT = 50
+
+# Gush Dan bounding box — סינון גיאוגרפי בכל ה-collectors
+GUSH_DAN_BBOX = {
+    "lat_min": 31.97, "lat_max": 32.19,
+    "lon_min": 34.73, "lon_max": 34.93,
+}
 
 # ─── Israel Railways API (Trains) ──────────────────────────────────────────────
 RAIL_API_BASE = "https://www.rail.co.il/apiinfo/api"

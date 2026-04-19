@@ -26,22 +26,11 @@ from config.settings import HERE_API_KEY, KAFKA_TOPICS
 from producers.base_producer import BaseProducer
 
 
-# Israel bounding box split into tiles — Israeli territory only (excludes Jordan, Lebanon, Syria)
-# Eastern border: 35.55 (west of Sea of Galilee) — excludes Jordan
-# Northern border: 33.3 — excludes Lebanon/Syria
+# גוש דן ותל אביב בלבד — שני tiles ממוקדים
+# (name,          lat_min, lat_max, lon_min, lon_max)
 ISRAEL_TILES = [
-    # (name,          lat_min, lat_max, lon_min, lon_max)
-    ("galil_west",    32.7,    33.3,    34.9,    35.3),   # Western Galilee
-    ("galil_east",    32.7,    33.3,    35.3,    35.55),  # Eastern Galilee + Sea of Galilee
-    ("haifa",         32.5,    32.9,    34.9,    35.15),  # Haifa and Krayot
-    ("shomron",       32.1,    32.5,    34.9,    35.35),  # Samaria + Jezreel Valley
-    ("tel_aviv",      31.9,    32.2,    34.7,    34.95),  # Greater Tel Aviv (Gush Dan)
-    ("center",        31.7,    32.1,    34.8,    35.1),   # Central Israel
-    ("jerusalem",     31.6,    31.95,   34.9,    35.35),  # Jerusalem
-    ("south_west",    30.8,    31.6,    34.4,    34.9),   # Shephelah + Northern Negev
-    ("beer_sheva",    30.5,    31.0,    34.5,    35.1),   # Beer Sheva
-    ("negev",         29.5,    30.5,    34.6,    35.2),   # Southern Negev
-    ("eilat",         29.4,    29.8,    34.9,    35.05),  # Eilat
+    ("tel_aviv",  31.97,   32.19,   34.73,   34.93),  # תל אביב + גוש דן
+    ("center",    31.80,   32.00,   34.75,   34.95),  # מרכז — רמת גן, גבעתיים, חולון, בת ים
 ]
 
 # HERE congestion level mapping

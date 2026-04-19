@@ -61,13 +61,24 @@ def fetch_siri_vehicle_locations(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
     params = {
         "limit": limit,
         "get_count": "false",
-        # filter only vehicles that reported in the last minute
-        "order_by": "-recorded_at_time",
+        "order_by": "id desc",   # מהיר יותר מ-recorded_at_time
     }
     try:
-        resp = requests.get(url, params=params, timeout=15)
+        resp = requests.get(url, params=params, timeout=8)  # fail fast
         resp.raise_for_status()
-        return resp.json()
+        items = resp.json()
+        # סינון לגוש דן ותל אביב בלבד
+        filtered = [
+            v for v in items
+            if v.get("lat") and v.get("lon")
+            and 31.97 <= float(v["lat"]) <= 32.19
+            and 34.73 <= float(v["lon"]) <= 34.93
+        ]
+        log.info(f"Vehicle monitoring: {len(filtered)}/{len(items)} in Gush Dan")
+        return filtered
+    except requests.Timeout:
+        log.warning("Stride API timed out (>8s) — skipping vehicle monitoring cycle")
+        return []
     except requests.RequestException as e:
         log.error(f"Stride API error (vehicle monitoring): {e}")
         return []
@@ -90,9 +101,12 @@ def fetch_ride_stops_with_delay(limit: int = BUS_FETCH_LIMIT) -> list[dict]:
         "order_by": "-actual_arrival_time",
     }
     try:
-        resp = requests.get(url, params=params, timeout=15)
+        resp = requests.get(url, params=params, timeout=8)  # fail fast
         resp.raise_for_status()
         return resp.json()
+    except requests.Timeout:
+        log.warning("Stride API timed out (>8s) — skipping ride stops cycle")
+        return []
     except requests.RequestException as e:
         log.error(f"Stride API error (ride stops): {e}")
         return []
