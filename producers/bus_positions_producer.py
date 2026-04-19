@@ -22,7 +22,7 @@ from config.settings import OPEN_BUS_API_URL, KAFKA_TOPICS, OPERATORS
 from producers.base_producer import BaseProducer
 
 # Hasadna SIRI endpoint for live vehicle locations
-SIRI_URL = f"{OPEN_BUS_API_URL}/siri_vehicle_locations/list"
+SIRI_URL = f"{OPEN_BUS_API_URL.rstrip('/')}/siri_vehicle_locations/list"
 
 
 class BusPositionsProducer(BaseProducer):
@@ -45,10 +45,10 @@ class BusPositionsProducer(BaseProducer):
             "order_by": "id desc",   # id desc מהיר יותר מ-recorded_at_time desc
         }
         try:
-            response = requests.get(self.url, params=params, timeout=8)  # fail fast
+            response = requests.get(self.url, params=params, timeout=15)  # allow slow responses
             response.raise_for_status()
         except requests.Timeout:
-            self.logger.warning("Hasadna SIRI API timed out (>8s) — skipping this cycle")
+            self.logger.warning("Hasadna SIRI API timed out (>15s) — skipping this cycle")
             return []
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch from Hasadna SIRI: {e}")
