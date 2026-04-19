@@ -35,7 +35,13 @@ BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 RAIL_BOARD_URL = ""
 HASADNA_URL    = "https://open-bus-stride-api.hasadna.org.il"
 NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
+GOOGLE_PLACES_URL = "https://maps.googleapis.com/maps/api/place"
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+
+# טעינת Google Maps API Key מ-.env
+from dotenv import load_dotenv
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # ── גוש דן ותל אביב — Bounding Box ──────────────────────────────────────────
 GUSH_DAN = {
@@ -438,21 +444,104 @@ class BotHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": f"geocoding error: {e}"}, status=500)
 
-        # ── streets → רשימת רחובות סטטית לכל עיר ────────────────────────────
+        # ── streets → רשימת רחובות מ-Google Places ──────────────────────────
         # GET /streets?city=תל+אביב
+        # משתמש ב-Google Places Autocomplete לקבלת רחובות אמיתיים
         elif path == "/streets":
             city = urllib.parse.unquote_plus((qs.get("city") or [""])[0]).strip()
             if not city:
                 self.send_json({"error": "?city= required"}, status=400)
                 return
-            streets = CITY_STREETS.get(city, [])
-            if not streets:
-                # fallback: חפש עיר דומה
+
+            # אם אין Google API Key — fallback לנתונים סטטיים
+            if not GOOGLE_MAPS_API_KEY:
+                streets = CITY_STREETS.get(city, [])
                 for k in CITY_STREETS:
                     if city in k or k in city:
                         streets = CITY_STREETS[k]
                         break
-            self.send_json({"city": city, "streets": sorted(streets)})
+                self.send_json({"city": city, "streets": sorted(streets), "source": "static"})
+                return
+
+            try:
+                # שלב 1: מצא את place_id של העיר
+                geocode_url = "https://maps.googleapis.com/maps/api/geocode/json?" + urllib.parse.urlencode({
+                    "address": city + ", ישראל",
+                    "key":     GOOGLE_MAPS_API_KEY,
+                    "language":"he",
+                    "region":  "il",
+                })
+                req = urllib.request.Request(geocode_url,
+                    headers={"User-Agent": "IsraelTransitBot/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    geo_data = json.loads(resp.read())
+
+                if geo_data.get("status") != "OK":
+                    raise Exception(f"Geocode failed: {geo_data.get('status')}")
+
+                loc    = geo_data["results"][0]["geometry"]["location"]
+                city_lat = loc["lat"]
+                city_lon = loc["lng"]
+
+                # שלב 2: חפש רחובות עם Places API (Nearby Search + Text Search)
+                # שימוש ב-Text Search עם שאילתות רחוב
+                streets = set()
+
+                # חיפוש רחובות נפוצים בעיר
+                for prefix in ["רחוב", "שדרות", "דרך"]:
+                    places_url = f"{GOOGLE_PLACES_URL}/textsearch/json?" + urllib.parse.urlencode({
+                        "query":    f"{prefix} {city}",
+                        "key":      GOOGLE_MAPS_API_KEY,
+                        "language": "he",
+                        "region":   "il",
+                        "location": f"{city_lat},{city_lon}",
+                        "radius":   "3000",
+                        "type":     "route",
+                    })
+                    req2 = urllib.request.Request(places_url,
+                        headers={"User-Agent": "IsraelTransitBot/1.0"})
+                    with urllib.request.urlopen(req2, timeout=10) as resp2:
+                        places_data = json.loads(resp2.read())
+
+                    for place in places_data.get("results", []):
+                        name = place.get("name", "")
+                        # נקה את שם הרחוב
+                        for strip in ["רחוב ", "שדרות ", "דרך ", "שד' "]:
+                            if name.startswith(strip):
+                                name = name[len(strip):]
+                        if name and len(name) > 1:
+                            streets.add(name.strip())
+
+                # שלב 3: אם קיבלנו מעט תוצאות — השלם מהנתונים הסטטיים
+                static = CITY_STREETS.get(city, [])
+                for k in CITY_STREETS:
+                    if city in k or k in city:
+                        static = CITY_STREETS[k]
+                        break
+                streets.update(static)
+
+                result = sorted(streets)
+                self.send_json({
+                    "city":    city,
+                    "streets": result,
+                    "count":   len(result),
+                    "source":  "google_places",
+                })
+
+            except Exception as e:
+                # fallback לנתונים סטטיים אם Google נכשל
+                log.warning(f"Google Places failed: {e} — using static data")
+                streets = CITY_STREETS.get(city, [])
+                for k in CITY_STREETS:
+                    if city in k or k in city:
+                        streets = CITY_STREETS[k]
+                        break
+                self.send_json({
+                    "city":    city,
+                    "streets": sorted(streets),
+                    "source":  "static_fallback",
+                    "error":   str(e),
+                })
 
         # ── Stride proxy — מסנן לגוש דן ותל אביב ────────────────────────────
         elif path.startswith("/proxy/stride"):
