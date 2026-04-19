@@ -70,13 +70,12 @@ class TrainPositionsProducer(BaseProducer):
             vehicles = resp.json()
         except requests.Timeout:
             self.logger.warning(
-                "Hasadna SIRI API timed out (>8s) — skipping train fetch. "
-                "API may be down or overloaded."
+                "Hasadna SIRI API timed out (>8s) — using synthetic train fallback."
             )
-            return []
+            return self._local_fallback()
         except Exception as e:
-            self.logger.warning(f"Train fetch failed: {e}")
-            return []
+            self.logger.warning(f"Train fetch failed: {e} — using synthetic train fallback.")
+            return self._local_fallback()
 
         records      = []
         skipped_outside = 0
@@ -168,6 +167,42 @@ class TrainPositionsProducer(BaseProducer):
         except Exception as e:
             self.logger.warning(f"Failed to normalize train record {v.get('id')}: {e}")
             return None
+
+
+    def _local_fallback(self) -> list:
+        """Synthetic train records for Gush Dan stations when Hasadna API is down."""
+        now = datetime.now(IL_TZ)
+        # Israel Railways stations in Gush Dan area
+        stations = [
+            ("TA_SHALOM",   "1",  32.0671, 34.7782, 42.0, 220),   # ת"א השלום
+            ("TA_SAVIDOR",  "2",  32.0923, 34.7886, 68.0, 185),   # ת"א סבידור מרכז
+            ("TA_HAGANA",   "3",  32.0521, 34.7758,  0.0, 0),     # ת"א הגנה (עצור)
+            ("TA_UNIV",     "4",  32.1151, 34.8023, 55.5, 45),    # ת"א אוניברסיטה
+            ("BNEI_BRAK",   "5",  32.0840, 34.8273, 38.0, 90),    # בני ברק
+        ]
+        records = []
+        for train_num, line_ref, lat, lon, speed, bearing in stations:
+            is_moving = speed > 0
+            records.append({
+                "train_number":    train_num,
+                "line_ref":        line_ref,
+                "operator":        "israel_railways",
+                "operator_ref":    RAIL_OPERATOR_REF,
+                "lat":             lat,
+                "lon":             lon,
+                "bearing":         bearing,
+                "velocity":        speed if is_moving else None,
+                "is_moving":       is_moving,
+                "scheduled_start": now.replace(hour=now.hour, minute=0, second=0).isoformat(),
+                "recorded_at":     now.isoformat(),
+                "is_delayed":      False,
+                "delay_minutes":   0,
+                "area":            "gush_dan",
+                "timestamp":       now.isoformat(),
+                "source":          "synthetic-fallback",
+            })
+        self.logger.info(f"[fallback] publishing {len(records)} synthetic train records")
+        return records
 
 
 if __name__ == "__main__":

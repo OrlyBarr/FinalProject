@@ -64,13 +64,12 @@ class BusPositionsProducer(BaseProducer):
             response.raise_for_status()
         except requests.Timeout:
             self.logger.warning(
-                "Hasadna SIRI API timed out (>8s) — skipping this cycle. "
-                "API may be down or overloaded."
+                "Hasadna SIRI API timed out (>8s) — using local cache fallback."
             )
-            return []
+            return self._local_fallback()
         except requests.RequestException as e:
-            self.logger.error(f"Failed to fetch from Hasadna SIRI: {e}")
-            return []
+            self.logger.error(f"Failed to fetch from Hasadna SIRI: {e} — using local cache fallback.")
+            return self._local_fallback()
 
         try:
             items = response.json()
@@ -208,6 +207,67 @@ class BusPositionsProducer(BaseProducer):
         except Exception as e:
             self.logger.warning(f"Failed to normalize record {item.get('id')}: {e}")
             return None
+
+
+    def _local_fallback(self) -> list:
+        """Load buses_with_nearest_stops.json and return normalized records."""
+        import os, json as _json
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        now_ts = datetime.now(IL_TZ).isoformat()
+        for fname in ("buses_with_nearest_stops.json", "bus_positions.json"):
+            path = os.path.join(base, fname)
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+                if not data:
+                    continue
+                records = []
+                for b in data:
+                    lat = b.get("lat") or b.get("latitude")
+                    lon = b.get("lon") or b.get("longitude")
+                    if not lat or not lon:
+                        continue
+                    if not self._in_center(float(lat), float(lon)):
+                        continue
+                    vel = b.get("velocity") or b.get("speed_kmh")
+                    try:
+                        speed_kmh = float(vel) if vel is not None else None
+                    except (TypeError, ValueError):
+                        speed_kmh = None
+                    op_id = str(b.get("operator_id") or "")
+                    line_ref = str(b.get("line_ref") or b.get("route_id") or "")
+                    records.append({
+                        "vehicle_id":       str(b.get("vehicle_id") or ""),
+                        "entity_id":        str(b.get("trip_id") or ""),
+                        "trip_id":          str(b.get("trip_id") or ""),
+                        "route_id":         line_ref,
+                        "line_ref":         line_ref,
+                        "route_short_name": str(b.get("route_short_name") or line_ref),
+                        "operator_id":      op_id,
+                        "operator_name":    b.get("operator_name") or OPERATORS.get(op_id, "Unknown"),
+                        "start_date":       now_ts[:10],
+                        "latitude":         round(float(lat), 6),
+                        "longitude":        round(float(lon), 6),
+                        "bearing":          b.get("bearing"),
+                        "speed_kmh":        speed_kmh,
+                        "is_moving":        speed_kmh is not None and speed_kmh > 0,
+                        "current_stop_seq": None,
+                        "stop_id":          str(b.get("nearest_stop_id") or ""),
+                        "current_status":   "in_transit" if (speed_kmh or 0) > 0 else "unknown",
+                        "timestamp":        b.get("timestamp") or now_ts,
+                        "congestion_level": 0,
+                        "area":             "gush_dan",
+                        "source":           "local-cache-fallback",
+                    })
+                if records:
+                    self.logger.info(f"[fallback] publishing {len(records)} cached records from {fname}")
+                    return records
+            except Exception as e:
+                self.logger.error(f"[fallback] failed to load {fname}: {e}")
+        self.logger.warning("[fallback] no local cache found — returning empty")
+        return []
 
 
 if __name__ == "__main__":
