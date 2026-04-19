@@ -38,18 +38,24 @@ class BusPositionsProducer(BaseProducer):
         """
         Fetch live bus positions from Open Bus Stride SIRI API.
         Returns list of normalized vehicle position dicts.
+        Uses short timeout (8s) to fail fast when API is down.
         """
         params = {
             "limit":    500,
-            "order_by": "recorded_at_time desc",
+            "order_by": "id desc",   # id desc מהיר יותר מ-recorded_at_time desc
         }
         try:
-            response = requests.get(self.url, params=params, timeout=20)
+            response = requests.get(self.url, params=params, timeout=8)  # fail fast
             response.raise_for_status()
-            items = response.json()
+        except requests.Timeout:
+            self.logger.warning("Hasadna SIRI API timed out (>8s) — skipping this cycle")
+            return []
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch from Hasadna SIRI: {e}")
             return []
+
+        try:
+            items = response.json()
         except ValueError as e:
             self.logger.error(f"Invalid JSON from Hasadna SIRI: {e}")
             return []
@@ -93,6 +99,13 @@ class BusPositionsProducer(BaseProducer):
     def _normalize(self, item: dict) -> dict:
         """Normalize Hasadna SIRI vehicle location to flat dict.
         Only returns records for actively moving vehicles (velocity > 0).
+
+        Stride API field reference (confirmed from live data):
+          siri_route__operator_ref                    — operator numeric ID (e.g. "6" for NTA)
+          siri_route__line_ref                        — line reference string
+          siri_route__gtfs_route__route_short_name    — human-readable line number (e.g. "63")
+          siri_ride__vehicle_ref                      — vehicle ID
+          siri_ride__id                               — ride/trip ID
         """
         try:
             lat = item.get("lat")
@@ -108,29 +121,44 @@ class BusPositionsProducer(BaseProducer):
             if velocity is None or float(velocity) <= 0:
                 return None
 
-            # FIX: API returns singular siri_route__ / siri_ride__ (not plural)
-            operator_ref = str(item.get("siri_route__operator_ref") or "")
-            line_ref     = str(item.get("siri_route__line_ref") or "")
-            timestamp    = self._parse_timestamp(item.get("recorded_at_time", ""))
+            # ── Operator: try siri_route__ first, then top-level fallback ────
+            operator_ref = (
+                str(item.get("siri_route__operator_ref") or "").strip() or
+                str(item.get("operator_ref") or "").strip()
+            )
+
+            # ── Line ref: try siri_route__ first, then top-level fallback ───
+            line_ref = (
+                str(item.get("siri_route__line_ref") or "").strip() or
+                str(item.get("line_ref") or "").strip()
+            )
+
+            # ── Human-readable route number (e.g. "63", "480") ───────────────
+            route_short_name = (
+                str(item.get("siri_route__gtfs_route__route_short_name") or "").strip() or
+                str(item.get("route_short_name") or "").strip() or
+                line_ref  # fallback to line_ref if no short name
+            )
+
+            timestamp = self._parse_timestamp(item.get("recorded_at_time", ""))
 
             return {
-                # FIX: API uses siri_ride__vehicle_ref, not vehicle_ref
                 "vehicle_id":       str(item.get("siri_ride__vehicle_ref") or item.get("id") or ""),
                 "entity_id":        str(item.get("id") or ""),
-                "trip_id":          str(item.get("siri_ride__id") or ""),  # FIX: singular
+                "trip_id":          str(item.get("siri_ride__id") or ""),
                 "route_id":         line_ref,
-                "line_ref":         line_ref,   # FIX: שמור גם כ-line_ref לחיפוש ב-Kibana
+                "line_ref":         line_ref,
+                "route_short_name": route_short_name,      # מספר קו קריא, למשל "63"
                 "operator_id":      operator_ref,
-                # FIX: f"unknown_operator_{operator_ref}" → "Unknown" למניעת "operator_" ב-ES
                 "operator_name":    OPERATORS.get(operator_ref, "Unknown") if operator_ref else "Unknown",
                 "start_date":       timestamp[:10],
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
                 "bearing":          item.get("bearing"),
-                "speed_kmh":        item.get("velocity"),          # FIX: was None; API provides "velocity" (km/h)
+                "speed_kmh":        float(item.get("velocity") or 0),  # velocity > 0 מובטח
                 "current_stop_seq": item.get("current_stop_sequence"),
-                "stop_id":          str(item.get("siri_ride_stop_id") or ""),  # FIX: was siri_stop_id (nonexistent); correct field is siri_ride_stop_id
-                "current_status":   "in_transit",
+                "stop_id":          str(item.get("siri_ride_stop_id") or ""),
+                "current_status":   "in_transit",          # velocity > 0 מובטח כאן
                 "timestamp":        timestamp,
                 "congestion_level": 0,
             }
