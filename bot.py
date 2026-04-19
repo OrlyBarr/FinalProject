@@ -43,6 +43,97 @@ GUSH_DAN = {
     "lon_min": 34.73, "lon_max": 34.93,
 }
 
+# ── רחובות לכל עיר בגוש דן ───────────────────────────────────────────────────
+CITY_STREETS = {
+    "תל אביב-יפו": sorted([
+        "אבן גבירול","אלנבי","בוגרשוב","בן יהודה","בן גוריון","גורדון",
+        "דיזנגוף","דרך יפו","הארבעה","הברזל","הגליל","הירקון","הנביאים",
+        "הרצל","השייטת","ויצמן","זמנהוף","חיים לבנון","יהודה הלוי",
+        "יהושע בן נון","יצחק שדה","כנפי נשרים","לה גווארדיה","לילנבלום",
+        'מזא"ה',"מנחם בגין","נחלת בנימין","נחמני","נורדאו","סוקולוב",
+        "פינסקר","פלורנטין","פרישמן","קינג ג'ורג'","רוטשילד","שד' שאול המלך",
+        "שד' ירושלים","שדרות חן","שלמה המלך","שלמה לבין","שינקין","תובל",
+        "ארלוזורוב","אחד העם","ביאליק","חסן בק","יפת","שד' רוקח",
+        "מסגר","הצורן","האורגים","הרקמה","הנחושת","החרושת","דרך בגין",
+        "קיבוץ גלויות","שד' לוי אשכול","חובבי ציון","שד' נורדאו",
+    ]),
+    "רמת גן": sorted([
+        "אבא הלל","ביאליק","בן גוריון","ברודצקי","ז'בוטינסקי","חזון איש",
+        "יהודה הנשיא","יוספטל","כצנלסון","מאפו","מוצקין","עמל",
+        "פועה","ריינס","שד' ירושלים","שד' מנחם בגין","תל חי",
+        "הרב קוק","הצנחנים","אלוף שדה","בעל שם טוב","גנסין",
+        "אוסישקין","ארלוזורוב","בלפור","קרליבך","קפלן",
+    ]),
+    "גבעתיים": sorted([
+        "ארלוזורוב","בורוכוב","גרוזנברג","הנשיא","וייצמן","יהלום",
+        "כצנלסון","קוגל","שד' העצמאות","שד' הציונות","שינקין",
+        'תרצ"ה',"הרב מימון","אחד העם","גאולה","חיבת ציון",
+        "קוסובסקי","פלוגת הבלתי מחדיל","בן גוריון",
+    ]),
+    "בני ברק": sorted([
+        "אחיעזר","הרב אלפנדרי","הרב דסלר","הרב הרצוג","הרב שך",
+        "ז'בוטינסקי","חזון איש","יצחק קפלן","כהנמן","מוהליבר",
+        "מנחם בגין","עמיאל","פועלי צדק","רבי עקיבא","שמחה",
+        "תחכמוני","בר אילן","בית יעקב","ישיבת פוניבז'","נחל קדרון",
+    ]),
+    "פתח תקווה": sorted([
+        "אחד העם","ארלוזורוב","בילינסון","גנות","הגדוד העברי","הרצל",
+        "ויצמן","חיים עוזר","יוספטל","יחזקאל","כצנלסון","מוהליבר",
+        "מנחם בגין","נורדאו","עגנון","פינס","קפלן",
+        "שד' העצמאות","שיפר","שמחה","תמר","אוסישקין","בלפור",
+        "סירקין","אחוזה","הגפן","המייסדים",
+    ]),
+    "חולון": sorted([
+        "אבן גבירול","בן גוריון","גולדה מאיר","הלח\"י","הנשיא","ויצמן",
+        "יוספטל","ינאי","כצנלסון","מנחם בגין","סוקולוב",
+        "עציון","פלמ\"ח","קוגן","רבין","שד' חולון","שוהם","תל גיבורים",
+        "אלתרמן","בלפור","גורדון","דרך בן צבי","פיקר","ז'בוטינסקי",
+    ]),
+    "בת ים": sorted([
+        "אחד העם","בלפור","בן גוריון","גורדון","הגבורה","הנשיא",
+        "ויצמן","חורגין","יוספטל","לסקוב","מנחם בגין","סוקולוב",
+        "עציון","פלמ\"ח","רוטשילד","שד' ירושלים","שינקין","תמר",
+        "הרצל","ביאליק","בן יהודה","דרך יפו","קפלן","בלפור",
+    ]),
+    "הרצליה": sorted([
+        "אבן גבירול","בן גוריון","גיבורי ישראל","דרך הים","הגלים","הנשיא",
+        "ויצמן","יהלום","כוכב הצפון","מנחם בגין","נורדאו","סוקולוב",
+        "עגנון","פלמ\"ח","קפלן","שד' ירושלים","שד' בן ציון","תמר",
+        "אחד העם","בלפור","רוטשילד","הרב קוק","שד' ההסתדרות",
+    ]),
+    "רמת השרון": sorted([
+        "אבא הלל","ביאליק","בן גוריון","גיבורי ישראל","הגלים","הנשיא",
+        "כצנלסון","מנחם בגין","סוקולוב","עגנון","קפלן",
+        "שד' ירושלים","תמר","אחד העם","בלפור","רוטשילד",
+        "הרב קוק","בעל שם טוב","שד' ויצמן",
+    ]),
+    "גבעת שמואל": sorted([
+        "בן גוריון","גיבורי ישראל","הגבורה","הנשיא","ויצמן","כצנלסון",
+        "מנחם בגין","סוקולוב","עגנון","קפלן","שד' ירושלים","תמר",
+        "אחד העם","בלפור","רוטשילד","הרב קוק","שינקין",
+    ]),
+    "קריית אונו": sorted([
+        "אבא הלל","ביאליק","בן גוריון","גיבורי ישראל","הגבורה","הנשיא",
+        "ויצמן","כצנלסון","מנחם בגין","סוקולוב","עגנון","קפלן",
+        "שד' ירושלים","תמר","אחד העם","בלפור","רוטשילד","דרך השלום",
+    ]),
+    "אור יהודה": sorted([
+        "בן גוריון","גיבורי ישראל","הגבורה","הנשיא","ויצמן","כצנלסון",
+        "מנחם בגין","סוקולוב","עגנון","קפלן","שד' ירושלים","תמר",
+        "אחד העם","בלפור","רוטשילד","הרב קוק","דרך השלום","הציונות",
+    ]),
+    "אזור": sorted([
+        "בן גוריון","הגבורה","הנשיא","ויצמן","כצנלסון","מנחם בגין",
+        "סוקולוב","עגנון","קפלן","שד' ירושלים","תמר","אחד העם",
+        "בלפור","רוטשילד","דרך השלום","הציונות","הרצל",
+    ]),
+    "גבעת עדה": sorted([
+        "בן גוריון","הגבורה","הנשיא","ויצמן","כצנלסון","מנחם בגין",
+        "סוקולוב","עגנון","קפלן","שד' ירושלים","תמר","אחד העם",
+        "בלפור","רוטשילד","דרך השלום","הרצל",
+    ]),
+}
+
 def _in_gush_dan(lat, lon) -> bool:
     """בדיקה אם נקודה נמצאת בגוש דן / תל אביב."""
     try:
@@ -115,104 +206,40 @@ class BotHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_json({"error": f"HTML file not found: {filepath}"}, status=404)
 
-    def _fetch_url(self, target_url, timeout=8):
-        """Fetch URL, return (status_int, bytes_body). Raises on error."""
-        req = urllib.request.Request(
-            target_url,
-            headers={"Accept": "application/json", "User-Agent": "IsraelTransitBot/1.0"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, resp.read()
-
-    def _send_raw(self, status, body):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", len(body))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
-
     def _proxy(self, target_url):
-        """Generic server-side proxy — 8 s timeout, no fallback."""
+        """Generic server-side proxy — forwards GET, adds CORS headers."""
         try:
-            status, body = self._fetch_url(target_url)
-            self._send_raw(status, body)
+            req = urllib.request.Request(
+                target_url,
+                headers={
+                    "Accept":     "application/json",
+                    "User-Agent": "IsraelTransitBot/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body   = resp.read()
+                status = resp.status
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", len(body))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
         except urllib.error.HTTPError as e:
             body = e.read() or json.dumps({"error": str(e)}).encode()
-            self._send_raw(e.code, body)
+            self.send_response(e.code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", len(body))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
         except Exception as e:
             self.send_json({"error": f"proxy error: {e}"}, status=502)
-
-    def _proxy_with_fallback(self, target_url, fallback_fn):
-        """Try live proxy; on any failure serve fallback_fn() as local JSON."""
-        try:
-            status, body = self._fetch_url(target_url)
-            self._send_raw(status, body)
-        except Exception as e:
-            print(f"[BOT-proxy] upstream failed ({e}), serving local fallback")
-            data = fallback_fn()
-            self.send_json(data)
-
-    # ── Local Stride-format fallback ──────────────────────────────────────────
-
-    def _stride_local(self, api_path, qs):
-        """Return local cached data in Stride API response format."""
-        buses = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
-
-        if "gtfs_routes" in api_path:
-            line_filters = set(filter(None, (qs.get("line_refs") or [""])[0].split(",")))
-            op_filters   = set(filter(None, (qs.get("operator_refs") or [""])[0].split(",")))
-            seen, routes = set(), []
-            for b in buses:
-                lr = str(b.get("line_ref") or b.get("route_short_name") or "")
-                op = str(b.get("operator_id") or "")
-                if not lr: continue
-                if line_filters and lr not in line_filters: continue
-                if op_filters   and op not in op_filters:   continue
-                key = (lr, op)
-                if key in seen: continue
-                seen.add(key)
-                routes.append({
-                    "line_ref":         lr,
-                    "route_short_name": lr,
-                    "operator_ref":     op,
-                    "route_long_name":  b.get("operator_name", ""),
-                })
-            routes.sort(key=lambda r: r["line_ref"])
-            return routes
-
-        if "siri_vehicle_locations" in api_path:
-            lr_filter = (qs.get("line_ref") or [""])[0]
-            op_filter = (qs.get("operator_ref") or [""])[0]
-            result = []
-            for b in buses:
-                lr = str(b.get("line_ref") or "")
-                op = str(b.get("operator_id") or "")
-                if lr_filter and lr != lr_filter: continue
-                if op_filter and op != op_filter: continue
-                if not _in_gush_dan(b.get("lat"), b.get("lon")): continue
-                result.append({
-                    "siri_route__line_ref":    lr,
-                    "siri_route__operator_ref": op,
-                    "lat":                     b.get("lat"),
-                    "lon":                     b.get("lon"),
-                    "velocity":                b.get("velocity"),
-                    "bearing":                 b.get("bearing"),
-                    "recorded_at_time":        b.get("timestamp"),
-                    "direction_ref":           "0",
-                    "siri_ride__id":           b.get("trip_id"),
-                    "siri_ride__vehicle_ref":  b.get("vehicle_id"),
-                    "operator_name":           b.get("operator_name"),
-                })
-            return result[:100]
-
-        return []
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
 
     def do_GET(self):
@@ -285,6 +312,102 @@ class BotHandler(BaseHTTPRequestHandler):
             ]
             self.send_json(filtered[:200])
 
+        # ── GTFS — routes by operator ─────────────────────────────────────────
+        # GET /gtfs/routes?operator_id=6&q=63
+        elif path == "/gtfs/routes":
+            op  = (qs.get("operator_id") or [""])[0].strip()
+            q_  = (qs.get("q") or [""])[0].strip()
+            lim = int((qs.get("limit") or ["100"])[0])
+            try:
+                from gtfs_query import search_routes
+                rows = search_routes(query=q_, operator_id=op, limit=lim)
+                self.send_json({"routes": rows, "count": len(rows)})
+            except Exception as e:
+                self.send_json({"error": str(e), "routes": []}, status=500)
+
+        # ── GTFS — stops of a route ───────────────────────────────────────────
+        # GET /gtfs/route_stops?route_id=XXX  OR  ?short_name=63
+        elif path == "/gtfs/route_stops":
+            route_id   = (qs.get("route_id")   or [""])[0].strip()
+            short_name = (qs.get("short_name")  or [""])[0].strip()
+            try:
+                from gtfs_query import get_route_stops, get_route_stops_by_short_name
+                if short_name:
+                    rows = get_route_stops_by_short_name(short_name)
+                elif route_id:
+                    rows = get_route_stops(route_id)
+                else:
+                    self.send_json({"error": "?route_id= or ?short_name= required"}, status=400)
+                    return
+                self.send_json({"stops": rows, "count": len(rows)})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
+
+        # ── GTFS — nearby stops ───────────────────────────────────────────────
+        # GET /gtfs/nearby?lat=32.08&lon=34.78&radius=500
+        elif path == "/gtfs/nearby":
+            try:
+                lat    = float((qs.get("lat")    or ["0"])[0])
+                lon    = float((qs.get("lon")    or ["0"])[0])
+                radius = int((qs.get("radius")   or ["500"])[0])
+                from gtfs_query import get_nearby_stops, get_routes_at_stop
+                stops = get_nearby_stops(lat, lon, radius)
+                # הוסף קווים לכל תחנה
+                for s in stops[:5]:
+                    s["routes"] = get_routes_at_stop(s["stop_id"])
+                self.send_json({"stops": stops, "count": len(stops)})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
+
+        # ── GTFS — stop schedule ──────────────────────────────────────────────
+        # GET /gtfs/schedule?stop_id=XXX&from=08:00
+        elif path == "/gtfs/schedule":
+            stop_id  = (qs.get("stop_id")  or [""])[0].strip()
+            from_t   = (qs.get("from")     or ["00:00:00"])[0].strip()
+            day_type = (qs.get("day")      or ["weekday"])[0].strip()
+            if not stop_id:
+                self.send_json({"error": "?stop_id= required"}, status=400)
+                return
+            try:
+                from gtfs_query import get_stop_schedule
+                rows = get_stop_schedule(stop_id, from_t, day_type)
+                self.send_json({"schedule": rows, "count": len(rows)})
+            except Exception as e:
+                self.send_json({"error": str(e), "schedule": []}, status=500)
+
+        # ── GTFS — search stops ───────────────────────────────────────────────
+        # GET /gtfs/stops?q=דיזנגוף
+        elif path == "/gtfs/stops":
+            q_ = (qs.get("q") or [""])[0].strip()
+            try:
+                from gtfs_query import search_stops
+                rows = search_stops(q_) if q_ else []
+                self.send_json({"stops": rows})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
+
+        # ── GTFS — operators ─────────────────────────────────────────────────
+        # GET /gtfs/operators
+        elif path == "/gtfs/operators":
+            try:
+                from gtfs_query import get_operators
+                rows = get_operators()
+                self.send_json({"operators": rows})
+            except Exception as e:
+                self.send_json({"error": str(e), "operators": []}, status=500)
+
+        # ── GTFS — status ─────────────────────────────────────────────────────
+        # GET /gtfs/status
+        elif path == "/gtfs/status":
+            try:
+                from gtfs_query import get_gtfs_summary, is_available
+                self.send_json({
+                    "available": is_available(),
+                    "summary":   get_gtfs_summary(),
+                })
+            except Exception as e:
+                self.send_json({"available": False, "error": str(e)})
+
         # ── geocode → Nominatim proxy ─────────────────────────────────────────
         elif path == "/geocode":
             address = urllib.parse.unquote_plus((qs.get("q") or [""])[0]).strip()
@@ -315,6 +438,22 @@ class BotHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": f"geocoding error: {e}"}, status=500)
 
+        # ── streets → רשימת רחובות סטטית לכל עיר ────────────────────────────
+        # GET /streets?city=תל+אביב
+        elif path == "/streets":
+            city = urllib.parse.unquote_plus((qs.get("city") or [""])[0]).strip()
+            if not city:
+                self.send_json({"error": "?city= required"}, status=400)
+                return
+            streets = CITY_STREETS.get(city, [])
+            if not streets:
+                # fallback: חפש עיר דומה
+                for k in CITY_STREETS:
+                    if city in k or k in city:
+                        streets = CITY_STREETS[k]
+                        break
+            self.send_json({"city": city, "streets": sorted(streets)})
+
         # ── Stride proxy — מסנן לגוש דן ותל אביב ────────────────────────────
         elif path.startswith("/proxy/stride"):
             api_path = path[len("/proxy/stride"):]
@@ -333,7 +472,7 @@ class BotHandler(BaseHTTPRequestHandler):
 
             if query:
                 target += "?" + query
-            self._proxy_with_fallback(target, lambda: self._stride_local(api_path, qs))
+            self._proxy(target)
 
         # ── Hasadna alias ─────────────────────────────────────────────────────
         elif path.startswith("/proxy/hasadna"):
@@ -350,7 +489,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 query = f"{query}&{bbox_params}" if query else bbox_params
             if query:
                 target += "?" + query
-            self._proxy_with_fallback(target, lambda: self._stride_local(api_path, qs))
+            self._proxy(target)
 
         # ── Israel Railways → Stride (israelrail.azurewebsites.net is dead) ──
         elif path.startswith("/proxy/rail"):
@@ -360,8 +499,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
             )
             target = f"{HASADNA_URL.rstrip('/')}/siri_vehicle_locations/list?{stride_params}"
-            rail_api_path = "/siri_vehicle_locations/list"
-            self._proxy_with_fallback(target, lambda: self._stride_local(rail_api_path, qs))
+            self._proxy(target)
 
         else:
             self.send_json({"error": "Not found", "path": self.path}, status=404)
@@ -376,10 +514,9 @@ def main():
     ).start()
     print("🔄 Background bus refresh started (every 2 min)")
 
-    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
-    print(f"   /                         → Transit Query Tool (agent_transit.html)")
+    print(f"   /                         → Transit Query Tool (index.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
     print(f"   /health                   → health check")
     print(f"   /status                   → system status")
