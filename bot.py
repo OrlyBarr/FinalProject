@@ -31,7 +31,9 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
-RAIL_BOARD_URL = "https://israelrail.azurewebsites.net/stations/GetStationBoard"
+# israelrail.azurewebsites.net is hijacked — disabled
+# Train data served via Open Bus Stride with operator_ref=2
+RAIL_BOARD_URL = ""   # dead — see /proxy/rail handler below
 HASADNA_URL    = "https://open-bus-stride-api.hasadna.org.il"
 NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
@@ -141,13 +143,20 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── Transit Query Tool (agent_transit.html) ──────────────────────────
+        # ── Transit Query Tool ────────────────────────────────────────────────
+        # מגיש index.html (גרסה חדשה) עם fallback ל-agent_transit.html
         if path == "/" or path == "/transit":
-            self.send_html(os.path.join(BASE_DIR, "agent_transit.html"))
+            html = os.path.join(BASE_DIR, "index.html")
+            if not os.path.exists(html):
+                html = os.path.join(BASE_DIR, "agent_transit.html")
+            self.send_html(html)
 
         # ── Agent dashboard ───────────────────────────────────────────────────
         elif path == "/agent":
-            self.send_html(os.path.join(BASE_DIR, "agent_transit.html"))
+            html = os.path.join(BASE_DIR, "index.html")
+            if not os.path.exists(html):
+                html = os.path.join(BASE_DIR, "agent_transit.html")
+            self.send_html(html)
 
         # ── health ────────────────────────────────────────────────────────────
         elif path == "/health":
@@ -233,9 +242,13 @@ class BotHandler(BaseHTTPRequestHandler):
                 target += "?" + parsed.query
             self._proxy(target)
 
-        # ── Israel Railways proxy ─────────────────────────────────────────────
+        # ── Israel Railways proxy → Stride (israelrail.azurewebsites.net is dead) ──
+        # מפנה ל-Open Bus Stride עם operator_ref=2 (רכבת ישראל)
         elif path.startswith("/proxy/rail"):
-            target = f"{RAIL_BOARD_URL}?{parsed.query}" if parsed.query else RAIL_BOARD_URL
+            station_id = urllib.parse.parse_qs(parsed.query).get("stationId", [""])[0]
+            # בנה query ל-Stride
+            stride_params = "operator_ref=2&limit=100&order_by=recorded_at_time+desc"
+            target = f"{HASADNA_URL}/siri_vehicle_locations/list?{stride_params}"
             self._proxy(target)
 
         else:

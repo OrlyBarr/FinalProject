@@ -112,7 +112,13 @@ def ensure_bucket(s3):
 
 
 def upload(s3, records: list, prefix: str, label: str) -> str:
-    """Upload list of records as JSON to time-partitioned S3 path (Israel time)."""
+    """Upload list of records as JSON to time-partitioned S3 path (Israel time).
+
+    Retries up to 4 times with exponential backoff (Layer 3 resilience).
+    On total failure saves the payload to the resilient_pipeline pending dir
+    so the background thread in ResilientMinioWriter can retry it later.
+    """
+    import time as _time
     now = now_il()
     key = (
         f"{prefix}/"
@@ -121,15 +127,44 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
         f"{label}_{now.strftime('%Y%m%d_%H%M%S')}.json"
     )
     body = json.dumps(records, ensure_ascii=False, indent=2).encode("utf-8")
-    s3.put_object(
-        Bucket=MAIN_BUCKET,
-        Key=key,
-        Body=body,
-        ContentType="application/json",
-        Metadata={"record_count": str(len(records))},
-    )
     path = f"s3://{MAIN_BUCKET}/{key}"
-    log.info(f"  ✅ {len(records)} records → {path}")
+
+    last_err = None
+    for attempt in range(4):
+        try:
+            s3.put_object(
+                Bucket=MAIN_BUCKET,
+                Key=key,
+                Body=body,
+                ContentType="application/json",
+                Metadata={"record_count": str(len(records))},
+            )
+            log.info(f"  ✅ {len(records)} records → {path}")
+            return path
+        except Exception as e:
+            last_err = e
+            wait = min(2 ** attempt, 30)
+            log.warning(f"  MinIO upload attempt {attempt+1}/4 failed: {e}. Retry in {wait}s")
+            _time.sleep(wait)
+
+    # All retries exhausted — save locally for background retry by ResilientMinioWriter
+    log.error(f"  MinIO upload failed after 4 attempts: {last_err}")
+    try:
+        from resilient_pipeline import BUFFER_DIR
+        pending = BUFFER_DIR / "minio_pending"
+        pending.mkdir(parents=True, exist_ok=True)
+        safe = key.replace("/", "_")
+        (pending / f"{safe}.data").write_bytes(body)
+        with open(pending / f"{safe}.meta.json", "w") as mf:
+            json.dump({
+                "bucket":   MAIN_BUCKET,
+                "key":      key,
+                "ctype":    "application/json",
+                "saved_at": now.isoformat(),
+            }, mf)
+        log.warning(f"  ⚠️  Saved locally for background retry → {key}")
+    except Exception as pe:
+        log.error(f"  Failed to save locally: {pe}")
     return path
 
 
@@ -192,7 +227,7 @@ def fetch_buses() -> list:
     try:
         r = requests.get(
             f"{OPEN_BUS_URL}/siri_vehicle_locations/list",
-            params={"limit": 500, "order_by": "recorded_at_time desc"},
+            params={"limit": 500, "order_by": "id desc"},
             timeout=15,
         )
         r.raise_for_status()
@@ -218,15 +253,13 @@ def fetch_buses() -> list:
             for rec in records
             if rec.get("lat") is not None and rec.get("lon") is not None
         ]
-        # Filter out stale records — the Hasadna SIRI API uses far-future dates
-        # (e.g. 2038-01-14 = Unix max-int32, 2037-xx-xx = near-sentinel) when
-        # recorded_at_time is unavailable. Those records also have velocity=0 and
-        # a frozen bearing, making them useless for analysis.
-        current_year = now_il().year
+        # Filter out sentinel/corrupt records — the Hasadna SIRI API uses far-future dates
+        # (2038-01-14 = Unix max-int32, 2037-xx-xx = near-sentinel) when
+        # recorded_at_time is unavailable. Reject anything year >= 2037.
         result = [
             r for r in result
             if r.get("recorded_at") and
-               int(r["recorded_at"][:4]) <= current_year
+               int(r["recorded_at"][:4]) < 2037
         ]
         log.info(f"  Buses: {len(result)} vehicle positions fetched (stale-filtered)")
         return result
@@ -246,7 +279,7 @@ def fetch_trains() -> list:
             params={
                 "operator_ref": "2",
                 "limit":        300,
-                "order_by":     "recorded_at_time desc",
+                "order_by":     "id desc",
             },
             timeout=15,
         )
@@ -277,12 +310,11 @@ def fetch_trains() -> list:
             for rec in records
             if rec.get("lat") is not None
         ]
-        # Filter out stale records with far-future placeholder timestamps
-        current_year = now_il().year
+        # Filter out sentinel/corrupt records with far-future placeholder timestamps (2038 = Unix max-int32)
         result = [
             r for r in result
             if r.get("recorded_at") and
-               int(r["recorded_at"][:4]) <= current_year
+               int(r["recorded_at"][:4]) < 2037
         ]
         log.info(f"  Trains: {len(result)} vehicle positions fetched (stale-filtered)")
         return result

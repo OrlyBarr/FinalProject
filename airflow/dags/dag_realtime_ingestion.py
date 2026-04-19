@@ -10,15 +10,12 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import sys
 sys.path.insert(0, "/opt/airflow")
+from resilient_pipeline import RESILIENT_DEFAULT_ARGS
 
 default_args = {
-    "owner":            "transit-team",
-    "depends_on_past":  False,
-    "start_date":       datetime(2026, 4, 13),
-    "email_on_failure": True,
-    "retries":          3,
-    "retry_delay":      timedelta(seconds=30),
-    "execution_timeout": timedelta(seconds=55),
+    **RESILIENT_DEFAULT_ARGS,
+    "email_on_failure":  True,
+    "execution_timeout": timedelta(seconds=55),  # tight: must fit in 1-min schedule
 }
 
 

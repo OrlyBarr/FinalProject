@@ -14,13 +14,12 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
+import sys
+sys.path.insert(0, "/opt/airflow")
+from resilient_pipeline import RESILIENT_DEFAULT_ARGS
 
 _default = {
-    "owner":             "transit-team",
-    "depends_on_past":   False,
-    "start_date":        datetime(2026, 4, 13),
-    "retries":           2,
-    "retry_delay":       timedelta(seconds=30),
+    **RESILIENT_DEFAULT_ARGS,
     "execution_timeout": timedelta(minutes=4),
 }
 

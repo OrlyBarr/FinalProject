@@ -119,8 +119,10 @@ class BusPositionsProducer(BaseProducer):
                 "entity_id":        str(item.get("id") or ""),
                 "trip_id":          str(item.get("siri_ride__id") or ""),  # FIX: singular
                 "route_id":         line_ref,
+                "line_ref":         line_ref,   # FIX: שמור גם כ-line_ref לחיפוש ב-Kibana
                 "operator_id":      operator_ref,
-                "operator_name":    OPERATORS.get(operator_ref, f"unknown_operator_{operator_ref}" if operator_ref else "unknown"),
+                # FIX: f"unknown_operator_{operator_ref}" → "Unknown" למניעת "operator_" ב-ES
+                "operator_name":    OPERATORS.get(operator_ref, "Unknown") if operator_ref else "Unknown",
                 "start_date":       timestamp[:10],
                 "latitude":         round(float(lat), 6),
                 "longitude":        round(float(lon), 6),
