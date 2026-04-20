@@ -178,14 +178,11 @@ echo ""
 docker compose ps
 echo ""
 
-# Deploy resilient_pipeline.py to both Airflow containers so DAGs can import it
+# resilient_pipeline.py is already mounted via docker-compose volume — no copy needed
 if [ -f "resilient_pipeline.py" ]; then
-  docker cp resilient_pipeline.py airflow-webserver:/opt/airflow/resilient_pipeline.py 2>/dev/null && \
-  docker cp resilient_pipeline.py airflow-scheduler:/opt/airflow/resilient_pipeline.py 2>/dev/null && \
-  success "resilient_pipeline.py deployed to Airflow containers" || \
-  warn "Could not copy resilient_pipeline.py to containers (will retry on next run)"
+  success "resilient_pipeline.py available in Airflow containers (via volume mount)"
 else
-  warn "resilient_pipeline.py not found — skipping container deploy"
+  warn "resilient_pipeline.py not found on host"
 fi
 
 # ─────────────────────────────────────────────────────────────
