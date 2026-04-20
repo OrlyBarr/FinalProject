@@ -20,19 +20,30 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 
 sys.path.insert(0, "/opt/airflow")
+try:
+    from resilient_pipeline import RESILIENT_DEFAULT_ARGS
+except ImportError:
+    from datetime import timedelta
+    RESILIENT_DEFAULT_ARGS = {
+        "owner": "transit-team",
+        "depends_on_past": False,
+        "retries": 5,
+        "retry_delay": timedelta(minutes=2),
+        "retry_exponential_backoff": True,
+        "max_retry_delay": timedelta(minutes=5),
+        "execution_timeout": timedelta(minutes=10),
+        "on_failure_callback": None,
+    }
 
 import os
 os.environ.setdefault("ELASTICSEARCH_HOST",     "http://elasticsearch:9200")
 os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
 default_args = {
-    "owner":             "transit-team",
-    "depends_on_past":   False,
+    **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),
     "email_on_failure":  False,
-    "retries":           1,
-    "retry_delay":       timedelta(seconds=10),
-    "execution_timeout": timedelta(seconds=60),  # FIX: was 25s — impossible with 6 parallel tasks
+    "execution_timeout": timedelta(seconds=60),
 }
 
 

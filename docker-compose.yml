@@ -176,6 +176,7 @@ services:
       - ./config:/opt/airflow/config
       - ./storage:/opt/airflow/storage
       - ./warehouse:/opt/airflow/warehouse
+      - ./resilient_pipeline.py:/opt/airflow/resilient_pipeline.py
     ports:
       - "8081:8080"
     command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@transit.il 2>/dev/null || true && airflow webserver"
@@ -226,6 +227,7 @@ services:
       - ./config:/opt/airflow/config
       - ./storage:/opt/airflow/storage
       - ./warehouse:/opt/airflow/warehouse
+      - ./resilient_pipeline.py:/opt/airflow/resilient_pipeline.py
     command: scheduler
 
   # ─────────────────────────────────────────

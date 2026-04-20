@@ -47,8 +47,11 @@ class ServiceAlertsProducer(BaseProducer):
 
     def fetch_data(self) -> list:
         try:
-            response = requests.get(self.url, timeout=15)
+            response = requests.get(self.url, timeout=8)  # fail fast כשה-API למטה
             response.raise_for_status()
+        except requests.Timeout:
+            self.logger.warning("MOT ServiceAlerts timed out (>8s) — skipping this cycle")
+            return []
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch ServiceAlerts: {e}")
             return []

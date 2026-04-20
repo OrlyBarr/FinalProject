@@ -116,31 +116,55 @@ def load_local_json(filename: str) -> list:
 
 def fetch_live_bus_data() -> list:
     """Fetch fresh bus positions from Hasadna SIRI API."""
+    # Operator name lookup (Israeli transit operators by SIRI operator_ref)
+    _OP_NAMES = {
+        "1": "Egged", "2": "Israel Railways", "3": "Dan", "4": "Kavim",
+        "5": "Metropoline", "6": "NTA (Metro)", "7": "Superbus", "8": "GB Tours",
+        "14": "Nateev Express", "15": "Bus.co.il", "18": "Afikim", "25": "Connex",
+    }
     try:
+        from datetime import datetime as _dt
         import requests
         r = requests.get(
             "https://open-bus-stride-api.hasadna.org.il/siri_vehicle_locations/list",
-            params={"limit": 500, "order_by": "recorded_at_time desc"},
+            params={"limit": 500, "order_by": "id desc"},
             timeout=15,
         )
         r.raise_for_status()
         records = r.json()
         log.info(f"Fetched {len(records)} live vehicle positions from Hasadna SIRI")
-        return [
-            {
-                "vehicle_id":    str(rec.get("id", "")),
-                "route_id":      str(rec.get("siri_snapshot_id", "")),
-                "trip_id":       str(rec.get("siri_ride_stop_id", "")),
-                "lat":           rec.get("lat"),
-                "lon":           rec.get("lon"),
-                "bearing":       rec.get("bearing"),
-                "velocity":      rec.get("velocity"),
-                "timestamp":     rec.get("recorded_at_time"),
-                "source":        "hasadna-siri",
-            }
-            for rec in records
-            if rec.get("lat") is not None and rec.get("lon") is not None
-        ]
+        result = []
+        for rec in records:
+            if rec.get("lat") is None or rec.get("lon") is None:
+                continue
+            # Skip sentinel timestamps (2037+)
+            ts = rec.get("recorded_at_time", "")
+            if ts and ts[:4] >= "2037":
+                ts = _dt.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+            operator_id  = str(rec.get("siri_route__operator_ref") or "").strip()
+            line_ref     = str(rec.get("siri_route__line_ref") or "").strip()
+            route_short  = (
+                str(rec.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                or line_ref
+            )
+
+            result.append({
+                "vehicle_id":       str(rec.get("siri_ride__vehicle_ref") or rec.get("id") or ""),
+                "trip_id":          str(rec.get("siri_ride__id") or ""),
+                "route_id":         line_ref,
+                "line_ref":         line_ref,
+                "route_short_name": route_short,
+                "operator_id":      operator_id,
+                "operator_name":    _OP_NAMES.get(operator_id, operator_id or "Unknown"),
+                "lat":              rec.get("lat"),
+                "lon":              rec.get("lon"),
+                "bearing":          rec.get("bearing"),
+                "velocity":         rec.get("velocity"),
+                "timestamp":        ts,
+                "source":           "hasadna-siri",
+            })
+        return result
     except Exception as e:
         log.error(f"Live fetch failed: {e}")
         return []

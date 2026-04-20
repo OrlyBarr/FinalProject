@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-setup_kibana.py — Israel Transit Kibana Dashboard (v3 — fixed)
-===============================================================
-תיקונים:
-  - שגיאת 'Cannot read mode' נפתרה: אין שימוש ב-seriesParams
-  - גרפי זמן: מוגדר timeFrom=now-15d כדי לכסות 13-16 אפריל
-  - כל הגרפים עם visState תואם Kibana 8
+setup_kibana.py — Israel Transit Kibana Dashboard (v4)
+=======================================================
+עדכונים:
+  - סינון לגוש דן ותל אביב (area:gush_dan)
+  - תמיכה ב-is_moving flag (מהירות אופציונלית ב-SIRI)
+  - speed_kmh יכול להיות null — גרפים מסננים כראוי
+  - גרפי is_moving vs parked
+  - operator_name תקין (ללא "operator_")
+  - route_short_name — מספר קו קריא
 
-נתונים אמיתיים:
-  transit-bus-positions   (11.9M) — _indexed_at, vehicle_id, speed_kmh,
-    operator_name, route_id, current_status, bearing, stop_id, location
-  transit-train-positions (449K)  — _indexed_at, vehicle_id, velocity,
-    trip_id, train_number
+נתונים:
+  transit-bus-positions   — _indexed_at, vehicle_id, speed_kmh (nullable),
+    operator_name, route_short_name, line_ref, is_moving, area, location
+  transit-train-positions — _indexed_at, vehicle_id, velocity (nullable),
+    train_number, line_ref, is_moving, area
 
 Run: python3 setup_kibana.py
 """
@@ -27,21 +30,32 @@ HEADERS = {"kbn-xsrf": "true", "Content-Type": "application/json"}
 BUS     = "transit-bus-positions"
 TRAIN   = "transit-train-positions"
 
+# פילטר גלובלי — גוש דן ותל אביב בלבד
+# נתונים ישנים לפני השינוי לא יסוננו (אין להם שדה area)
+GUSH_DAN_FILTER = 'area:gush_dan OR NOT area:*'
+
 INDEX_PATTERNS = [
     {"id": BUS,   "title": BUS,   "timeFieldName": "_indexed_at"},
     {"id": TRAIN, "title": TRAIN, "timeFieldName": "_indexed_at"},
 ]
 
 ALL_VIZ_IDS = [
-    "kpi-bus-count", "kpi-bus-vehicles", "kpi-bus-speed",
-    "kpi-bus-active", "kpi-train-count", "kpi-train-vehicles",
+    # ROW 1 — KPIs
+    "kpi-bus-count", "kpi-bus-moving", "kpi-bus-speed",
+    "kpi-bus-operators", "kpi-train-count", "kpi-train-moving",
+    # ROW 2 — Timelines
     "tl-bus", "tl-train",
-    "spd-hist-bus", "spd-hist-train",
-    "spd-time-bus", "spd-time-train",
-    "pie-operator", "pie-status",
-    "top-routes", "top-operators",
+    # ROW 3 — Moving vs Parked
+    "moving-pie-bus", "moving-pie-train",
+    # ROW 4 — Speed
+    "spd-hist-bus", "spd-time-bus",
+    # ROW 5 — Operators & Lines
+    "bar-operators", "bar-lines",
+    # ROW 6 — Hourly activity
+    "hourly-bus",
+    # ROW 7 — Top vehicles & stops
     "top-bus-veh", "top-train-veh",
-    "bearing-hist",
+    "top-stops", "bearing-hist",
 ]
 
 
@@ -53,9 +67,12 @@ def wait_for_kibana():
         try:
             r = requests.get(f"{KIBANA}/api/status", timeout=5)
             if r.status_code == 200:
-                lvl = (r.json().get("status") or {}).get("overall", {}).get("level", "")
-                if lvl in ("available", "green"):
-                    print("✅ Kibana ready"); return True
+                d   = r.json()
+                lvl = d.get("overall", {}).get("level") or d.get("status", {}).get("overall", {}).get("state") or "available"
+                if lvl in ("available", "green", "all_green", "some_degraded"):
+                    print(f"✅ Kibana ready ({lvl})")
+                    return True
+                print(f"  Kibana status: {lvl} — waiting...")
         except Exception:
             pass
         print(f"  {i+1}/30..."); time.sleep(3)
@@ -94,7 +111,7 @@ def viz(vid, title, state, index, q=""):
                       headers=HEADERS, json=body)
     ok = r.status_code in (200, 201)
     print(f"{'✅' if ok else '❌'} {title}" +
-          ("" if ok else f"  [{r.status_code}] {r.text[:120]}"))
+          ("" if ok else f"  [{r.status_code}] {r.text[:100]}"))
     return ok
 
 
@@ -135,7 +152,7 @@ def a_hist(field, interval, lo, hi, lbl=""):
                       "customLabel": lbl or field}}
 
 
-# ── visState builders (Kibana 8 compatible) ───────────────────────────────────
+# ── visState builders ─────────────────────────────────────────────────────────
 
 def metric_vs(title, agg, sub="", schema="Blues",
               use_ranges=False, ranges=None, invert=False):
@@ -160,85 +177,60 @@ def metric_vs(title, agg, sub="", schema="Blues",
 
 
 def line_vs(title, m_agg, y_lbl="", threshold=None):
-    """
-    Kibana 8 line chart — visState без seriesParams ב-top level.
-    seriesParams מוגדר בתוך params בלבד.
-    """
     series = [{
         "show": True, "type": "line", "mode": "normal",
         "data": {"label": y_lbl or "ערך", "id": "1"},
         "valueAxis": "ValueAxis-1",
         "drawLinesBetweenPoints": True,
-        "lineWidth": 2,
-        "interpolate": "linear",
-        "showCircles": True,
+        "lineWidth": 2, "interpolate": "linear", "showCircles": True,
     }]
     return {
         "title": title, "type": "line",
         "params": {
-            "type": "line",
-            "grid": {"categoryLines": False},
-            "categoryAxes": [{
-                "id": "CategoryAxis-1", "type": "category",
-                "position": "bottom", "show": True,
-                "style": {}, "scale": {"type": "linear"},
-                "labels": {"show": True, "filter": True, "truncate": 100},
-                "title": {},
-            }],
-            "valueAxes": [{
-                "id": "ValueAxis-1", "name": "LeftAxis-1",
-                "type": "value", "position": "left", "show": True,
-                "style": {}, "scale": {"type": "linear", "mode": "normal"},
-                "labels": {"show": True, "rotate": 0, "filter": False, "truncate": 100},
-                "title": {"text": y_lbl},
-            }],
+            "type": "line", "grid": {"categoryLines": False},
+            "categoryAxes": [{"id": "CategoryAxis-1", "type": "category",
+                              "position": "bottom", "show": True, "style": {},
+                              "scale": {"type": "linear"},
+                              "labels": {"show": True, "filter": True, "truncate": 100},
+                              "title": {}}],
+            "valueAxes": [{"id": "ValueAxis-1", "name": "LeftAxis-1",
+                           "type": "value", "position": "left", "show": True,
+                           "style": {}, "scale": {"type": "linear", "mode": "normal"},
+                           "labels": {"show": True, "rotate": 0, "filter": False, "truncate": 100},
+                           "title": {"text": y_lbl}}],
             "seriesParams": series,
-            "addTooltip": True, "addLegend": False,
-            "legendPosition": "right",
+            "addTooltip": True, "addLegend": False, "legendPosition": "right",
             "times": [], "addTimeMarker": False,
-            "thresholdLine": {
-                "show": bool(threshold),
-                "value": threshold or 10,
-                "width": 2, "style": "full", "color": "#E7664C",
-            },
+            "thresholdLine": {"show": bool(threshold), "value": threshold or 10,
+                              "width": 2, "style": "full", "color": "#E7664C"},
         },
         "aggs": [m_agg, a_date()],
     }
 
 
 def hbar_vs(title, m_agg, s_agg, y_lbl=""):
-    """Kibana 8 horizontal bar — seriesParams inside params."""
-    series = [{
-        "show": True, "type": "histogram", "mode": "stacked",
-        "data": {"label": y_lbl or "ערך", "id": "1"},
-        "valueAxis": "ValueAxis-1",
-        "drawLinesBetweenPoints": True,
-        "lineWidth": 2, "showCircles": True,
-    }]
+    series = [{"show": True, "type": "histogram", "mode": "stacked",
+               "data": {"label": y_lbl or "ערך", "id": "1"},
+               "valueAxis": "ValueAxis-1",
+               "drawLinesBetweenPoints": True, "lineWidth": 2, "showCircles": True}]
     return {
         "title": title, "type": "horizontal_bar",
         "params": {
-            "type": "histogram",
-            "grid": {"categoryLines": False},
-            "categoryAxes": [{
-                "id": "CategoryAxis-1", "type": "category",
-                "position": "left", "show": True,
-                "style": {}, "scale": {"type": "linear"},
-                "labels": {"show": True, "rotate": 0,
-                           "filter": True, "truncate": 200},
-                "title": {},
-            }],
-            "valueAxes": [{
-                "id": "ValueAxis-1", "name": "BottomAxis-1",
-                "type": "value", "position": "bottom", "show": True,
-                "style": {}, "scale": {"type": "linear", "mode": "normal"},
-                "labels": {"show": True, "rotate": 0,
-                           "filter": True, "truncate": 100},
-                "title": {"text": y_lbl},
-            }],
+            "type": "histogram", "grid": {"categoryLines": False},
+            "categoryAxes": [{"id": "CategoryAxis-1", "type": "category",
+                              "position": "left", "show": True, "style": {},
+                              "scale": {"type": "linear"},
+                              "labels": {"show": True, "rotate": 0,
+                                         "filter": True, "truncate": 200},
+                              "title": {}}],
+            "valueAxes": [{"id": "ValueAxis-1", "name": "BottomAxis-1",
+                           "type": "value", "position": "bottom", "show": True,
+                           "style": {}, "scale": {"type": "linear", "mode": "normal"},
+                           "labels": {"show": True, "rotate": 0,
+                                      "filter": True, "truncate": 100},
+                           "title": {"text": y_lbl}}],
             "seriesParams": series,
-            "addTooltip": True, "addLegend": False,
-            "legendPosition": "right",
+            "addTooltip": True, "addLegend": False, "legendPosition": "right",
             "times": [], "addTimeMarker": False,
             "thresholdLine": {"show": False, "value": 10,
                               "width": 1, "style": "full", "color": "#E7664C"},
@@ -248,37 +240,27 @@ def hbar_vs(title, m_agg, s_agg, y_lbl=""):
 
 
 def hist_vs(title, m_agg, s_agg, y_lbl=""):
-    """Kibana 8 vertical histogram."""
-    series = [{
-        "show": True, "type": "histogram", "mode": "stacked",
-        "data": {"label": y_lbl or "ערך", "id": "1"},
-        "valueAxis": "ValueAxis-1",
-        "drawLinesBetweenPoints": True,
-        "lineWidth": 2, "showCircles": True,
-    }]
+    series = [{"show": True, "type": "histogram", "mode": "stacked",
+               "data": {"label": y_lbl or "ערך", "id": "1"},
+               "valueAxis": "ValueAxis-1",
+               "drawLinesBetweenPoints": True, "lineWidth": 2, "showCircles": True}]
     return {
         "title": title, "type": "histogram",
         "params": {
-            "type": "histogram",
-            "grid": {"categoryLines": False},
-            "categoryAxes": [{
-                "id": "CategoryAxis-1", "type": "category",
-                "position": "bottom", "show": True,
-                "style": {}, "scale": {"type": "linear"},
-                "labels": {"show": True, "filter": True, "truncate": 100},
-                "title": {},
-            }],
-            "valueAxes": [{
-                "id": "ValueAxis-1", "name": "LeftAxis-1",
-                "type": "value", "position": "left", "show": True,
-                "style": {}, "scale": {"type": "linear", "mode": "normal"},
-                "labels": {"show": True, "rotate": 0,
-                           "filter": False, "truncate": 100},
-                "title": {"text": y_lbl},
-            }],
+            "type": "histogram", "grid": {"categoryLines": False},
+            "categoryAxes": [{"id": "CategoryAxis-1", "type": "category",
+                              "position": "bottom", "show": True, "style": {},
+                              "scale": {"type": "linear"},
+                              "labels": {"show": True, "filter": True, "truncate": 100},
+                              "title": {}}],
+            "valueAxes": [{"id": "ValueAxis-1", "name": "LeftAxis-1",
+                           "type": "value", "position": "left", "show": True,
+                           "style": {}, "scale": {"type": "linear", "mode": "normal"},
+                           "labels": {"show": True, "rotate": 0,
+                                      "filter": False, "truncate": 100},
+                           "title": {"text": y_lbl}}],
             "seriesParams": series,
-            "addTooltip": True, "addLegend": False,
-            "legendPosition": "right",
+            "addTooltip": True, "addLegend": False, "legendPosition": "right",
             "times": [], "addTimeMarker": False,
             "thresholdLine": {"show": False, "value": 10,
                               "width": 1, "style": "full", "color": "#E7664C"},
@@ -300,7 +282,7 @@ def pie_vs(title, s_agg):
     }
 
 
-# ── build all visualizations ──────────────────────────────────────────────────
+# ── create visualizations ─────────────────────────────────────────────────────
 
 def create_visualizations():
     done = []
@@ -308,183 +290,221 @@ def create_visualizations():
     def add(vid, ok, x, y, w, h):
         if ok: done.append((vid, x, y, w, h))
 
-    # ══ ROW 1 — KPI metrics (y=0, h=5) ══════════════════════════════════════
+    # ══ ROW 1 — KPI (y=0, h=5) ═══════════════════════════════════════════════
 
+    # סה"כ רשומות אוטובוסים בגוש דן
     add("kpi-bus-count", viz(
-        "kpi-bus-count", "🚌 רשומות אוטובוסים",
-        metric_vs("רשומות אוטובוסים", a_count("רשומות"), "רשומות ב-ES"),
+        "kpi-bus-count", "🚌 רשומות — גוש דן",
+        metric_vs("רשומות אוטובוסים", a_count("רשומות"), "גוש דן + ת\"א"),
         BUS,
     ), 0, 0, 8, 5)
 
-    add("kpi-bus-vehicles", viz(
-        "kpi-bus-vehicles", "🚌 אוטובוסים ייחודיים",
-        metric_vs("אוטובוסים ייחודיים",
-                  a_card("vehicle_id", "אוטובוסים"), "vehicle IDs"),
-        BUS,
+    # אוטובוסים נוסעים (is_moving:true)
+    add("kpi-bus-moving", viz(
+        "kpi-bus-moving", "🟢 אוטובוסים נוסעים",
+        metric_vs("נוסעים כרגע", a_count("נוסעים"),
+                  "is_moving = true",
+                  schema="Green to Red", use_ranges=True,
+                  ranges=[{"from":0,"to":50},{"from":50,"to":200},{"from":200,"to":99999}],
+                  invert=True),
+        BUS, "is_moving: true",
     ), 8, 0, 8, 5)
 
+    # מהירות ממוצעת — רק כלי רכב שמדווחים מהירות
     add("kpi-bus-speed", viz(
-        "kpi-bus-speed", "💨 מהירות ממוצעת אוטובוסים",
+        "kpi-bus-speed", "💨 מהירות ממוצעת",
         metric_vs("מהירות ממוצעת",
                   a_avg("speed_kmh", "מהירות (קמ\"ש)"),
-                  "קמ\"ש ממוצע",
-                  schema="Green to Red",
-                  use_ranges=True,
-                  ranges=[{"from":0,"to":15},
-                          {"from":15,"to":40},
-                          {"from":40,"to":999}]),
-        BUS, "speed_kmh > 0",
+                  "קמ\"ש | רק מדווחי מהירות",
+                  schema="Green to Red", use_ranges=True,
+                  ranges=[{"from":0,"to":15},{"from":15,"to":40},{"from":40,"to":999}]),
+        BUS, "is_moving: true AND speed_kmh > 0",
     ), 16, 0, 8, 5)
 
-    add("kpi-bus-active", viz(
-        "kpi-bus-active", "🟢 אוטובוסים In-Transit",
-        metric_vs("In Transit",
-                  a_count("בנסיעה"),
-                  "current_status: in_transit",
-                  schema="Green to Red",
-                  use_ranges=True,
-                  ranges=[{"from":0,"to":50},
-                          {"from":50,"to":200},
-                          {"from":200,"to":99999}],
-                  invert=True),
-        BUS, "current_status: in_transit",
+    # מפעילים ייחודיים
+    add("kpi-bus-operators", viz(
+        "kpi-bus-operators", "🏢 מפעילים פעילים",
+        metric_vs("מפעילים", a_card("operator_name", "מפעילים"),
+                  "חברות מפעילות"),
+        BUS, 'NOT operator_name:"Unknown"',
     ), 24, 0, 8, 5)
 
+    # רכבות — רשומות
     add("kpi-train-count", viz(
         "kpi-train-count", "🚆 רשומות רכבות",
-        metric_vs("רשומות רכבות", a_count("רשומות"), "רשומות ב-ES",
-                  schema="Blues"),
+        metric_vs("רשומות רכבות", a_count("רשומות"),
+                  "גוש דן + ת\"א", schema="Blues"),
         TRAIN,
     ), 32, 0, 8, 5)
 
-    add("kpi-train-vehicles", viz(
-        "kpi-train-vehicles", "🚆 רכבות ייחודיות",
-        metric_vs("רכבות ייחודיות",
-                  a_card("vehicle_id", "רכבות"), "vehicle IDs",
-                  schema="Blues"),
-        TRAIN,
+    # רכבות נוסעות
+    add("kpi-train-moving", viz(
+        "kpi-train-moving", "🚆 רכבות נוסעות",
+        metric_vs("רכבות נוסעות", a_count("נוסעות"),
+                  "is_moving = true", schema="Blues"),
+        TRAIN, "is_moving: true",
     ), 40, 0, 8, 5)
 
     # ══ ROW 2 — Timelines (y=5, h=10) ════════════════════════════════════════
 
     add("tl-bus", viz(
-        "tl-bus", "📈 פעילות אוטובוסים לאורך זמן",
+        "tl-bus", "📈 פעילות אוטובוסים לאורך זמן — גוש דן",
         line_vs("פעילות אוטובוסים לאורך זמן",
                 a_count("רשומות"), "רשומות"),
         BUS,
     ), 0, 5, 24, 10)
 
     add("tl-train", viz(
-        "tl-train", "📈 פעילות רכבות לאורך זמן",
+        "tl-train", "📈 פעילות רכבות לאורך זמן — גוש דן",
         line_vs("פעילות רכבות לאורך זמן",
                 a_count("רשומות"), "רשומות"),
         TRAIN,
     ), 24, 5, 24, 10)
 
-    # ══ ROW 3 — Speed histograms (y=15, h=10) ════════════════════════════════
+    # ══ ROW 3 — Moving vs Parked pies (y=15, h=10) ═══════════════════════════
 
+    # פילוח נוסע/חונה/לא ידוע — אוטובוסים
+    add("moving-pie-bus", viz(
+        "moving-pie-bus", "🚌 נוסע vs חונה — אוטובוסים",
+        pie_vs("נוסע vs חונה",
+               a_terms("is_moving", 3, "סטטוס")),
+        BUS,
+    ), 0, 15, 24, 10)
+
+    # פילוח נוסע/חונה — רכבות
+    add("moving-pie-train", viz(
+        "moving-pie-train", "🚆 נוסע vs חונה — רכבות",
+        pie_vs("נוסע vs חונה — רכבות",
+               a_terms("is_moving", 3, "סטטוס")),
+        TRAIN,
+    ), 24, 15, 24, 10)
+
+    # ══ ROW 4 — Speed (y=25, h=10) ══════════════════════════════════════════
+
+    # התפלגות מהירות — רק כאלה שמדווחים
     add("spd-hist-bus", viz(
         "spd-hist-bus", "💨 התפלגות מהירות אוטובוסים",
-        hist_vs("התפלגות מהירות אוטובוסים",
+        hist_vs("התפלגות מהירות (כלי רכב מדווחים בלבד)",
                 a_count("כלי רכב"),
                 a_hist("speed_kmh", 5, 0, 120, "מהירות (קמ\"ש)"),
                 "מספר כלי רכב"),
         BUS, "speed_kmh > 0",
-    ), 0, 15, 24, 10)
+    ), 0, 25, 24, 10)
 
-    add("spd-hist-train", viz(
-        "spd-hist-train", "💨 התפלגות מהירות רכבות",
-        hist_vs("התפלגות מהירות רכבות",
-                a_count("רכבות"),
-                a_hist("velocity", 10, 0, 160, "מהירות (קמ\"ש)"),
-                "מספר רכבות"),
-        TRAIN, "velocity > 0",
-    ), 24, 15, 24, 10)
-
-    # ══ ROW 4 — Speed over time (y=25, h=10) ════════════════════════════════
-
+    # מהירות לאורך זמן
     add("spd-time-bus", viz(
-        "spd-time-bus", "📉 מהירות ממוצעת אוטובוסים לאורך זמן",
-        line_vs("מהירות ממוצעת אוטובוסים לאורך זמן",
+        "spd-time-bus", "📉 מהירות ממוצעת לאורך זמן",
+        line_vs("מהירות ממוצעת לאורך זמן",
                 a_avg("speed_kmh", "מהירות (קמ\"ש)"),
                 "קמ\"ש", threshold=20),
         BUS, "speed_kmh > 0",
-    ), 0, 25, 24, 10)
-
-    add("spd-time-train", viz(
-        "spd-time-train", "📉 מהירות ממוצעת רכבות לאורך זמן",
-        line_vs("מהירות ממוצעת רכבות לאורך זמן",
-                a_avg("velocity", "מהירות (קמ\"ש)"),
-                "קמ\"ש"),
-        TRAIN, "velocity > 0",
     ), 24, 25, 24, 10)
 
-    # ══ ROW 5 — Pie charts (y=35, h=10) ══════════════════════════════════════
+    # ══ ROW 5 — Operators & Lines (y=35, h=12) ════════════════════════════
 
-    add("pie-operator", viz(
-        "pie-operator", "🏢 פילוח לפי מפעיל",
-        pie_vs("פילוח לפי מפעיל",
-               a_terms("operator_name.keyword", 12, "מפעיל")),
-        BUS,
-    ), 0, 35, 24, 10)
-
-    add("pie-status", viz(
-        "pie-status", "🟢 פילוח לפי סטטוס",
-        pie_vs("פילוח לפי סטטוס",
-               a_terms("current_status.keyword", 5, "סטטוס")),
-        BUS,
-    ), 24, 35, 24, 10)
-
-    # ══ ROW 6 — Top routes + operators (y=45, h=12) ══════════════════════════
-
-    add("top-routes", viz(
-        "top-routes", "🛣️ Top 15 קווים פעילים",
-        hbar_vs("Top קווים פעילים",
+    # מפעילים — ללא Unknown
+    add("bar-operators", viz(
+        "bar-operators", "🏢 פעילות לפי מפעיל — גוש דן",
+        hbar_vs("מפעילים",
                 a_count("רשומות"),
-                a_terms("route_id.keyword", 15, "קו (route_id)"),
+                a_terms("operator_name", 12, "מפעיל"),
                 "מספר רשומות"),
-        BUS,
-    ), 0, 45, 24, 12)
+        BUS, 'NOT operator_name:"Unknown"',
+    ), 0, 35, 24, 12)
 
-    add("top-operators", viz(
-        "top-operators", "🏢 Top מפעילים לפי פעילות",
-        hbar_vs("Top מפעילים",
+    # קווים — route_short_name (מספר קו קריא)
+    add("bar-lines", viz(
+        "bar-lines", "🛣️ Top 15 קווים פעילים — גוש דן",
+        hbar_vs("Top קווים",
                 a_count("רשומות"),
-                a_terms("operator_name.keyword", 15, "מפעיל"),
+                a_terms("route_short_name", 15, "מספר קו"),
                 "מספר רשומות"),
-        BUS,
-    ), 24, 45, 24, 12)
+        BUS, 'route_short_name:* AND NOT route_short_name:""',
+    ), 24, 35, 24, 12)
 
-    # ══ ROW 7 — Top vehicles (y=57, h=12) ════════════════════════════════════
+    # ══ ROW 6 — Hourly activity (y=47, h=12) ═════════════════════════════
+
+    add("hourly-bus", viz(
+        "hourly-bus", "🕐 פעילות אוטובוסים לפי שעה — גוש דן",
+        {
+            "title": "פעילות לפי שעה ביום",
+            "type": "line",
+            "params": {
+                "type": "line", "grid": {"categoryLines": False},
+                "addLegend": False, "addTooltip": True, "addTimeMarker": False,
+                "categoryAxes": [{"id": "CA-1", "type": "category",
+                                  "position": "bottom", "show": True, "style": {},
+                                  "scale": {"type": "linear"},
+                                  "labels": {"show": True, "filter": True, "truncate": 100},
+                                  "title": {}}],
+                "valueAxes": [{"id": "VA-1", "name": "LeftAxis-1",
+                               "type": "value", "position": "left", "show": True,
+                               "style": {}, "scale": {"type": "linear", "mode": "normal"},
+                               "labels": {"show": True, "rotate": 0,
+                                          "filter": False, "truncate": 100},
+                               "title": {"text": "מספר רשומות"}}],
+                "seriesParams": [{"show": True, "type": "histogram", "mode": "stacked",
+                                  "data": {"label": "רשומות", "id": "1"},
+                                  "valueAxis": "VA-1",
+                                  "drawLinesBetweenPoints": True,
+                                  "lineWidth": 2, "showCircles": True}],
+                "times": [], "legendPosition": "right",
+                "thresholdLine": {"show": False, "value": 10,
+                                  "width": 1, "style": "full", "color": "#E7664C"},
+            },
+            "aggs": [
+                {"id": "1", "enabled": True, "type": "count", "schema": "metric",
+                 "params": {"customLabel": "רשומות"}},
+                {"id": "2", "enabled": True, "type": "date_histogram",
+                 "schema": "segment",
+                 "params": {"field": "_indexed_at", "interval": "1h",
+                            "min_doc_count": 1, "useNormalizedEsInterval": True,
+                            "drop_partials": False, "extended_bounds": {},
+                            "customLabel": "שעה"}},
+            ],
+        },
+        BUS,
+    ), 0, 47, 48, 12)
+
+    # ══ ROW 7 — Top vehicles & stops (y=59, h=12) ═════════════════════════
 
     add("top-bus-veh", viz(
         "top-bus-veh", "🚌 Top 15 אוטובוסים פעילים",
-        hbar_vs("Top אוטובוסים פעילים",
+        hbar_vs("Top אוטובוסים",
                 a_count("רשומות"),
-                a_terms("vehicle_id.keyword", 15, "vehicle_id"),
+                a_terms("vehicle_id", 15, "vehicle_id"),
                 "מספר רשומות"),
         BUS,
-    ), 0, 57, 24, 12)
+    ), 0, 59, 24, 12)
 
     add("top-train-veh", viz(
-        "top-train-veh", "🚆 Top 15 רכבות פעילות",
-        hbar_vs("Top רכבות פעילות",
+        "top-train-veh", "🚆 Top 15 נסיעות רכבת",
+        hbar_vs("Top רכבות",
                 a_count("רשומות"),
-                a_terms("vehicle_id.keyword", 15, "vehicle_id"),
+                a_terms("trip_id", 15, "trip_id"),
                 "מספר רשומות"),
         TRAIN,
-    ), 24, 57, 24, 12)
+    ), 24, 59, 24, 12)
 
-    # ══ ROW 8 — Bearing (y=69, h=10) ═════════════════════════════════════════
+    # ══ ROW 8 — Stops & Bearing (y=71, h=12) ═════════════════════════════
+
+    add("top-stops", viz(
+        "top-stops", "🚏 Top 15 תחנות עמוסות — גוש דן",
+        hbar_vs("Top תחנות",
+                a_count("רשומות"),
+                a_terms("stop_id", 15, "תחנה (stop_id)"),
+                "מספר רשומות"),
+        BUS,
+    ), 0, 71, 24, 12)
 
     add("bearing-hist", viz(
-        "bearing-hist", "🧭 התפלגות כיוון נסיעה (Bearing 0°–360°)",
-        hist_vs("התפלגות כיוון נסיעה",
+        "bearing-hist", "🧭 התפלגות כיוון נסיעה",
+        hist_vs("כיוון נסיעה (0°–360°)",
                 a_count("רשומות"),
                 a_hist("bearing", 10, 0, 360, "כיוון (מעלות)"),
                 "מספר רשומות"),
         BUS,
-    ), 0, 69, 48, 10)
+    ), 24, 71, 24, 12)
 
     return done
 
@@ -495,8 +515,7 @@ def create_dashboard(viz_list):
     did = "israel-transit-dashboard"
     requests.delete(f"{KIBANA}/api/saved_objects/dashboard/{did}", headers=HEADERS)
 
-    panels = []
-    refs   = []
+    panels, refs = [], []
     for i, (vid, gx, gy, gw, gh) in enumerate(viz_list):
         panels.append({
             "version": "8.8.0",
@@ -509,11 +528,11 @@ def create_dashboard(viz_list):
 
     body = {
         "attributes": {
-            "title":       "🚌 Israel Transit — Real-Time Dashboard",
-            "description": "ניטור אוטובוסים ורכבות בישראל | bus-positions + train-positions",
+            "title":       "🚌 Israel Transit — גוש דן ותל אביב",
+            "description": "ניטור אוטובוסים ורכבות בגוש דן ותל אביב",
             "hits": 0,
             "timeRestore": True,
-            "timeFrom":    "now-15d",   # מכסה 13–16 אפריל
+            "timeFrom":    "now-60d",
             "timeTo":      "now",
             "refreshInterval": {"pause": False, "value": 60000},
             "panelsJSON":  json.dumps(panels),
@@ -540,7 +559,7 @@ def create_dashboard(viz_list):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    print("\n🚌 Israel Transit — Kibana Setup v3\n")
+    print("\n🚌 Israel Transit — Kibana Setup v4 (גוש דן)\n")
 
     print("🧹 Cleaning...")
     for t, i in ([("dashboard", "israel-transit-dashboard")] +
@@ -550,7 +569,7 @@ def main():
     if not wait_for_kibana():
         print("❌ Kibana not available"); return
 
-    print("\n📋 Index patterns (timeField=_indexed_at)...")
+    print("\n📋 Index patterns...")
     for p in INDEX_PATTERNS:
         upsert_pattern(p)
     set_default()
@@ -564,8 +583,6 @@ def main():
 
     print("\n✅ Done!")
     print("   http://localhost:5601/app/dashboards")
-    print("\n💡 אם גרפי הזמן עדיין ריקים — לחצי 'Refresh' ב-Kibana")
-    print("   ווודאי שטווח הזמן הוא לפחות 'Last 15 days'")
 
 
 if __name__ == "__main__":

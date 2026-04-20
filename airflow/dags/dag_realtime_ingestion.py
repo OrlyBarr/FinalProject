@@ -1,7 +1,13 @@
 """
 airflow/dags/dag_realtime_ingestion.py
 DAG 1: Fetches all GTFS-RT feeds + Railways API → Kafka topics
-Schedule: every minute (producers internally fetch every 30-60s)
+Schedule: every 2 minutes
+
+תיקונים:
+  - start_date נוסף ל-default_args (חובה ב-Airflow, חסר מ-RESILIENT_DEFAULT_ARGS)
+  - max_retry_delay מוגבל ל-5 דקות (real-time — לא 30)
+  - validate_ingestion מזהיר כשאין נתונים
+  - resilient_pipeline נטען בבטחה עם fallback אם לא נגיש
 """
 
 from datetime import datetime, timedelta
@@ -11,14 +17,29 @@ from airflow.utils.trigger_rule import TriggerRule
 import sys
 sys.path.insert(0, "/opt/airflow")
 
+# ── טעינת RESILIENT_DEFAULT_ARGS עם fallback בטוח ───────────────────────────
+# resilient_pipeline.py צריך להיות מועלה ל-/opt/airflow (ראה docker-compose.yml)
+try:
+    from resilient_pipeline import RESILIENT_DEFAULT_ARGS
+except ImportError:
+    # Fallback אם הקובץ לא נמצא — ערכי ברירת מחדל סבירים
+    RESILIENT_DEFAULT_ARGS = {
+        "owner":                     "transit-team",
+        "depends_on_past":           False,
+        "retries":                   5,
+        "retry_delay":               timedelta(minutes=2),
+        "retry_exponential_backoff": True,
+        "max_retry_delay":           timedelta(minutes=5),
+        "execution_timeout":         timedelta(seconds=55),
+        "on_failure_callback":       None,
+    }
+
 default_args = {
-    "owner":            "transit-team",
-    "depends_on_past":  False,
-    "start_date":       datetime(2026, 4, 13),
-    "email_on_failure": True,
-    "retries":          3,
-    "retry_delay":      timedelta(seconds=30),
-    "execution_timeout": timedelta(seconds=55),
+    **RESILIENT_DEFAULT_ARGS,
+    "start_date":        datetime(2026, 4, 13),  # חובה — Airflow לא יטען DAG בלי זה
+    "email_on_failure":  True,
+    "execution_timeout": timedelta(seconds=55),  # חייב להיכנס בחלון של 2 דקות
+    "max_retry_delay":   timedelta(minutes=5),   # real-time — מקסימום 5 דקות, לא 30
 }
 
 
@@ -91,13 +112,15 @@ def validate_ingestion(**context):
     """Validate that all producers sent data and log summary."""
     ti = context["ti"]
     counts = {
-        "bus_positions": ti.xcom_pull(task_ids="fetch_bus_positions",  key="bus_count")   or 0,
-        "trip_updates":  ti.xcom_pull(task_ids="fetch_trip_updates",   key="trip_count")  or 0,
+        "bus_positions":   ti.xcom_pull(task_ids="fetch_bus_positions",   key="bus_count")   or 0,
+        "trip_updates":    ti.xcom_pull(task_ids="fetch_trip_updates",    key="trip_count")  or 0,
         "train_positions": ti.xcom_pull(task_ids="fetch_train_positions", key="train_count") or 0,
         "service_alerts":  ti.xcom_pull(task_ids="fetch_service_alerts",  key="alert_count") or 0,
     }
     total = sum(counts.values())
     print(f"Ingestion summary: {counts} | total={total}")
+    if total == 0:
+        print("WARNING: No records ingested this cycle — check API/Kafka availability")
     return total
 
 

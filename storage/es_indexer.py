@@ -52,18 +52,40 @@ INDEX_SETTINGS = {
     "mappings": {
         "dynamic": "true",
         "properties": {
-            "timestamp":     {"type": "date", "ignore_malformed": True},
-            "recorded_at":   {"type": "date", "ignore_malformed": True},
-            "latitude":      {"type": "float"},
-            "longitude":     {"type": "float"},
-            "location":      {"type": "geo_point"},
-            "delay_minutes": {"type": "float"},
-            "operator_name": {"type": "keyword"},
-            "route_id":      {"type": "keyword"},
-            "vehicle_id":    {"type": "keyword"},
-            "line_ref":      {"type": "keyword"},
-            "trip_id":       {"type": "keyword"},
-            "stop_id":       {"type": "keyword"},
+            # זמן
+            "timestamp":         {"type": "date", "ignore_malformed": True},
+            "recorded_at":       {"type": "date", "ignore_malformed": True},
+            "_indexed_at":       {"type": "date"},
+            # מיקום
+            "latitude":          {"type": "float"},
+            "longitude":         {"type": "float"},
+            "lat":               {"type": "float"},
+            "lon":               {"type": "float"},
+            "location":          {"type": "geo_point"},
+            # זיהוי
+            "operator_name":     {"type": "keyword"},
+            "operator_id":       {"type": "keyword"},
+            "operator_ref":      {"type": "keyword"},
+            "route_id":          {"type": "keyword"},
+            "route_short_name":  {"type": "keyword"},
+            "vehicle_id":        {"type": "keyword"},
+            "line_ref":          {"type": "keyword"},
+            "trip_id":           {"type": "keyword"},
+            "stop_id":           {"type": "keyword"},
+            "train_number":      {"type": "keyword"},
+            "area":              {"type": "keyword"},
+            # מהירות — null_value מאפשר חיפוש גם כשהשדה חסר
+            "speed_kmh":         {"type": "float"},   # null אם SIRI לא מדווח
+            "velocity":          {"type": "float"},   # null אם SIRI לא מדווח
+            "is_moving":         {"type": "boolean"},
+            "speed_category":    {"type": "keyword"},
+            # עיכוב
+            "delay_minutes":     {"type": "float"},
+            "delay_seconds":     {"type": "integer"},
+            "delay_category":    {"type": "keyword"},
+            "is_delayed":        {"type": "boolean"},
+            # כיוון
+            "bearing":           {"type": "float"},
         }
     }
 }

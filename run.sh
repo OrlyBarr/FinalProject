@@ -135,6 +135,10 @@ else
   success "All libraries installed"
 fi
 
+# Create resilient pipeline buffer directories (Kafka + MinIO local fallback)
+mkdir -p /tmp/transit_buffer/kafka /tmp/transit_buffer/minio_pending
+success "Resilient buffer directories ready: /tmp/transit_buffer/"
+
 # ─────────────────────────────────────────────────────────────
 #  Step 2: Start Docker services
 # ─────────────────────────────────────────────────────────────
@@ -173,6 +177,16 @@ success "All containers started"
 echo ""
 docker compose ps
 echo ""
+
+# Deploy resilient_pipeline.py to both Airflow containers so DAGs can import it
+if [ -f "resilient_pipeline.py" ]; then
+  docker cp resilient_pipeline.py airflow-webserver:/opt/airflow/resilient_pipeline.py 2>/dev/null && \
+  docker cp resilient_pipeline.py airflow-scheduler:/opt/airflow/resilient_pipeline.py 2>/dev/null && \
+  success "resilient_pipeline.py deployed to Airflow containers" || \
+  warn "Could not copy resilient_pipeline.py to containers (will retry on next run)"
+else
+  warn "resilient_pipeline.py not found — skipping container deploy"
+fi
 
 # ─────────────────────────────────────────────────────────────
 #  Step 3: Wait for critical services
@@ -315,7 +329,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "8 — Enabling Airflow DAGs"
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
@@ -397,6 +411,34 @@ except Exception as e:
 EOF
 
 # ─────────────────────────────────────────────────────────────
+#  Step 10.5: Pipeline Health Check (resilient_pipeline)
+# ─────────────────────────────────────────────────────────────
+step "10.5 — Pipeline resilience health check"
+
+# Run health check from the HOST — always use localhost endpoints (not Docker-internal hostnames)
+MINIO_ENDPOINT=http://localhost:9000 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 python3 - <<'EOF'
+import sys, json
+sys.path.insert(0, '.')
+try:
+    from resilient_pipeline import ResilientProducer, ResilientMinioWriter, pipeline_health
+    import os
+    bootstrap = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+    endpoint  = os.getenv('MINIO_ENDPOINT', 'http://localhost:9000')
+    producer  = ResilientProducer(bootstrap)
+    minio     = ResilientMinioWriter(endpoint, 'minioadmin', 'minioadmin123')
+    health    = pipeline_health(producer, minio)
+    kafka_ok  = health.get('kafka', {}).get('connected', False)
+    minio_ok  = health.get('minio', {}).get('connected', False)
+    buf_files = health.get('kafka', {}).get('buffer_files', 0)
+    pending   = health.get('minio', {}).get('pending_files', 0)
+    print(f'  Kafka:  {"✅ connected" if kafka_ok else "⚠️  buffering locally"} | buffered={buf_files} msgs')
+    print(f'  MinIO:  {"✅ connected" if minio_ok else "⚠️  pending local retry"} | pending={pending} files')
+    print(f'  Overall: {"✅ healthy" if health["overall_healthy"] else "⚠️  degraded (fallbacks active)"}')
+except Exception as e:
+    print(f'⚠️  Health check skipped: {e}')
+EOF
+
+# ─────────────────────────────────────────────────────────────
 #  Step 11: Start Bot API (port 5000)
 # ─────────────────────────────────────────────────────────────
 step "11 — Starting Transit Bot API (port 5000)"
@@ -451,7 +493,8 @@ echo ""
 echo -e "${BOLD}  🚌  Project components:${NC}"
   echo -e "  • ${GREEN}5 Producers${NC} fetching data from GTFS-RT, Israel Railways, and HERE Traffic API"
   echo -e "  • ${GREEN}11 Kafka Topics${NC} for real-time streaming (incl. bus/train delay topics)"
-echo -e "  • ${GREEN}5 Airflow DAGs${NC} for ETL scheduling"
+echo -e "  • ${GREEN}8 Airflow DAGs${NC} for ETL scheduling (3 direct-to-MinIO + 5 Kafka-based)"
+echo -e "  • ${GREEN}Resilient Pipeline${NC} — Kafka buffer + MinIO retry + exponential backoff on all DAGs"
 echo -e "  • ${GREEN}MinIO S3${NC} for storage (Data Lake)"
 echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
 echo -e "  • ${GREEN}Delay Collectors${NC} (bus, train, historical) → run: bash scripts/start_collectors.sh"
