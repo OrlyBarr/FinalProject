@@ -2,7 +2,7 @@
 # Python Dependencies
 
 # ── Kafka ─────────────────────────────────────────────────
-kafka-python==2.0.2
+kafka-python-ng>=2.2.3
 
 # ── GTFS-RT Protocol Buffers ──────────────────────────────
 gtfs-realtime-bindings==2.0.0    # Google GTFS-RT protobuf bindings
