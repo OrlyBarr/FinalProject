@@ -2,7 +2,7 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
-.env
+#.env
 *.json
 !package.json
 # Python virtual environment
