@@ -18,6 +18,7 @@ Endpoints:
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
 import os
 import sys
 import threading
@@ -26,6 +27,8 @@ import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
+
+log = logging.getLogger(__name__)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -683,11 +686,14 @@ class BotHandler(BaseHTTPRequestHandler):
             target = HASADNA_URL.rstrip("/") + api_path
 
             # הוסף פרמטרי bbox לגוש דן לכל קריאת siri_vehicle_locations
+            # (רק אם הפרונטאנד לא שלח bbox משלו)
             query = parsed.query
-            if "siri_vehicle_locations" in api_path:
+            if "siri_vehicle_locations" in api_path and "lat__greater_or_equal" not in query:
                 bbox_params = (
-                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                    f"lat__greater_or_equal={GUSH_DAN['lat_min']}"
+                    f"&lat__lower_or_equal={GUSH_DAN['lat_max']}"
+                    f"&lon__greater_or_equal={GUSH_DAN['lon_min']}"
+                    f"&lon__lower_or_equal={GUSH_DAN['lon_max']}"
                 )
                 query = f"{query}&{bbox_params}" if query else bbox_params
 
@@ -702,10 +708,12 @@ class BotHandler(BaseHTTPRequestHandler):
                 api_path = "/" + api_path
             target = HASADNA_URL.rstrip("/") + api_path
             query  = parsed.query
-            if "siri_vehicle_locations" in api_path:
+            if "siri_vehicle_locations" in api_path and "lat__greater_or_equal" not in query:
                 bbox_params = (
-                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                    f"lat__greater_or_equal={GUSH_DAN['lat_min']}"
+                    f"&lat__lower_or_equal={GUSH_DAN['lat_max']}"
+                    f"&lon__greater_or_equal={GUSH_DAN['lon_min']}"
+                    f"&lon__lower_or_equal={GUSH_DAN['lon_max']}"
                 )
                 query = f"{query}&{bbox_params}" if query else bbox_params
             if query:
@@ -713,11 +721,38 @@ class BotHandler(BaseHTTPRequestHandler):
             self._proxy(target)
 
         # ── Israel Railways → Stride (israelrail.azurewebsites.net is dead) ──
+        # מקבל פרמטר stationId אופציונלי לסינון לפי אזור התחנה
         elif path.startswith("/proxy/rail"):
+            station_id = qs.get("stationId", [""])[0]
+            # קואורדינטות תחנות רכבת ישראל
+            RAIL_STATION_COORDS = {
+                "700":  (32.4493, 34.9205), "1220": (33.0063, 35.0972),
+                "1500": (32.0893, 34.7773), "1600": (32.0648, 34.7751),
+                "1700": (32.0858, 34.7784), "2100": (31.8952, 34.8018),
+                "2200": (31.9651, 34.7984), "2300": (32.0993, 34.7977),
+                "3100": (31.8952, 35.0186), "3400": (31.7919, 35.2040),
+                "3600": (32.8145, 34.9886), "3700": (31.9993, 34.8849),
+                "4100": (32.8145, 34.9886), "4600": (33.0063, 35.0972),
+                "4640": (32.9257, 35.0707), "4900": (32.4493, 34.9205),
+                "5000": (32.3155, 34.8519), "5200": (32.0912, 34.8560),
+                "6700": (32.1837, 34.8700), "6900": (31.8052, 34.6468),
+                "7300": (31.2435, 34.8018), "7500": (31.8052, 34.6468),
+                "7600": (31.6598, 34.5714), "8600": (31.8952, 35.0186),
+            }
+            if station_id and station_id in RAIL_STATION_COORDS:
+                lat, lon = RAIL_STATION_COORDS[station_id]
+                r = 0.20  # ~22 ק"מ סביב התחנה
+                lat_min, lat_max = lat - r, lat + r
+                lon_min, lon_max = lon - r, lon + r
+            else:
+                lat_min = GUSH_DAN["lat_min"]
+                lat_max = GUSH_DAN["lat_max"]
+                lon_min = GUSH_DAN["lon_min"]
+                lon_max = GUSH_DAN["lon_max"]
             stride_params = (
-                f"siri_route__operator_ref=2&limit=100&order_by=id+desc"
-                f"&lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                f"siri_route__operator_ref=2&limit=50&order_by=id+desc"
+                f"&lat__greater_or_equal={lat_min}&lat__lower_or_equal={lat_max}"
+                f"&lon__greater_or_equal={lon_min}&lon__lower_or_equal={lon_max}"
             )
             target = f"{HASADNA_URL.rstrip('/')}/siri_vehicle_locations/list?{stride_params}"
             self._proxy(target)
