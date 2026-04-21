@@ -29,6 +29,14 @@ import urllib.error
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+# תיקון encoding ל-Windows/ASCII environments
+import locale
+try:
+    locale.setlocale(locale.LC_ALL, '')
+except Exception:
+    pass
 
 BOT_PORT       = int(os.getenv("BOT_PORT", 5000))
 # israelrail.azurewebsites.net is hijacked — disabled
@@ -41,7 +49,8 @@ BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 # טעינת Google Maps API Key מ-.env
 from dotenv import load_dotenv
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_MAPS_API_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
+ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ── גוש דן ותל אביב — Bounding Box ──────────────────────────────────────────
 GUSH_DAN = {
@@ -187,8 +196,15 @@ def load_json(filename):
 
 class BotHandler(BaseHTTPRequestHandler):
 
-    def log_message(self, format, *args):
-        print(f"[BOT] {self.address_string()} - {format % args}")
+    def log_message(self, fmt, *args):
+        """Override to prevent ASCII encoding errors with Hebrew URLs."""
+        try:
+            msg = (fmt % args).encode("utf-8", errors="replace").decode("utf-8")
+            sys.stderr.buffer.write(
+                f"[{self.log_date_time_string()}] {msg}\n".encode("utf-8")
+            )
+        except Exception:
+            pass
 
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -245,8 +261,124 @@ class BotHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path   = parsed.path
+        length = int(self.headers.get("Content-Length", 0))
+        body   = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(body)
+        except Exception:
+            payload = {}
+
+        # ── /ask — Gemini API (חינמי) ────────────────────────────────────────
+        # POST /ask  { messages: [...], tool_data: "..." }
+        if path == "/ask":
+            # GEMINI_API_KEY מ-aistudio.google.com (חינמי, 1500/יום)
+            # fallback ל-GOOGLE_MAPS_API_KEY אם GEMINI_API_KEY לא מוגדר
+            api_key = os.getenv("GEMINI_API_KEY") or GOOGLE_MAPS_API_KEY
+            if not api_key:
+                self.send_json({"error": "הגדירי GEMINI_API_KEY ב-.env (מ-aistudio.google.com)"}, status=500)
+                return
+            try:
+                messages  = payload.get("messages", [])
+                tool_data = payload.get("tool_data", "")
+
+                system_text = f"""אתה סוכן תחבורה ציבורית חכם לגוש דן ותל אביב, ישראל.
+אתה מנהל שיחה טבעית בעברית — בדיוק כמו Google Maps Transit, רק בצ'אט.
+
+כללים:
+1. תמיד שאל שאלות המשך כדי לקבל מידע חסר. לעולם אל תנחש.
+2. כשמישהו אומר "אוטובוסים ליד" — שאל: "מה הכתובת המדויקת?"
+3. כשמישהו שואל על קו — שאל: "באיזה כיוון? מאיפה לאן?"
+4. כשמישהו שואל על רכבת — שאל: "מאיזו תחנה? לאן?"
+5. כשמישהו שואל על מפעיל — שאל: "איזה מפעיל? (דן, אגד, NTA, סופרבוס, קווים...)"
+6. תן תשובות קצרות וישירות — המידע הרלוונטי בלבד.
+7. אם יש נתונים אמיתיים מהכלים — השתמש בהם. אחרת — ציין שאין מידע זמין.
+8. אל תמציא מספרי קווים, שעות או תחנות שאינם בנתונים.
+9. המלץ על Google Maps Transit לנסיעה ספציפית כשצריך.
+
+אזור הכיסוי: גוש דן ותל אביב (lat 31.97–32.19, lon 34.73–34.93).
+מפעילים: דן (3), אגד (5), NTA מטרופולין (6), סופרבוס (18), קווים (21).
+תחנות רכבת: ת"א מרכז, ת"א סבידור, ת"א השלום, ת"א הגנה, ת"א אוניברסיטה, בני ברק, פתח תקווה.
+{f"נתונים רלוונטיים:{chr(10)}{tool_data}" if tool_data else ""}"""
+
+                # המר היסטוריית הודעות לפורמט Gemini
+                # Gemini: contents = [{role: "user"/"model", parts: [{text: "..."}]}]
+                gemini_contents = []
+
+                # הוסף system כהודעת user ראשונה אם אין היסטוריה
+                for msg in messages[-12:]:
+                    role = "model" if msg.get("role") == "assistant" else "user"
+                    gemini_contents.append({
+                        "role":  role,
+                        "parts": [{"text": msg.get("content", "")}],
+                    })
+
+                # אם ההודעה הראשונה היא model — הוסף system לפניה
+                if gemini_contents and gemini_contents[0]["role"] == "model":
+                    gemini_contents.insert(0, {
+                        "role":  "user",
+                        "parts": [{"text": "שלום, אתה סוכן תחבורה ציבורית."}],
+                    })
+
+                req_body = json.dumps({
+                    "system_instruction": {"parts": [{"text": system_text}]},
+                    "contents": gemini_contents,
+                    "generationConfig": {
+                        "maxOutputTokens": 800,
+                        "temperature":     0.7,
+                    },
+                }, ensure_ascii=False).encode("utf-8")
+
+                # Gemini 2.0 Flash — חינמי (1500 בקשות/יום)
+                # משתמשים ב-http.client ישירות לתמיכה בעברית
+                import http.client, ssl
+                ctx = ssl.create_default_context()
+                conn = http.client.HTTPSConnection(
+                    "generativelanguage.googleapis.com", timeout=30, context=ctx)
+                conn.request(
+                    "POST",
+                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+                    body=req_body,
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                )
+                http_resp = conn.getresponse()
+                raw = http_resp.read().decode("utf-8")
+                conn.close()
+
+                if http_resp.status != 200:
+                    err_msg = json.loads(raw).get("error", {}).get("message", raw[:200])
+                    self.send_json({"error": err_msg}, status=http_resp.status)
+                    return
+
+                result = json.loads(raw)
+
+                # חלץ תשובה מפורמט Gemini
+                reply = (
+                    result.get("candidates", [{}])[0]
+                    .get("content", {})
+                    .get("parts", [{}])[0]
+                    .get("text", "לא התקבלה תשובה")
+                )
+                self.send_json({"reply": reply})
+
+            except urllib.error.HTTPError as e:
+                err_body = e.read() or b"{}"
+                try:
+                    err_msg = json.loads(err_body).get("error", {}).get("message", str(e))
+                except Exception:
+                    err_msg = str(e)
+                self.send_json({"error": err_msg}, status=e.code)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        else:
+            self.send_json({"error": "Unknown POST endpoint"}, status=404)
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)

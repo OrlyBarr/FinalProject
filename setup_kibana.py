@@ -68,11 +68,9 @@ def wait_for_kibana():
             r = requests.get(f"{KIBANA}/api/status", timeout=5)
             if r.status_code == 200:
                 d   = r.json()
-                lvl = d.get("overall", {}).get("level") or d.get("status", {}).get("overall", {}).get("state") or "available"
-                if lvl in ("available", "green", "all_green", "some_degraded"):
-                    print(f"✅ Kibana ready ({lvl})")
-                    return True
-                print(f"  Kibana status: {lvl} — waiting...")
+                lvl = d.get("overall", {}).get("level") or "available"
+                print(f"✅ Kibana ready ({lvl})")
+                return True
         except Exception:
             pass
         print(f"  {i+1}/30..."); time.sleep(3)
@@ -333,16 +331,17 @@ def create_visualizations():
     add("kpi-train-count", viz(
         "kpi-train-count", "🚆 רשומות רכבות",
         metric_vs("רשומות רכבות", a_count("רשומות"),
-                  "גוש דן + ת\"א", schema="Blues"),
+                  "כל ישראל (Stride operator_ref=2)", schema="Blues"),
         TRAIN,
     ), 32, 0, 8, 5)
 
-    # רכבות נוסעות
+    # קווי רכבת ייחודיים (line_ref — השדה האמיתי)
     add("kpi-train-moving", viz(
-        "kpi-train-moving", "🚆 רכבות נוסעות",
-        metric_vs("רכבות נוסעות", a_count("נוסעות"),
-                  "is_moving = true", schema="Blues"),
-        TRAIN, "is_moving: true",
+        "kpi-train-moving", "🚆 קווי רכבת ייחודיים",
+        metric_vs("קווים ייחודיים",
+                  a_card("line_ref", "קווים"),
+                  "לפי line_ref", schema="Blues"),
+        TRAIN,
     ), 40, 0, 8, 5)
 
     # ══ ROW 2 — Timelines (y=5, h=10) ════════════════════════════════════════
@@ -355,15 +354,15 @@ def create_visualizations():
     ), 0, 5, 24, 10)
 
     add("tl-train", viz(
-        "tl-train", "📈 פעילות רכבות לאורך זמן — גוש דן",
+        "tl-train", "📈 פעילות רכבות לאורך זמן",
         line_vs("פעילות רכבות לאורך זמן",
                 a_count("רשומות"), "רשומות"),
         TRAIN,
     ), 24, 5, 24, 10)
 
-    # ══ ROW 3 — Moving vs Parked pies (y=15, h=10) ═══════════════════════════
+    # ══ ROW 3 — Moving vs Parked (y=15, h=10) ═══════════════════════════════
 
-    # פילוח נוסע/חונה/לא ידוע — אוטובוסים
+    # פילוח נוסע/חונה — אוטובוסים
     add("moving-pie-bus", viz(
         "moving-pie-bus", "🚌 נוסע vs חונה — אוטובוסים",
         pie_vs("נוסע vs חונה",
@@ -371,17 +370,17 @@ def create_visualizations():
         BUS,
     ), 0, 15, 24, 10)
 
-    # פילוח נוסע/חונה — רכבות
+    # Top קווי רכבת לפי line_ref (במקום is_moving שתמיד False)
     add("moving-pie-train", viz(
-        "moving-pie-train", "🚆 נוסע vs חונה — רכבות",
-        pie_vs("נוסע vs חונה — רכבות",
-               a_terms("is_moving", 3, "סטטוס")),
+        "moving-pie-train", "🚆 Top 10 קווי רכבת פעילים",
+        pie_vs("קווי רכבת לפי line_ref",
+               a_terms("line_ref", 10, "קו רכבת")),
         TRAIN,
     ), 24, 15, 24, 10)
 
-    # ══ ROW 4 — Speed (y=25, h=10) ══════════════════════════════════════════
+    # ══ ROW 4 — Speed & Train lines (y=25, h=10) ════════════════════════════
 
-    # התפלגות מהירות — רק כאלה שמדווחים
+    # התפלגות מהירות אוטובוסים — רק מדווחים
     add("spd-hist-bus", viz(
         "spd-hist-bus", "💨 התפלגות מהירות אוטובוסים",
         hist_vs("התפלגות מהירות (כלי רכב מדווחים בלבד)",
@@ -391,9 +390,9 @@ def create_visualizations():
         BUS, "speed_kmh > 0",
     ), 0, 25, 24, 10)
 
-    # מהירות לאורך זמן
+    # מהירות ממוצעת לאורך זמן — אוטובוסים בלבד (velocity רכבת תמיד 0)
     add("spd-time-bus", viz(
-        "spd-time-bus", "📉 מהירות ממוצעת לאורך זמן",
+        "spd-time-bus", "📉 מהירות ממוצעת אוטובוסים לאורך זמן",
         line_vs("מהירות ממוצעת לאורך זמן",
                 a_avg("speed_kmh", "מהירות (קמ\"ש)"),
                 "קמ\"ש", threshold=20),
@@ -477,11 +476,12 @@ def create_visualizations():
         BUS,
     ), 0, 59, 24, 12)
 
+    # Top 15 קווי רכבת לפי line_ref (keyword — train_number הוא text ולא aggregatable)
     add("top-train-veh", viz(
-        "top-train-veh", "🚆 Top 15 נסיעות רכבת",
-        hbar_vs("Top רכבות",
+        "top-train-veh", "🚆 Top 15 קווי רכבת פעילים (לפי line_ref)",
+        hbar_vs("Top קווי רכבת",
                 a_count("רשומות"),
-                a_terms("trip_id", 15, "trip_id"),
+                a_terms("line_ref", 15, "קו רכבת (line_ref)"),
                 "מספר רשומות"),
         TRAIN,
     ), 24, 59, 24, 12)
@@ -559,7 +559,7 @@ def create_dashboard(viz_list):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    print("\n🚌 Israel Transit — Kibana Setup v4 (גוש דן)\n")
+    print("\n🚌 Israel Transit — Kibana Setup v5 (תיקון נתוני רכבת)\n")
 
     print("🧹 Cleaning...")
     for t, i in ([("dashboard", "israel-transit-dashboard")] +
