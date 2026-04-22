@@ -318,18 +318,29 @@ class BotHandler(BaseHTTPRequestHandler):
                     out.pop(0)
                 return out or [{"role": "user", "parts": [{"text": "שלום"}]}]
 
-            # Gemini — runs in thread so we can enforce a HARD wall-clock timeout
-            def _gemini():
+            # Gemini — מנסה מודלים בסדר עדיפות (free tier)
+            # gemini-1.5-flash: 1500 req/day, 15 RPM — הכי אמין בחינמי
+            # gemini-2.0-flash-lite: מהיר יותר אבל מכסה קטנה יותר
+            # gemini-1.5-flash-8b: הקטן ביותר, גיבוי אחרון
+            GEMINI_MODELS = [
+                "gemini-1.5-flash",
+                "gemini-2.0-flash-lite",
+                "gemini-1.5-flash-8b",
+            ]
+
+            def _gemini_model(model):
                 r = _req.post(
-                    "https://generativelanguage.googleapis.com"
-                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
+                    f"https://generativelanguage.googleapis.com"
+                    f"/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}",
                     json={
                         "system_instruction": {"parts": [{"text": SYSTEM}]},
                         "contents": _contents(messages),
                         "generationConfig": {"maxOutputTokens": 400, "temperature": 0.7},
                     },
-                    timeout=(5, 12),   # (connect timeout, read timeout)
+                    timeout=(5, 12),
                 )
+                if r.status_code == 429:
+                    raise RuntimeError(f"429_QUOTA")   # quota — try next model
                 if r.status_code != 200:
                     raise RuntimeError(r.json().get("error", {}).get("message", r.text[:150]))
                 cands = r.json().get("candidates", [])
@@ -337,6 +348,21 @@ class BotHandler(BaseHTTPRequestHandler):
                     raise RuntimeError("Gemini: תשובה ריקה")
                 parts = cands[0].get("content", {}).get("parts", [])
                 return "".join(p.get("text", "") for p in parts).strip() or "לא התקבלה תשובה"
+
+            def _gemini():
+                last_err = ""
+                for model in GEMINI_MODELS:
+                    try:
+                        result = _gemini_model(model)
+                        log.info(f"/ask answered by {model}")
+                        return result
+                    except RuntimeError as e:
+                        last_err = str(e)
+                        if "429_QUOTA" in last_err:
+                            log.warning(f"/ask {model} quota exceeded — trying next model")
+                            continue
+                        raise   # שגיאה אחרת — הפסק מיד
+                raise RuntimeError(f"כל מודלי Gemini חרגו ממכסה: {last_err}")
 
             # Ollama — fallback, only if port 11434 is open
             def _ollama():
