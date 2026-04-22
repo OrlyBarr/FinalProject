@@ -277,7 +277,7 @@ def fetch_trains() -> list:
         r = requests.get(
             f"{OPEN_BUS_URL}/siri_vehicle_locations/list",
             params={
-                "operator_ref": "2",
+                "siri_route__operator_ref": "2",   # FIX: was "operator_ref" — Stride uses siri_route__ prefix
                 "limit":        300,
                 "order_by":     "id desc",
             },

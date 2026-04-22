@@ -18,6 +18,7 @@ Endpoints:
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
 import os
 import sys
 import threading
@@ -26,6 +27,8 @@ import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
+
+log = logging.getLogger(__name__)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -238,7 +241,7 @@ class BotHandler(BaseHTTPRequestHandler):
                     "User-Agent": "IsraelTransitBot/1.0",
                 },
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 body   = resp.read()
                 status = resp.status
             self.send_response(status)
@@ -255,6 +258,8 @@ class BotHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
+        except TimeoutError:
+            self.send_json({"error": "timeout — השרת החיצוני לא הגיב בזמן, נסי שוב"}, status=504)
         except Exception as e:
             self.send_json({"error": f"proxy error: {e}"}, status=502)
 
@@ -275,107 +280,60 @@ class BotHandler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
 
-        # ── /ask — Gemini API (חינמי) ────────────────────────────────────────
+        # ── /ask — Ollama (מקומי, ללא API Key) ──────────────────────────────
         # POST /ask  { messages: [...], tool_data: "..." }
         if path == "/ask":
-            # GEMINI_API_KEY מ-aistudio.google.com (חינמי, 1500/יום)
-            # fallback ל-GOOGLE_MAPS_API_KEY אם GEMINI_API_KEY לא מוגדר
-            api_key = os.getenv("GEMINI_API_KEY") or GOOGLE_MAPS_API_KEY
-            if not api_key:
-                self.send_json({"error": "הגדירי GEMINI_API_KEY ב-.env (מ-aistudio.google.com)"}, status=500)
-                return
             try:
                 messages  = payload.get("messages", [])
                 tool_data = payload.get("tool_data", "")
 
-                system_text = f"""אתה סוכן תחבורה ציבורית חכם לגוש דן ותל אביב, ישראל.
-אתה מנהל שיחה טבעית בעברית — בדיוק כמו Google Maps Transit, רק בצ'אט.
+                system_text = (
+                    "אתה סוכן תחבורה ציבורית חכם לגוש דן ותל אביב, ישראל. "
+                    "ענה תמיד בעברית. "
+                    "שאל שאלות המשך כדי לקבל מידע חסר. "
+                    "כשמישהו שואל על אוטובוסים ליד כתובת — שאל מה הכתובת. "
+                    "כשמישהו שואל על קו — שאל מאיפה לאן. "
+                    "כשמישהו שואל על רכבת — שאל מאיזו תחנה. "
+                    "אל תמציא מספרי קווים או שעות. "
+                    + (f"נתונים: {tool_data}" if tool_data else "")
+                )
 
-כללים:
-1. תמיד שאל שאלות המשך כדי לקבל מידע חסר. לעולם אל תנחש.
-2. כשמישהו אומר "אוטובוסים ליד" — שאל: "מה הכתובת המדויקת?"
-3. כשמישהו שואל על קו — שאל: "באיזה כיוון? מאיפה לאן?"
-4. כשמישהו שואל על רכבת — שאל: "מאיזו תחנה? לאן?"
-5. כשמישהו שואל על מפעיל — שאל: "איזה מפעיל? (דן, אגד, NTA, סופרבוס, קווים...)"
-6. תן תשובות קצרות וישירות — המידע הרלוונטי בלבד.
-7. אם יש נתונים אמיתיים מהכלים — השתמש בהם. אחרת — ציין שאין מידע זמין.
-8. אל תמציא מספרי קווים, שעות או תחנות שאינם בנתונים.
-9. המלץ על Google Maps Transit לנסיעה ספציפית כשצריך.
-
-אזור הכיסוי: גוש דן ותל אביב (lat 31.97–32.19, lon 34.73–34.93).
-מפעילים: דן (3), אגד (5), NTA מטרופולין (6), סופרבוס (18), קווים (21).
-תחנות רכבת: ת"א מרכז, ת"א סבידור, ת"א השלום, ת"א הגנה, ת"א אוניברסיטה, בני ברק, פתח תקווה.
-{f"נתונים רלוונטיים:{chr(10)}{tool_data}" if tool_data else ""}"""
-
-                # המר היסטוריית הודעות לפורמט Gemini
-                # Gemini: contents = [{role: "user"/"model", parts: [{text: "..."}]}]
-                gemini_contents = []
-
-                # הוסף system כהודעת user ראשונה אם אין היסטוריה
-                for msg in messages[-12:]:
-                    role = "model" if msg.get("role") == "assistant" else "user"
-                    gemini_contents.append({
-                        "role":  role,
-                        "parts": [{"text": msg.get("content", "")}],
+                ollama_messages = [{"role": "system", "content": system_text}]
+                for msg in messages[-8:]:
+                    ollama_messages.append({
+                        "role":    msg.get("role", "user"),
+                        "content": msg.get("content", ""),
                     })
 
-                # אם ההודעה הראשונה היא model — הוסף system לפניה
-                if gemini_contents and gemini_contents[0]["role"] == "model":
-                    gemini_contents.insert(0, {
-                        "role":  "user",
-                        "parts": [{"text": "שלום, אתה סוכן תחבורה ציבורית."}],
-                    })
-
+                import http.client
                 req_body = json.dumps({
-                    "system_instruction": {"parts": [{"text": system_text}]},
-                    "contents": gemini_contents,
-                    "generationConfig": {
-                        "maxOutputTokens": 800,
-                        "temperature":     0.7,
-                    },
+                    "model":    "tinyllama",
+                    "messages": ollama_messages,
+                    "stream":   False,
+                    "options":  {"num_predict": 300, "temperature": 0.7, "num_ctx": 1024},
                 }, ensure_ascii=False).encode("utf-8")
 
-                # Gemini 2.0 Flash — חינמי (1500 בקשות/יום)
-                # משתמשים ב-http.client ישירות לתמיכה בעברית
-                import http.client, ssl
-                ctx = ssl.create_default_context()
-                conn = http.client.HTTPSConnection(
-                    "generativelanguage.googleapis.com", timeout=30, context=ctx)
-                conn.request(
-                    "POST",
-                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-                    body=req_body,
-                    headers={"Content-Type": "application/json; charset=utf-8"},
-                )
+                conn = http.client.HTTPConnection("127.0.0.1", 11434, timeout=120)
+                conn.request("POST", "/api/chat", body=req_body,
+                             headers={"Content-Type": "application/json"})
                 http_resp = conn.getresponse()
                 raw = http_resp.read().decode("utf-8")
                 conn.close()
 
                 if http_resp.status != 200:
-                    err_msg = json.loads(raw).get("error", {}).get("message", raw[:200])
-                    self.send_json({"error": err_msg}, status=http_resp.status)
+                    self.send_json({"error": f"Ollama error {http_resp.status}: {raw[:200]}"}, status=500)
                     return
 
                 result = json.loads(raw)
-
-                # חלץ תשובה מפורמט Gemini
-                reply = (
-                    result.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "לא התקבלה תשובה")
-                )
+                reply  = result.get("message", {}).get("content", "לא התקבלה תשובה")
                 self.send_json({"reply": reply})
 
-            except urllib.error.HTTPError as e:
-                err_body = e.read() or b"{}"
-                try:
-                    err_msg = json.loads(err_body).get("error", {}).get("message", str(e))
-                except Exception:
-                    err_msg = str(e)
-                self.send_json({"error": err_msg}, status=e.code)
+            except TimeoutError:
+                self.send_json({"error": "timeout — Ollama לא הגיב בזמן, נסי שוב"}, status=504)
             except Exception as e:
-                self.send_json({"error": str(e)}, status=500)
+                self.send_json({"error": f"Ollama: {str(e)}"}, status=500)
+
+
 
         else:
             self.send_json({"error": "Unknown POST endpoint"}, status=404)
@@ -683,11 +641,14 @@ class BotHandler(BaseHTTPRequestHandler):
             target = HASADNA_URL.rstrip("/") + api_path
 
             # הוסף פרמטרי bbox לגוש דן לכל קריאת siri_vehicle_locations
+            # (רק אם הפרונטאנד לא שלח bbox משלו)
             query = parsed.query
-            if "siri_vehicle_locations" in api_path:
+            if "siri_vehicle_locations" in api_path and "lat__greater_or_equal" not in query:
                 bbox_params = (
-                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                    f"lat__greater_or_equal={GUSH_DAN['lat_min']}"
+                    f"&lat__lower_or_equal={GUSH_DAN['lat_max']}"
+                    f"&lon__greater_or_equal={GUSH_DAN['lon_min']}"
+                    f"&lon__lower_or_equal={GUSH_DAN['lon_max']}"
                 )
                 query = f"{query}&{bbox_params}" if query else bbox_params
 
@@ -702,10 +663,12 @@ class BotHandler(BaseHTTPRequestHandler):
                 api_path = "/" + api_path
             target = HASADNA_URL.rstrip("/") + api_path
             query  = parsed.query
-            if "siri_vehicle_locations" in api_path:
+            if "siri_vehicle_locations" in api_path and "lat__greater_or_equal" not in query:
                 bbox_params = (
-                    f"lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                    f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                    f"lat__greater_or_equal={GUSH_DAN['lat_min']}"
+                    f"&lat__lower_or_equal={GUSH_DAN['lat_max']}"
+                    f"&lon__greater_or_equal={GUSH_DAN['lon_min']}"
+                    f"&lon__lower_or_equal={GUSH_DAN['lon_max']}"
                 )
                 query = f"{query}&{bbox_params}" if query else bbox_params
             if query:
@@ -713,11 +676,38 @@ class BotHandler(BaseHTTPRequestHandler):
             self._proxy(target)
 
         # ── Israel Railways → Stride (israelrail.azurewebsites.net is dead) ──
+        # מקבל פרמטר stationId אופציונלי לסינון לפי אזור התחנה
         elif path.startswith("/proxy/rail"):
+            station_id = qs.get("stationId", [""])[0]
+            # קואורדינטות תחנות רכבת ישראל
+            RAIL_STATION_COORDS = {
+                "700":  (32.4493, 34.9205), "1220": (33.0063, 35.0972),
+                "1500": (32.0893, 34.7773), "1600": (32.0648, 34.7751),
+                "1700": (32.0858, 34.7784), "2100": (31.8952, 34.8018),
+                "2200": (31.9651, 34.7984), "2300": (32.0993, 34.7977),
+                "3100": (31.8952, 35.0186), "3400": (31.7919, 35.2040),
+                "3600": (32.8145, 34.9886), "3700": (31.9993, 34.8849),
+                "4100": (32.8145, 34.9886), "4600": (33.0063, 35.0972),
+                "4640": (32.9257, 35.0707), "4900": (32.4493, 34.9205),
+                "5000": (32.3155, 34.8519), "5200": (32.0912, 34.8560),
+                "6700": (32.1837, 34.8700), "6900": (31.8052, 34.6468),
+                "7300": (31.2435, 34.8018), "7500": (31.8052, 34.6468),
+                "7600": (31.6598, 34.5714), "8600": (31.8952, 35.0186),
+            }
+            if station_id and station_id in RAIL_STATION_COORDS:
+                lat, lon = RAIL_STATION_COORDS[station_id]
+                r = 0.20  # ~22 ק"מ סביב התחנה
+                lat_min, lat_max = lat - r, lat + r
+                lon_min, lon_max = lon - r, lon + r
+            else:
+                lat_min = GUSH_DAN["lat_min"]
+                lat_max = GUSH_DAN["lat_max"]
+                lon_min = GUSH_DAN["lon_min"]
+                lon_max = GUSH_DAN["lon_max"]
             stride_params = (
-                f"siri_route__operator_ref=2&limit=100&order_by=id+desc"
-                f"&lat__gte={GUSH_DAN['lat_min']}&lat__lte={GUSH_DAN['lat_max']}"
-                f"&lon__gte={GUSH_DAN['lon_min']}&lon__lte={GUSH_DAN['lon_max']}"
+                f"siri_route__operator_ref=2&limit=50&order_by=id+desc"
+                f"&lat__greater_or_equal={lat_min}&lat__lower_or_equal={lat_max}"
+                f"&lon__greater_or_equal={lon_min}&lon__lower_or_equal={lon_max}"
             )
             target = f"{HASADNA_URL.rstrip('/')}/siri_vehicle_locations/list?{stride_params}"
             self._proxy(target)

@@ -139,7 +139,7 @@ with DAG(
     dag_id="dag_realtime_ingestion",
     default_args=default_args,
     description="Fetch GTFS-RT + Railways → Kafka (every 2 min)",
-    schedule_interval=timedelta(minutes=2),    # was 30s — too aggressive, caused scheduler backlog
+    schedule_interval=timedelta(minutes=2),    # every 2 min — balanced between freshness and load
     catchup=False,
     max_active_runs=1,
     tags=["ingestion", "realtime", "transit", "israel"],

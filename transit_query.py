@@ -34,31 +34,22 @@ except ImportError:
 # ── Constants ────────────────────────────────────────────────────────────────
 
 HASADNA_URL  = "https://open-bus-stride-api.hasadna.org.il"
-RAIL_API_URL = "https://israelrail.azurewebsites.net"
+RAIL_API_URL = ""   # israelrail.azurewebsites.net is hijacked — using Stride instead
 NOMINATIM    = "https://nominatim.openstreetmap.org/search"
 
 OPERATORS = {
+    "2":   "Israel Railways",
     "3":   "Dan",
     "5":   "Egged",
-    "6":   "Egged Tavura",
-    "7":   "Cooperative",
-    "10":  "Metropoline",
-    "14":  "Kavim",
-    "15":  "Nateev Express",
-    "16":  "Jerusalem",
-    "18":  "Golan",
-    "20":  "Kavim",
-    "21":  "Regional Council",
-    "23":  "Haifa",
-    "25":  "Nazareth",
-    "31":  "Gan Shmuel",
-    "32":  "Afikim",
-    "34":  "Nir Shahak",
-    "37":  "Southern District",
-    "41":  "Veolia",
-    "42":  "Extra",
-    "44":  "Egged Tavura",
-    "91":  "Israel Railways",
+    "6":   "NTA Metropolitan",
+    "14":  "Metropoline",
+    "15":  "Egged Taavura",
+    "16":  "Tnufa",
+    "18":  "Superbus",
+    "21":  "Kavim",
+    "25":  "Nateev Express",
+    "32":  "V-Line",
+    "42":  "Afikim",
 }
 
 TRAIN_STATIONS = {
@@ -220,9 +211,9 @@ def cmd_track_line(line_ref: str) -> None:
     """Show all active vehicles on a bus line, grouped by direction."""
     print(f"\n🚌 Tracking line {line_ref} ...\n")
     params = {
-        "siri_routes__line_ref": line_ref,
+        "siri_route__line_ref": line_ref,   # singular: siri_route__ not siri_routes__
         "limit": 200,
-        "order_by": "recorded_at_time desc",
+        "order_by": "id desc",
     }
     resp = requests.get(f"{HASADNA_URL}/siri_vehicle_locations/list", params=params, timeout=20)
     resp.raise_for_status()
@@ -234,12 +225,12 @@ def cmd_track_line(line_ref: str) -> None:
 
     by_dir: dict[str, list] = {}
     for v in items:
-        d = str(v.get("siri_routes__direction_id") or "?")
+        d = str(v.get("siri_route__direction_id") or "?")
         by_dir.setdefault(d, []).append(v)
 
     for direction, vehicles in sorted(by_dir.items()):
         label = "Direction A" if direction == "1" else ("Direction B" if direction == "2" else f"Direction {direction}")
-        op    = operator_name(vehicles[0].get("siri_routes__operator_ref") or "")
+        op    = operator_name(vehicles[0].get("siri_route__operator_ref") or "")
         print(f"  {'─'*50}")
         print(f"  {label}  |  {op}  |  {len(vehicles)} buses")
         print(f"  {'─'*50}")
@@ -247,7 +238,7 @@ def cmd_track_line(line_ref: str) -> None:
             lat  = v.get("lat", "?")
             lon  = v.get("lon", "?")
             t    = (v.get("recorded_at_time") or "")[:19].replace("T", " ")
-            vid  = v.get("vehicle_ref") or v.get("id") or "?"
+            vid  = v.get("siri_ride__vehicle_ref") or v.get("id") or "?"
             print(f"    Vehicle {str(vid):>8}   📍 {lat}, {lon}   ⏰ {t}")
         if len(vehicles) > 10:
             print(f"    ... and {len(vehicles) - 10} more vehicles")
@@ -255,94 +246,100 @@ def cmd_track_line(line_ref: str) -> None:
 
 
 def cmd_train_station(station_id: str) -> None:
-    """Show the departure board for a train station."""
+    """Show active trains near a station using Open Bus Stride (operator_ref=2)."""
     name = TRAIN_STATIONS.get(station_id, f"Station {station_id}")
-    print(f"\n🚆 Departures Board — {name} (Station {station_id})\n")
+    print(f"\n🚆 Active Trains near {name} (Station {station_id})\n")
+    print("  ℹ️  Israel Railways API is unavailable — showing active trains from Open Bus Stride.\n")
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    hour  = datetime.now().hour
+    # Station coordinates for bbox filtering
+    STATION_COORDS = {
+        "700":  (32.4493, 34.9205), "1220": (33.0063, 35.0972),
+        "1500": (32.0893, 34.7773), "1600": (32.0648, 34.7751),
+        "1700": (32.0858, 34.7784), "2300": (32.0993, 34.7977),
+        "3100": (31.8952, 35.0186), "3400": (31.7919, 35.2040),
+        "3600": (32.8145, 34.9886), "3700": (31.9993, 34.8849),
+        "4100": (32.8145, 34.9886), "4600": (33.0063, 35.0972),
+        "4900": (32.4493, 34.9205), "5000": (32.3155, 34.8519),
+        "5200": (32.0912, 34.8560), "7300": (31.2435, 34.8018),
+        "7500": (31.8052, 34.6468), "7600": (31.6598, 34.5714),
+        "8600": (31.8952, 35.0186),
+    }
 
-    url    = f"{RAIL_API_URL}/stations/GetStationBoard"
-    params = {"stationId": station_id, "date": today, "hour": hour}
-    headers = {"Accept": "application/json"}
+    params: dict = {"siri_route__operator_ref": "2", "limit": 50, "order_by": "id desc"}
+    if station_id in STATION_COORDS:
+        lat, lon = STATION_COORDS[station_id]
+        r = 0.20  # ~22 km radius
+        params.update({
+            "lat__greater_or_equal": lat - r, "lat__lower_or_equal": lat + r,
+            "lon__greater_or_equal": lon - r, "lon__lower_or_equal": lon + r,
+        })
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        resp = requests.get(
+            f"{HASADNA_URL}/siri_vehicle_locations/list",
+            params=params, timeout=15,
+        )
         resp.raise_for_status()
-        data = resp.json()
+        vehicles = resp.json()
+    except Exception as e:
+        print(f"  ❌ Error fetching from Stride: {e}")
+        return
+
+    if not vehicles:
+        print(f"  ⚠️  No active trains found near {name} at this time.")
+        return
+
+    print(f"  {'Train':>8}  {'Line':>6}  {'Speed':>7}  {'Scheduled':>10}  {'Updated':>12}")
+    print(f"  {'─'*55}")
+    for v in vehicles[:15]:
+        tn      = str(v.get("siri_ride__vehicle_ref") or v.get("id") or "?")
+        line    = str(v.get("siri_route__line_ref") or "?")
+        speed   = f"{float(v['velocity']):.0f} km/h" if v.get("velocity") else "—"
+        sched   = (v.get("siri_ride__scheduled_start_time") or "")[:16].replace("T", " ")
+        updated = (v.get("recorded_at_time") or "")[:16].replace("T", " ")
+        print(f"  {tn:>8}  {line:>6}  {speed:>7}  {sched:>10}  {updated:>12}")
+
+
+def cmd_track_train(train_number: str) -> None:
+    """Find a train by vehicle_ref using Open Bus Stride."""
+    print(f"\n🔎 Searching for train {train_number} via Open Bus Stride...\n")
+    print("  ℹ️  Israel Railways API is unavailable — using Stride vehicle locations.\n")
+
+    try:
+        resp = requests.get(
+            f"{HASADNA_URL}/siri_vehicle_locations/list",
+            params={
+                "siri_route__operator_ref": "2",
+                "limit": 200,
+                "order_by": "id desc",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        vehicles = resp.json()
     except Exception as e:
         print(f"  ❌ Error: {e}")
         return
 
-    trains = (data.get("result", {}).get("trains")
-              or data.get("Data")
-              or data.get("trains")
-              or [])
-
-    if not trains:
-        print(f"  ⚠️  No departures at {name} at this time.")
-        return
-
-    print(f"  {'Line':>5}  {'Dest':20}  {'Planned':8}  {'Actual':8}  {'Delay':8}  {'Platform':>8}")
-    print(f"  {'─'*65}")
-    for t in trains[:15]:
-        line    = str(t.get("trainno") or t.get("LineNumber") or "?")
-        dest    = str(t.get("orign")   or t.get("Destination") or "?")[:20]
-        planned = str(t.get("departtime") or t.get("DepartureTime") or "?")[:5]
-        actual  = str(t.get("actualdeparttime") or t.get("ActualDepartureTime") or planned)[:5]
-        delay   = t.get("delay") or t.get("Delay") or 0
-        platform = str(t.get("platform") or t.get("Platform") or "?")
-        dl      = delay_label(delay)
-        print(f"  {line:>5}  {dest:20}  {planned:8}  {actual:8}  {dl:10}  {platform:>6}")
-
-
-def cmd_track_train(train_number: str) -> None:
-    """Scan stations to find a train by number and show its current status."""
-    print(f"\n🔎 Searching for train number {train_number} ...\n")
-
-    today      = datetime.now().strftime("%Y-%m-%d")
-    hour       = datetime.now().hour
-    scan_stations = list(TRAIN_STATIONS.keys())[:15]   # scan first 15 major stations
-    found      = []
-
-    for sid in scan_stations:
-        name = TRAIN_STATIONS.get(sid, sid)
-        try:
-            params = {"stationId": sid, "date": today, "hour": hour}
-            resp   = requests.get(
-                f"{RAIL_API_URL}/stations/GetStationBoard",
-                params=params,
-                headers={"Accept": "application/json"},
-                timeout=10,
-            )
-            if not resp.ok:
-                continue
-            data   = resp.json()
-            trains = (data.get("result", {}).get("trains")
-                      or data.get("Data") or data.get("trains") or [])
-            for t in trains:
-                tno = str(t.get("trainno") or t.get("LineNumber") or "")
-                if tno == str(train_number):
-                    t["_station_name"] = name
-                    t["_station_id"]   = sid
-                    found.append(t)
-        except Exception:
-            continue
+    found = [
+        v for v in vehicles
+        if str(v.get("siri_ride__vehicle_ref") or "") == str(train_number)
+    ]
 
     if not found:
-        print(f"  ⚠️  Train {train_number} not found at scanned stations.")
+        print(f"  ⚠️  Train {train_number} not found in active vehicles.")
+        print(f"  Tip: Train numbers in Stride are vehicle_ref values (e.g. 145, 203).")
         return
 
-    print(f"  ✅ Found train {train_number} at {len(found)} stations:")
-    print()
-    for t in found:
-        station  = t["_station_name"]
-        planned  = str(t.get("departtime") or t.get("DepartureTime") or "?")[:5]
-        actual   = str(t.get("actualdeparttime") or t.get("ActualDepartureTime") or planned)[:5]
-        delay    = t.get("delay") or t.get("Delay") or 0
-        platform = str(t.get("platform") or t.get("Platform") or "?")
-        dl       = delay_label(delay)
-        print(f"  📍 {station:30} | Departs {planned} ({actual:5}) {dl} | Platform {platform}")
+    print(f"  ✅ Found train {train_number}:\n")
+    for v in found:
+        lat     = v.get("lat", "?")
+        lon     = v.get("lon", "?")
+        speed   = f"{float(v['velocity']):.0f} km/h" if v.get("velocity") else "—"
+        line    = v.get("siri_route__line_ref") or "?"
+        sched   = (v.get("siri_ride__scheduled_start_time") or "")[:16].replace("T", " ")
+        updated = (v.get("recorded_at_time") or "")[:16].replace("T", " ")
+        print(f"  Line {line} | 📍 {lat}, {lon} | {speed} | Scheduled: {sched} | Updated: {updated}")
 
 
 def cmd_alerts() -> None:

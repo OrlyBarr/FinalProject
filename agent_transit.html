@@ -181,16 +181,15 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37
             <option value="">כל המפעילים</option>
             <option value="3">3 — דן</option>
             <option value="5">5 — אגד</option>
-            <option value="6">6 — אגד תעבורה</option>
-            <option value="7">7 — קוופרטיב</option>
-            <option value="10">10 — מטרופולין</option>
-            <option value="14">14 — קווים</option>
-            <option value="15">15 — נתיב אקספרס</option>
-            <option value="16">16 — ירושלים</option>
-            <option value="18">18 — גולן</option>
-            <option value="20">20 — Kavim</option>
-            <option value="25">25 — נצרת</option>
-            <option value="42">42 — Extra</option>
+            <option value="6">6 — NTA מטרופולין</option>
+            <option value="14">14 — מטרופולין</option>
+            <option value="15">15 — אגד תעבורה</option>
+            <option value="16">16 — תנופה</option>
+            <option value="18">18 — סופרבוס</option>
+            <option value="21">21 — קווים</option>
+            <option value="25">25 — נתיב אקספרס</option>
+            <option value="32">32 — V-Line</option>
+            <option value="42">42 — אפיקים</option>
           </select>
         </div>
         <button class="btn" onclick="searchLine()">הצג תחנות עתידיות</button>
@@ -274,9 +273,9 @@ const STRIDE     = "/proxy/stride";
 const RAIL_PROXY = "/proxy/rail";
 
 const OPERATORS = {
-  "2":"רכבת ישראל","3":"דן","5":"אגד","6":"אגד תעבורה","7":"קוופרטיב",
-  "10":"מטרופולין","14":"קווים","15":"נתיב אקספרס","16":"ירושלים",
-  "18":"גולן","20":"Kavim","25":"נצרת","42":"Extra"
+  "2":"רכבת ישראל","3":"דן","5":"אגד","6":"NTA מטרופולין",
+  "14":"מטרופולין","15":"אגד תעבורה","16":"תנופה",
+  "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס","32":"V-Line","42":"אפיקים"
 };
 
 const TRAIN_STATIONS = {
@@ -484,7 +483,7 @@ function onLineNumberInput(val){
     label.textContent=`מפעילים עם קו ${val}`;
     picker.innerHTML=`<div class="loader"><div class="spinner"></div></div>`;
     try{
-      const r=await fetch(`${STRIDE}/gtfs_routes/list?line_refs=${encodeURIComponent(val)}&limit=200`);
+      const r=await fetch(`${STRIDE}/gtfs_routes/list?line_ref=${encodeURIComponent(val)}&limit=200`);
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       const routes=await r.json();
       const byOp={};
@@ -518,7 +517,7 @@ async function onOperatorChange(){
   label.textContent=`קווים של ${OPERATORS[opId]||opId}`;
   picker.innerHTML=`<div class="loader"><div class="spinner"></div></div>`;
   try{
-    const r=await fetch(`${STRIDE}/gtfs_routes/list?operator_refs=${opId}&limit=500&order_by=line_ref asc`);
+    const r=await fetch(`${STRIDE}/gtfs_routes/list?operator_ref=${opId}&limit=500&order_by=line_ref asc`);
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const routes=await r.json();
     const seen=new Set();
@@ -548,8 +547,8 @@ async function searchLine(){
   if(!line){ setMsg(out,"הכנסי מספר קו","warn"); return; }
   setLoading(out);
 
-  let url=`${STRIDE}/siri_vehicle_locations/list?line_ref=${encodeURIComponent(line)}&limit=100&order_by=id desc`;
-  if(opId) url+=`&operator_ref=${opId}`;
+  let url=`${STRIDE}/siri_vehicle_locations/list?siri_route__line_ref=${encodeURIComponent(line)}&limit=100&order_by=id desc`;
+  if(opId) url+=`&siri_route__operator_ref=${opId}`;
 
   let vehicles=[];
   try{
@@ -609,24 +608,54 @@ async function searchStation(sid){
   const sName=TRAIN_STATIONS[sid]||`תחנה ${sid}`;
   setLoading(out);
 
-  const today=new Date().toISOString().slice(0,10);
-  const hour=new Date().getHours();
   let data;
   try{
-    const r=await fetch(`${RAIL_PROXY}?stationId=${sid}&date=${today}&hour=${hour}`,{headers:{Accept:"application/json"}});
+    const r=await fetch(`${RAIL_PROXY}?stationId=${sid}`,{headers:{Accept:"application/json"}});
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     data=await r.json();
   }catch(e){
-    setMsg(out,`❌ שגיאת Railways API: ${e.message}<br><small style="color:var(--text3)">הרצי: <code>python3 transit_query.py --train-station ${sid}</code></small>`,"err");
+    setMsg(out,`❌ שגיאת API: ${e.message}<br><small style="color:var(--text3)">הרצי: <code>python3 transit_query.py --train-station ${sid}</code></small>`,"err");
     return;
   }
 
+  // Stride מחזיר array של כלי רכב פעילים
+  if(Array.isArray(data)){
+    if(!data.length){ setMsg(out,`⚠️ אין רכבות פעילות באזור ${sName} כרגע.`,"warn"); return; }
+    let html=`<div class="summary">🚆 ${sName} — ${data.length} רכבות פעילות באזור (מקור: Open Bus Stride)</div>`;
+    for(const v of data.slice(0,15)) html+=renderStrideTrainCard(v);
+    out.innerHTML=html;
+    return;
+  }
+
+  // פורמט ישן של Israel Railways API
   const trains=data?.result?.trains||data?.Data?.Routes||data?.trains||[];
   if(!trains.length){ setMsg(out,`⚠️ אין נסיעות בתחנת ${sName} כרגע.`,"warn"); return; }
-
   let html=`<div class="summary">🚆 ${sName} — ${trains.length} נסיעות קרובות</div>`;
   for(const t of trains.slice(0,15)) html+=renderTrainCard(t);
   out.innerHTML=html;
+}
+
+function renderStrideTrainCard(v){
+  const tn=v.siri_ride__vehicle_ref||v.id||"—";
+  const lineRef=v.siri_route__line_ref||v.line_ref||"—";
+  const sched=v.siri_ride__scheduled_start_time?v.siri_ride__scheduled_start_time.slice(11,16):"—";
+  const speed=v.velocity!=null?`${(+v.velocity).toFixed(0)} קמ"ש`:"";
+  const updated=ageStr(v.recorded_at_time);
+  const rideId=v.siri_ride__id||v.siri_ride_id||"";
+  const pid=`str-${tn}`;
+  return `<div class="train-row">
+    <div class="train-header">
+      <span class="train-num">🚆 ${tn}</span>
+      <span class="train-route">קו ${lineRef}</span>
+      ${speed?`<span style="font-size:.78rem;color:var(--text3)">💨 ${speed}</span>`:""}
+    </div>
+    <div class="train-times">
+      ${sched!=="—"?`יציאה מתוכננת: <span>${sched}</span> &nbsp;·&nbsp;`:""}
+      עדכון: <span>${updated} לפני</span>
+    </div>
+    ${rideId?`<button class="stops-toggle" onclick="toggleTrainStops('${pid}','${rideId}',this)">▶ תחנות עתידיות</button>
+      <div class="stops-panel" id="${pid}"></div>`:""}
+  </div>`;
 }
 
 function renderTrainCard(t){
@@ -671,7 +700,7 @@ async function fetchTrainsAtStation(sid,btn){
 
   let vehicles=[];
   try{
-    const r=await fetch(`${STRIDE}/siri_vehicle_locations/list?operator_ref=2&limit=500&order_by=recorded_at_time desc`);
+    const r=await fetch(`${STRIDE}/siri_vehicle_locations/list?siri_route__operator_ref=2&limit=500&order_by=recorded_at_time desc`);
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     vehicles=await r.json();
   }catch(e){ setMsg(out,`❌ Stride: ${e.message}`,"err"); return; }
