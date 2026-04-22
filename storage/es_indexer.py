@@ -62,27 +62,28 @@ INDEX_SETTINGS = {
             "lat":               {"type": "float"},
             "lon":               {"type": "float"},
             "location":          {"type": "geo_point"},
-            # זיהוי
-            "operator_name":     {"type": "keyword"},
-            "operator_id":       {"type": "keyword"},
-            "operator_ref":      {"type": "keyword"},
-            "route_id":          {"type": "keyword"},
-            "route_short_name":  {"type": "keyword"},
-            "vehicle_id":        {"type": "keyword"},
-            "line_ref":          {"type": "keyword"},
-            "trip_id":           {"type": "keyword"},
-            "stop_id":           {"type": "keyword"},
-            "train_number":      {"type": "keyword"},
-            "area":              {"type": "keyword"},
+            # זיהוי — text + keyword sub-field so Kibana can use both
+            # free-text search (field) and aggregations/sorting (field.keyword)
+            "operator_name":     {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "operator_id":       {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "operator_ref":      {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "route_id":          {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "route_short_name":  {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "vehicle_id":        {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "line_ref":          {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "trip_id":           {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "stop_id":           {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "train_number":      {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
+            "area":              {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             # מהירות — null_value מאפשר חיפוש גם כשהשדה חסר
             "speed_kmh":         {"type": "float"},   # null אם SIRI לא מדווח
             "velocity":          {"type": "float"},   # null אם SIRI לא מדווח
             "is_moving":         {"type": "boolean"},
-            "speed_category":    {"type": "keyword"},
+            "speed_category":    {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             # עיכוב
             "delay_minutes":     {"type": "float"},
             "delay_seconds":     {"type": "integer"},
-            "delay_category":    {"type": "keyword"},
+            "delay_category":    {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
             "is_delayed":        {"type": "boolean"},
             # כיוון
             "bearing":           {"type": "float"},

@@ -16,11 +16,7 @@ error()   { echo -e "${RED}❌ $1${NC}"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-NDJSON="$PROJECT_ROOT/kibana/kibana_dashboard.ndjson"
 KIBANA_URL="${KIBANA_URL:-http://localhost:5601}"
-
-# ── Verify the dashboard file exists ─────────────────────────────
-[[ -f "$NDJSON" ]] || error "Dashboard file not found: $NDJSON"
 
 # ── Wait for Kibana ───────────────────────────────────────────────
 log "Waiting for Kibana at $KIBANA_URL ..."
@@ -36,25 +32,55 @@ for i in $(seq 1 40); do
   sleep 3
 done
 
-# ── Import ────────────────────────────────────────────────────────
-log "Importing dashboard from $NDJSON ..."
-HTTP_CODE=$(curl -s -o /tmp/kibana_import_response.json -w "%{http_code}" \
-  -X POST "$KIBANA_URL/api/saved_objects/_import?overwrite=true" \
-  -H "kbn-xsrf: true" \
-  -F "file=@$NDJSON")
+# ── Helper: import one ndjson file ───────────────────────────────
+import_file() {
+  local FILE="$1"
+  local LABEL="$2"
+  local TMP="/tmp/kibana_import_$(basename "$FILE").json"
 
-if [[ "$HTTP_CODE" == "200" ]]; then
-  ERRORS=$(python3 -c "import json,sys; d=json.load(open('/tmp/kibana_import_response.json')); print(d.get('errors', []))" 2>/dev/null || echo "[]")
-  if [[ "$ERRORS" == "[]" ]]; then
-    success "Dashboard imported successfully!"
-  else
-    warn "Import completed with errors: $ERRORS"
+  [[ -f "$FILE" ]] || { warn "File not found, skipping: $FILE"; return; }
+
+  # kibana_dashboard.ndjson is stored as a JSON array — convert to ndjson
+  if python3 -c "import json,sys; d=json.load(open('$FILE')); assert isinstance(d,list)" 2>/dev/null; then
+    log "Converting JSON array → ndjson: $FILE"
+    python3 -c "
+import json, sys
+objects = json.load(open('$FILE'))
+for obj in objects:
+    print(json.dumps(obj))
+" > /tmp/converted_$(basename "$FILE")
+    FILE="/tmp/converted_$(basename "$FILE")"
   fi
-else
-  warn "Kibana returned HTTP $HTTP_CODE"
-  cat /tmp/kibana_import_response.json || true
-fi
+
+  log "Importing $LABEL ..."
+  HTTP_CODE=$(curl -s -o "$TMP" -w "%{http_code}" \
+    -X POST "$KIBANA_URL/api/saved_objects/_import?overwrite=true" \
+    -H "kbn-xsrf: true" \
+    -F "file=@$FILE")
+
+  if [[ "$HTTP_CODE" == "200" ]]; then
+    ERRORS=$(python3 -c "
+import json
+d = json.load(open('$TMP'))
+errs = d.get('errors', [])
+print(len(errs), 'error(s):' if errs else 'errors', errs if errs else '')
+" 2>/dev/null || echo "unknown")
+    if [[ "$ERRORS" == *"0 errors"* || "$ERRORS" == *"0 error"* ]]; then
+      success "$LABEL imported successfully!"
+    else
+      warn "$LABEL imported with issues: $ERRORS"
+    fi
+  else
+    warn "$LABEL — Kibana returned HTTP $HTTP_CODE"
+    cat "$TMP" || true
+  fi
+}
+
+# ── Import both dashboards ────────────────────────────────────────
+import_file "$PROJECT_ROOT/kibana/kibana_dashboard.ndjson" "Israel Transit Delays Dashboard"
+import_file "$PROJECT_ROOT/kibana/transit_dashboard.ndjson"  "Israel Transit Main Dashboard"
 
 echo ""
-echo -e "${BOLD}Open dashboard:${NC} $KIBANA_URL/app/dashboards"
-echo -e "Search for: ${BOLD}Israel Transit Delays Dashboard${NC}"
+echo -e "${BOLD}Open dashboards:${NC} $KIBANA_URL/app/dashboards"
+echo -e "  • ${BOLD}Israel Transit Delays Dashboard${NC}"
+echo -e "  • ${BOLD}Israel Transit — גוש דן ותל אביב${NC}"
