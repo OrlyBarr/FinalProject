@@ -284,6 +284,7 @@ class BotHandler(BaseHTTPRequestHandler):
         # ── /ask — Gemini (primary, fast) → Ollama (fallback) ───────────────
         # POST /ask  { messages: [...], tool_data: "..." }
         if path == "/ask":
+          try:
             messages  = payload.get("messages", [])
             tool_data = payload.get("tool_data", "")
 
@@ -298,53 +299,78 @@ class BotHandler(BaseHTTPRequestHandler):
                 + (f"\nנתונים רלוונטיים: {tool_data}" if tool_data else "")
             )
 
-            import http.client, ssl
-
-            # ── helpers ────────────────────────────────────────────────────────
-            def _call_gemini(msgs, system, api_key, timeout=12):
-                """Gemini 2.0 Flash — מהיר, חינמי (1500/יום)."""
+            # ── Gemini helper — uses urllib (reliable timeout on Windows) ──────
+            def _call_gemini(msgs, system, api_key, timeout=14):
+                """Gemini 2.0 Flash via urllib — fast, free (1500 req/day)."""
+                # בנה contents — חייב להתחיל ולסיים ב-user, להחליף תפקידים
+                raw_msgs = msgs[-6:]
                 contents = []
-                for m in msgs[-6:]:   # רק 6 הודעות אחרונות — מהיר יותר
+                for m in raw_msgs:
                     role = "model" if m.get("role") == "assistant" else "user"
-                    contents.append({"role": role, "parts": [{"text": m.get("content", "")}]})
+                    txt  = (m.get("content") or "").strip()
+                    if not txt:
+                        continue
+                    # מיזוג הודעות עוקבות מאותו תפקיד
+                    if contents and contents[-1]["role"] == role:
+                        contents[-1]["parts"][0]["text"] += "\n" + txt
+                    else:
+                        contents.append({"role": role, "parts": [{"text": txt}]})
+
+                # Gemini דורש שהתוכן יתחיל ב-user
+                while contents and contents[0]["role"] != "user":
+                    contents.pop(0)
+                if not contents:
+                    contents = [{"role": "user", "parts": [{"text": "שלום"}]}]
 
                 body = json.dumps({
                     "system_instruction": {"parts": [{"text": system}]},
                     "contents": contents,
                     "generationConfig": {
-                        "maxOutputTokens": 400,
+                        "maxOutputTokens": 450,
                         "temperature":     0.7,
                         "topP":            0.9,
                     },
                 }, ensure_ascii=False).encode("utf-8")
 
-                ctx  = ssl.create_default_context()
-                conn = http.client.HTTPSConnection(
-                    "generativelanguage.googleapis.com", timeout=timeout, context=ctx)
-                conn.request(
-                    "POST",
-                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-                    body=body,
-                    headers={"Content-Type": "application/json; charset=utf-8"},
+                url = (
+                    "https://generativelanguage.googleapis.com"
+                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
                 )
-                resp = conn.getresponse()
-                raw  = resp.read().decode("utf-8")
-                conn.close()
-                if resp.status != 200:
-                    raise RuntimeError(f"Gemini HTTP {resp.status}: {raw[:200]}")
-                data  = json.loads(raw)
-                parts = data["candidates"][0]["content"]["parts"]
-                return "".join(p.get("text", "") for p in parts)
+                req = urllib.request.Request(
+                    url, data=body,
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    raw = resp.read().decode("utf-8")
 
-            def _call_ollama(msgs, system, timeout=90):
-                """Ollama tinyllama — גיבוי מקומי."""
+                data  = json.loads(raw)
+                cands = data.get("candidates", [])
+                if not cands:
+                    # safety block or empty
+                    raise RuntimeError("Gemini: no candidates returned (possibly safety filter)")
+                parts = cands[0].get("content", {}).get("parts", [])
+                return "".join(p.get("text", "") for p in parts).strip() or "לא התקבלה תשובה"
+
+            # ── Ollama helper — fallback only ──────────────────────────────────
+            def _call_ollama(msgs, system, timeout=30):
+                """Ollama (local) — גיבוי בלבד, timeout קצר כדי לא להתקע."""
+                import socket
+                # בדוק תחילה אם Ollama בכלל רץ (3 שניות)
+                try:
+                    s = socket.create_connection(("127.0.0.1", 11434), timeout=3)
+                    s.close()
+                except OSError:
+                    raise RuntimeError("Ollama לא רץ (port 11434 סגור)")
+
+                import http.client
                 body = json.dumps({
                     "model":   "tinyllama",
                     "messages": [{"role": "system", "content": system}]
                               + [{"role": m.get("role","user"), "content": m.get("content","")}
-                                 for m in msgs[-6:]],
+                                 for m in msgs[-4:]],
                     "stream":  False,
-                    "options": {"num_predict": 300, "temperature": 0.7, "num_ctx": 1024},
+                    "options": {"num_predict": 250, "temperature": 0.7, "num_ctx": 512},
                 }, ensure_ascii=False).encode("utf-8")
 
                 conn = http.client.HTTPConnection("127.0.0.1", 11434, timeout=timeout)
@@ -354,38 +380,52 @@ class BotHandler(BaseHTTPRequestHandler):
                 raw  = resp.read().decode("utf-8")
                 conn.close()
                 if resp.status != 200:
-                    raise RuntimeError(f"Ollama HTTP {resp.status}: {raw[:200]}")
+                    raise RuntimeError(f"Ollama HTTP {resp.status}: {raw[:120]}")
                 return json.loads(raw).get("message", {}).get("content", "לא התקבלה תשובה")
 
             # ── ראשי: Gemini → גיבוי: Ollama ──────────────────────────────────
             reply  = None
             source = None
-            error  = None
+            gemini_err = None
 
             if GEMINI_API_KEY:
                 try:
-                    reply  = _call_gemini(messages, SYSTEM_TEXT, GEMINI_API_KEY, timeout=12)
+                    reply  = _call_gemini(messages, SYSTEM_TEXT, GEMINI_API_KEY, timeout=14)
                     source = "gemini"
+                except urllib.error.HTTPError as e:
+                    raw_err = e.read().decode("utf-8", errors="replace")
+                    try:
+                        gemini_err = json.loads(raw_err).get("error", {}).get("message", raw_err[:120])
+                    except Exception:
+                        gemini_err = raw_err[:120]
+                    log.warning(f"/ask Gemini HTTP error: {gemini_err}")
                 except Exception as e:
-                    log.warning(f"/ask Gemini failed ({e}) — falling back to Ollama")
-                    error = str(e)
+                    gemini_err = str(e)
+                    log.warning(f"/ask Gemini failed: {gemini_err} — trying Ollama")
+            else:
+                gemini_err = "GEMINI_API_KEY לא מוגדר ב-.env"
 
             if reply is None:
-                # גיבוי — Ollama
                 try:
-                    reply  = _call_ollama(messages, SYSTEM_TEXT, timeout=90)
+                    reply  = _call_ollama(messages, SYSTEM_TEXT, timeout=30)
                     source = "ollama"
-                    if error:
-                        log.info(f"/ask using Ollama fallback (Gemini error: {error})")
+                    log.info(f"/ask Ollama fallback used (Gemini: {gemini_err})")
                 except Exception as e:
+                    # שניהם נכשלו — החזר שגיאה ברורה מיד
                     if not GEMINI_API_KEY:
-                        msg = "GEMINI_API_KEY חסר ב-.env וגם Ollama לא זמין"
+                        err_msg = "הוסיפי GEMINI_API_KEY ב-.env כדי להפעיל את הצ'אט"
+                    elif "סגור" in str(e) or "port" in str(e).lower():
+                        err_msg = f"Gemini: {gemini_err}"
                     else:
-                        msg = f"Gemini נכשל ({error}) וגם Ollama לא זמין ({e})"
-                    self.send_json({"error": msg}, status=503)
+                        err_msg = f"Gemini: {gemini_err} | Ollama: {e}"
+                    self.send_json({"error": err_msg}, status=503)
                     return
 
             self.send_json({"reply": reply, "source": source})
+
+          except Exception as e:
+            log.error(f"/ask unhandled error: {e}", exc_info=True)
+            self.send_json({"error": f"שגיאה פנימית: {e}"}, status=500)
 
 
 

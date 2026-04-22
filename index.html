@@ -458,34 +458,49 @@ async function sendMsg(){
   const lastBot = history.filter(m=>m.role==="assistant").slice(-1)[0]?.content||"";
   const toolData = await fetchToolData(queryText, lastBot);
 
-  // שלב 2: קרא ל-/ask (דרך bot.py — לא ישיר ל-Claude)
+  // שלב 2: קרא ל-/ask עם timeout של 20 שניות
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 20000);
   try {
     const resp = await fetch("/ask", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
+      signal: controller.signal,
       body: JSON.stringify({
         messages:  history.slice(-12),
         tool_data: toolData || "",
       }),
     });
+    clearTimeout(timeoutId);
 
-    if(!resp.ok){
-      const e=await resp.json().catch(()=>({}));
-      throw new Error(e.error||`HTTP ${resp.status}`);
-    }
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
-    const data=await resp.json();
-    const reply=data.reply||"לא התקבלה תשובה";
-    history.push({role:"assistant",content:reply});
+    const reply = data.reply || "לא התקבלה תשובה";
+    history.push({role:"assistant", content:reply});
     if(history.length>24) history=history.slice(-24);
 
     typing.remove();
-    addMsg("bot", fmt(reply));
+    const msgEl = addMsg("bot", fmt(reply));
+    // הצג איזה מנוע ענה (Gemini / Ollama) בתחתית הבועה
+    if(data.source){
+      const src = document.createElement("div");
+      src.style.cssText="font-size:.65rem;color:var(--text3);margin-top:5px;text-align:left";
+      src.textContent = data.source === "gemini" ? "⚡ Gemini" : "🖥️ Ollama";
+      msgEl.querySelector(".bubble").appendChild(src);
+    }
 
   } catch(e){
+    clearTimeout(timeoutId);
     typing.remove();
-    const isTimeout = e.message.includes("502") || e.message.includes("504") || e.message.includes("timeout") || e.message.includes("Failed to fetch");
-    addMsg("bot",`<div class="err">⚠️ ${esc(e.message)}</div><br><span style="font-size:.82rem;color:var(--text3)">${isTimeout ? "הבקשה לקחה יותר מדי זמן — נסי שוב." : "ודאי ש-bot.py רץ ו-GEMINI_API_KEY מוגדר ב-.env"}</span>`);
+    const isAbort   = e.name === "AbortError";
+    const isOffline = e.message.includes("Failed to fetch") || e.message.includes("NetworkError");
+    let hint = "";
+    if(isAbort)        hint = "⏱️ הבקשה ארכה יותר מ-20 שניות. ודאי ש-bot.py רץ ו-GEMINI_API_KEY מוגדר ב-.env";
+    else if(isOffline) hint = "🔌 לא ניתן להתחבר ל-bot.py — הפעילי אותו: <code>python bot.py</code>";
+    else if(e.message.includes("GEMINI_API_KEY")) hint = "🔑 הוסיפי GEMINI_API_KEY ב-.env ואתחלי את bot.py";
+    else               hint = `ודאי ש-GEMINI_API_KEY מוגדר ב-.env`;
+    addMsg("bot",`<div class="err">⚠️ ${esc(isAbort ? "timeout — לא התקבלה תשובה" : e.message)}</div><div style="font-size:.8rem;color:var(--text3);margin-top:6px">${hint}</div>`);
   }
 
   busy=false; document.getElementById("sbtn").disabled=false; inp.focus();
