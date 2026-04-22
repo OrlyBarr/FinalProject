@@ -140,13 +140,14 @@ textarea::placeholder{color:var(--text3)}
 
     <div class="quick-bar">
       <span style="font-size:.65rem;color:var(--text3);align-self:center">שאלות מהירות:</span>
-      <button class="qbtn" onclick="ask('קו 63')">קו 63</button>
-      <button class="qbtn" onclick="ask('קו 89')">קו 89</button>
-      <button class="qbtn" onclick="ask('קווי דן')">קווי דן</button>
-      <button class="qbtn" onclick="ask('קווי NTA')">קווי NTA</button>
-      <button class="qbtn" onclick="ask('רכבות מתל אביב מרכז')">רכבות ת"א מרכז</button>
-      <button class="qbtn" onclick="ask('רכבות מתל אביב השלום')">רכבות ת"א השלום</button>
-      <button class="qbtn" onclick="useMyLocation(true)">אוטובוסים ליד המיקום שלי</button>
+      <button class="qbtn" onclick="promptLine()">🔢 קו מספר</button>
+      <button class="qbtn" onclick="ask('קווי דן')">🚌 קווי דן</button>
+      <button class="qbtn" onclick="ask('קווי אגד')">🚌 קווי אגד</button>
+      <button class="qbtn" onclick="ask('קווי NTA')">🚇 קווי NTA</button>
+      <button class="qbtn" onclick="promptAddress()">📍 אוטובוסים ליד כתובת</button>
+      <button class="qbtn" onclick="ask('רכבות מתל אביב מרכז')">🚆 רכבות ת"א מרכז</button>
+      <button class="qbtn" onclick="ask('רכבות מתל אביב השלום')">🚆 רכבות ת"א השלום</button>
+      <button class="qbtn" onclick="useMyLocation(true)">📍 ליד המיקום שלי</button>
     </div>
 
     <div class="chat" id="chat">
@@ -330,6 +331,26 @@ function ask(text) {
   sendMsg();
 }
 
+function promptLine() {
+  document.getElementById('welcome')?.remove();
+  addMsg('bot', 'הזיני מספר קו אוטובוס (לדוגמה: 5, 89, 240):');
+  const inp = document.getElementById('inp');
+  inp.placeholder = 'מספר קו...';
+  inp.focus();
+  inp.onblur = null;
+  // כשמשתמש שולח — עטוף כ"קו X"
+  inp.dataset.mode = 'line';
+}
+
+function promptAddress() {
+  document.getElementById('welcome')?.remove();
+  addMsg('bot', 'הזיני כתובת לחיפוש אוטובוסים קרובים (לדוגמה: רחוב דיזנגוף, תל אביב):');
+  const inp = document.getElementById('inp');
+  inp.placeholder = 'כתובת לחיפוש...';
+  inp.focus();
+  inp.dataset.mode = 'address';
+}
+
 function setStatus(txt, ok) {
   document.getElementById('status-txt').textContent = txt;
   document.querySelector('.dot').style.background = ok ? '#22c55e' : '#f97316';
@@ -337,8 +358,20 @@ function setStatus(txt, ok) {
 
 async function sendMsg() {
   const inp = document.getElementById('inp');
-  const text = inp.value.trim();
+  let text = inp.value.trim();
   if (!text || busy) return;
+
+  // עטוף לפי mode אם פעיל
+  if (inp.dataset.mode === 'line') {
+    text = `קו ${text.replace(/[^\d]/g,'')}`;
+    inp.dataset.mode = '';
+    inp.placeholder = 'שאלי על קו, תחנה, מפעיל או כתובת...';
+  } else if (inp.dataset.mode === 'address') {
+    text = `אוטובוסים ליד ${text}`;
+    inp.dataset.mode = '';
+    inp.placeholder = 'שאלי על קו, תחנה, מפעיל או כתובת...';
+  }
+
   inp.value = ''; inp.style.height = 'auto';
   busy = true; document.getElementById('sbtn').disabled = true;
 
