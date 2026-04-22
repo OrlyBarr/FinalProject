@@ -355,13 +355,19 @@ class BotHandler(BaseHTTPRequestHandler):
                         pass
 
             # ── קווי מפעיל ──────────────────────────────────────────────────
+            OP_DISPLAY = {
+                "3":"דן","5":"אגד","6":"NTA מטרופולין","15":"אגד תעבורה",
+                "16":"תנופה","18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+                "14":"מטרופולין","32":"V-Line","42":"אפיקים",
+            }
             if not reply:
                 for op_name, op_id in OPERATOR_IDS.items():
-                    if op_name in ml and ("קו" in ml or "רשימ" in ml or "מפעיל" in ml or any(w in ml for w in ["של","מה"])):
+                    if op_name in ml and ("קו" in ml or "רשימ" in ml or "מפעיל" in ml or any(w in ml for w in ["של","מה","קווי"])):
+                        # נסה GTFS קודם
                         try:
                             gdata = _req.get(
                                 f"http://localhost:{BOT_PORT}/gtfs/routes",
-                                params={"operator_id": op_id, "limit": 200}, timeout=5
+                                params={"operator_id": op_id, "limit": 200}, timeout=4
                             ).json()
                             routes = gdata.get("routes", [])
                             if routes:
@@ -371,11 +377,40 @@ class BotHandler(BaseHTTPRequestHandler):
                                 reply = (
                                     f"**קווי {agency}** — {len(nums)} קווים\n"
                                     + ", ".join(str(n) for n in nums[:60])
-                                    + (f"  ועוד..." if len(nums)>60 else "")
+                                    + ("  ועוד..." if len(nums)>60 else "")
                                 )
                                 source = "gtfs"
                         except Exception:
                             pass
+
+                        # Stride fallback — כלי רכב פעילים כרגע
+                        if not reply:
+                            try:
+                                sr = _req.get(
+                                    f"{STRIDE}/siri_vehicle_locations/list",
+                                    params={"siri_route__operator_ref": op_id,
+                                            "limit": 200, "order_by": "id desc"},
+                                    timeout=9
+                                ).json()
+                                agency = OP_DISPLAY.get(op_id, op_name)
+                                if sr:
+                                    lines = sorted(
+                                        {str(v.get("siri_route__line_ref","")) for v in sr
+                                         if v.get("siri_route__line_ref")},
+                                        key=lambda x: int(x) if x.isdigit() else 9999
+                                    )
+                                    reply = (
+                                        f"**קווי {agency}** — {len(lines)} קווים פעילים כרגע\n"
+                                        + ", ".join(lines[:80])
+                                        + ("  ועוד..." if len(lines)>80 else "")
+                                    )
+                                else:
+                                    reply = f"**{agency}** — אין כלי רכב פעילים כרגע"
+                                source = "stride"
+                            except Exception:
+                                agency = OP_DISPLAY.get(op_id, op_name)
+                                reply = f"לא ניתן לשלוף קווי {agency} כרגע — נסי שוב"
+                                source = "error"
                         break
 
             # ── רכבות — תחנה ────────────────────────────────────────────────
