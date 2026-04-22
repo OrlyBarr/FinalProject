@@ -534,44 +534,115 @@ async function planRoute() {
   ask(`מסלול מ-${origin} ל-${dest}`);
 }
 
-// ── Route Cards Renderer ──────────────────────────────────────────────────────
+// ── Color palette for route lines ────────────────────────────────────────────
+const LINE_COLORS = [
+  '#6D28D9','#2563EB','#059669','#DC2626','#D97706',
+  '#7C3AED','#0891B2','#16A34A','#EA580C','#9333EA'
+];
+
+// ── Route state vars ──────────────────────────────────────────────────────────
+let routePlanMarkers = [];   // all vehicle dots from current route plan
+let routePolyline    = null; // dashed origin→destination line
+let routeEpMarkers   = [];   // origin + destination pins
+let activeLineMarkers = [];  // highlighted line from showLineOnMap
+
+// ── Route Cards Renderer (auto-updates map) ───────────────────────────────────
 function addRouteCards(routeData, textReply) {
   document.getElementById('welcome')?.remove();
 
-  // Header: first line of reply (strip markdown **)
+  // Clear previous route layer
+  routePlanMarkers.forEach(m => lmap.removeLayer(m));  routePlanMarkers = [];
+  routeEpMarkers.forEach(m => lmap.removeLayer(m));    routeEpMarkers = [];
+  activeLineMarkers.forEach(m => lmap.removeLayer(m)); activeLineMarkers = [];
+  if (routePolyline) { lmap.removeLayer(routePolyline); routePolyline = null; }
+
   const firstLine = (textReply || '').split('\n')[0].replace(/\*\*/g,'');
-  let html = `<div style="font-weight:700;color:var(--accent);margin-bottom:6px">🗺️ ${esc(firstLine)}</div>`;
+  let html = `<div style="font-weight:700;color:var(--accent);font-size:.9rem;margin-bottom:6px">🗺️ ${esc(firstLine)}</div>`;
 
   if (routeData && routeData.routes && routeData.routes.length) {
-    html += `<div style="font-size:.72rem;color:var(--text3);margin-bottom:8px">${routeData.routes.length} קווים פעילים באזור המסלול</div>`;
+    const totalVeh = routeData.routes.reduce((s,r)=>s+(r.vehicles||[]).length,0);
+    html += `<div style="font-size:.7rem;color:var(--text3);margin-bottom:8px">` +
+            `${routeData.routes.length} קווים · ${totalVeh} כלי רכב פעילים</div>`;
     html += '<div class="route-cards">';
-    for (const r of routeData.routes) {
+
+    for (let i = 0; i < routeData.routes.length; i++) {
+      const r   = routeData.routes[i];
       const lr  = r.line_ref || '?';
       const op  = r.operator || '?';
-      const ost = r.origin_stop;
-      const fst = r.final_stop;
-      const stopLine = ost && fst
-        ? `<div class="rc-stops">🚏 ${esc(ost)} ↔ ${esc(fst)}</div>`
+      const cnt = (r.vehicles || []).length;
+      const col = LINE_COLORS[i % LINE_COLORS.length];
+
+      const stopLine = (r.origin_stop && r.final_stop)
+        ? `<div class="rc-stops">🚏 ${esc(r.origin_stop)} ↔ ${esc(r.final_stop)}</div>`
         : '';
+      const cntBadge = cnt
+        ? `<span style="background:${col};color:#fff;border-radius:6px;` +
+          `padding:1px 6px;font-size:.62rem;font-weight:700;margin-left:4px">${cnt}🚌</span>`
+        : '';
+
       html += `
-        <div class="route-card">
-          <div class="rc-num">${esc(lr)}</div>
+        <div class="route-card" id="rc-${lr}" data-color="${col}" data-idx="${i}">
+          <div class="rc-num" style="background:${col};box-shadow:0 2px 8px ${col}55">${esc(lr)}</div>
           <div class="rc-info">
-            <div class="rc-line">קו ${esc(lr)}</div>
+            <div class="rc-line">${cntBadge}קו ${esc(lr)}</div>
             <div class="rc-op">🏢 ${esc(op)}</div>
             ${stopLine}
           </div>
           <div class="rc-actions">
-            <button class="rc-btn" title="הצג תחנות קו" onclick="ask('תחנות קו ${lr}')">📍 תחנות</button>
-            <button class="rc-btn" id="mapbtn-${lr}" title="סמן על מפה" onclick="showLineOnMap('${lr}',this)">🗺️ מפה</button>
+            <button class="rc-btn" onclick="ask('תחנות קו ${lr}')">📍 תחנות</button>
+            <button class="rc-btn" id="mapbtn-${lr}"
+              onclick="zoomToLine('${lr}',${i})">🗺️ מפה</button>
           </div>
         </div>`;
+
+      // ── Plot vehicles on map immediately ───────────────────────────────────
+      (r.vehicles || []).forEach(v => {
+        if (!v.lat || !v.lon) return;
+        const m = L.circleMarker([v.lat, v.lon], {
+          radius:7, fillColor:col, fillOpacity:.85,
+          color:'#fff', weight:1.5, zIndexOffset:500,
+        }).addTo(lmap);
+        m.bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif">
+          <b style="color:${col}">🚌 קו ${lr}</b><br>
+          <span style="color:var(--text3)">${esc(op)}</span>
+          ${v.vel ? '<br>מהירות: '+v.vel+' קמ"ש' : ''}
+          <br><a href="#" onclick="event.preventDefault();ask('תחנות קו ${lr}')"
+            style="color:#7C3AED;font-weight:600">תחנות ▶</a>
+        </div>`);
+        m._lineRef = lr;
+        m._baseStyle = {radius:7, fillOpacity:.85, weight:1.5, color:'#fff', fillColor:col};
+        routePlanMarkers.push(m);
+      });
     }
     html += '</div>';
-    // Pan map to origin
-    if (routeData.origin && routeData.origin.lat) {
-      lmap.setView([routeData.origin.lat, routeData.origin.lon], 13);
-      addRouteEndpoints(routeData);
+
+    // ── Draw origin/destination pins + dashed line ─────────────────────────
+    if (routeData.origin && routeData.destination) {
+      const o = routeData.origin, d = routeData.destination;
+
+      const pm1 = L.circleMarker([o.lat, o.lon], {
+        radius:13, fillColor:'#059669', fillOpacity:.95,
+        color:'#fff', weight:3, zIndexOffset:1500
+      }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif">
+        <b>🟢 מוצא</b><br>${esc(o.label)}</div>`);
+      routeEpMarkers.push(pm1);
+
+      const pm2 = L.circleMarker([d.lat, d.lon], {
+        radius:13, fillColor:'#DC2626', fillOpacity:.95,
+        color:'#fff', weight:3, zIndexOffset:1500
+      }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif">
+        <b>🔴 יעד</b><br>${esc(d.label)}</div>`);
+      routeEpMarkers.push(pm2);
+
+      routePolyline = L.polyline([[o.lat,o.lon],[d.lat,d.lon]], {
+        color:'#6D28D9', weight:3, dashArray:'12,8', opacity:.7
+      }).addTo(lmap);
+
+      // Fit bounds to include all markers
+      const allPts = [[o.lat,o.lon],[d.lat,d.lon],
+                      ...routePlanMarkers.map(m=>[m.getLatLng().lat,m.getLatLng().lng])];
+      if (allPts.length > 1)
+        lmap.fitBounds(allPts, {padding:[35,35]});
     }
   } else {
     html += `<div style="color:var(--text3);font-size:.83rem;margin-top:6px">לא נמצאו קווים פעילים</div>`;
@@ -579,78 +650,77 @@ function addRouteCards(routeData, textReply) {
 
   const d = document.createElement('div');
   d.className = 'msg bot';
-  d.innerHTML = `<div class="av">🚌</div><div class="bbl">${html}<div class="src-badge">⚡ Stride API — זמן אמת</div></div>`;
+  d.innerHTML = `<div class="av">🚌</div><div class="bbl">${html}` +
+                `<div class="src-badge">⚡ Stride API — זמן אמת</div></div>`;
   document.getElementById('chat').appendChild(d);
   setTimeout(() => { document.getElementById('chat').scrollTop = 9999; }, 40);
   return d;
 }
 
-// Mark origin/destination pins on map
-let routeEndpointMarkers = [];
-function addRouteEndpoints(rd) {
-  routeEndpointMarkers.forEach(m => lmap.removeLayer(m));
-  routeEndpointMarkers = [];
-  if (rd.origin && rd.origin.lat) {
-    const m1 = L.circleMarker([rd.origin.lat, rd.origin.lon], {
-      radius:11, fillColor:'#059669', fillOpacity:.9, color:'#fff', weight:2.5, zIndexOffset:800
-    }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif"><b>🟢 מוצא</b><br>${esc(rd.origin.label)}</div>`);
-    routeEndpointMarkers.push(m1);
+// ── Zoom to a specific line's vehicles and highlight them ─────────────────────
+function zoomToLine(lineRef, colorIdx) {
+  const col = LINE_COLORS[colorIdx % LINE_COLORS.length];
+
+  // Dim all, highlight selected
+  routePlanMarkers.forEach(m => {
+    if (m._lineRef === lineRef) {
+      m.setStyle({radius:12, fillOpacity:1, weight:3, color:'#fff'});
+      m.bringToFront();
+    } else {
+      m.setStyle({radius:5, fillOpacity:.2, weight:1, color:'#ccc'});
+    }
+  });
+
+  const lineMarkers = routePlanMarkers.filter(m => m._lineRef === lineRef);
+  if (lineMarkers.length > 0) {
+    const pts = lineMarkers.map(m => [m.getLatLng().lat, m.getLatLng().lng]);
+    lmap.fitBounds(pts, {padding:[30,30], maxZoom:15});
+    lineMarkers[0].openPopup();
   }
-  if (rd.destination && rd.destination.lat) {
-    const m2 = L.circleMarker([rd.destination.lat, rd.destination.lon], {
-      radius:11, fillColor:'#DC2626', fillOpacity:.9, color:'#fff', weight:2.5, zIndexOffset:800
-    }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif"><b>🔴 יעד</b><br>${esc(rd.destination.label)}</div>`);
-    routeEndpointMarkers.push(m2);
-  }
+
+  // Highlight card
+  document.querySelectorAll('.route-card').forEach(c => c.style.opacity='0.55');
+  const card = document.getElementById(`rc-${lineRef}`);
+  if (card) { card.style.opacity='1'; card.style.borderColor=col; }
+
+  // Update button
+  const btn = document.getElementById(`mapbtn-${lineRef}`);
+  if (btn) btn.textContent = `🗺️ ${lineMarkers.length}`;
 }
 
-// Show live vehicles for a specific line on the map
-let activeLineMarkers = [];
+// ── Show live vehicles for a line (from non-route contexts) ───────────────────
 async function showLineOnMap(lineRef, btn) {
-  // Clear previous line markers
   activeLineMarkers.forEach(m => lmap.removeLayer(m));
   activeLineMarkers = [];
-
   if (btn) { btn.textContent = '⌛'; btn.disabled = true; }
-
   try {
-    const data = await fetch(`/line_vehicles?line_ref=${encodeURIComponent(lineRef)}`).then(r => r.json());
+    const data = await fetch(`/line_vehicles?line_ref=${encodeURIComponent(lineRef)}`).then(r=>r.json());
     const vehicles = Array.isArray(data) ? data : [];
-
     vehicles.forEach(v => {
       const lat = parseFloat(v.lat || v.calculated_lat);
       const lon = parseFloat(v.lon || v.calculated_lon);
       if (!lat || !lon) return;
-      const spd = v.velocity ? Math.round(v.velocity) + ' קמ"ש' : 'לא ידוע';
-      const m = L.circleMarker([lat, lon], {
+      const spd = v.velocity ? Math.round(v.velocity)+' קמ"ש' : 'לא ידוע';
+      const m = L.circleMarker([lat,lon], {
         radius:12, fillColor:'#F59E0B', fillOpacity:.95,
         color:'#5B21B6', weight:3, zIndexOffset:1200,
       }).addTo(lmap);
-      m.bindPopup(
-        `<div style="direction:rtl;min-width:120px;font-family:Heebo,sans-serif">
-          <b style="color:#6D28D9;font-size:.95rem">🚌 קו ${lineRef}</b><br>
-          מהירות: ${spd}<br>
-          <a href="#" onclick="event.preventDefault();ask('תחנות קו ${lineRef}')"
-             style="color:#7C3AED;font-weight:600">תחנות הקו ▶</a>
-        </div>`
-      );
+      m.bindPopup(`<div style="direction:rtl;min-width:120px;font-family:Heebo,sans-serif">
+        <b style="color:#6D28D9">🚌 קו ${lineRef}</b><br>מהירות: ${spd}<br>
+        <a href="#" onclick="event.preventDefault();ask('תחנות קו ${lineRef}')"
+           style="color:#7C3AED;font-weight:600">תחנות הקו ▶</a>
+      </div>`);
       activeLineMarkers.push(m);
     });
-
     if (activeLineMarkers.length > 0) {
       const first = activeLineMarkers[0].getLatLng();
       lmap.setView([first.lat, first.lng], 14);
-      if (btn) { btn.textContent = `🗺️ ${activeLineMarkers.length}`; btn.disabled = false; }
+      if (btn) { btn.textContent=`🗺️ ${activeLineMarkers.length}`; btn.disabled=false; }
     } else {
-      if (btn) { btn.textContent = '🗺️ —'; btn.disabled = false; }
-      // subtle notification
-      const note = document.createElement('div');
-      note.style.cssText = 'font-size:.7rem;color:var(--text3);margin-top:4px;direction:rtl';
-      note.textContent = `לא נמצאו כלי רכב פעילים בקו ${lineRef} כרגע`;
-      btn.closest('.bbl')?.appendChild(note);
+      if (btn) { btn.textContent='🗺️ —'; btn.disabled=false; }
     }
   } catch(e) {
-    if (btn) { btn.textContent = '🗺️ מפה'; btn.disabled = false; }
+    if (btn) { btn.textContent='🗺️ מפה'; btn.disabled=false; }
   }
 }
 

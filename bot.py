@@ -424,7 +424,7 @@ class BotHandler(BaseHTTPRequestHandler):
                                 "https://nominatim.openstreetmap.org/search",
                                 params={"q": addr+", ישראל","format":"json","limit":1},
                                 headers={"User-Agent":"IsraelTransitBot/1.0"},
-                                timeout=6
+                                timeout=5
                             ).json()
                             if res:
                                 return (float(res[0]["lat"]), float(res[0]["lon"]),
@@ -452,60 +452,114 @@ class BotHandler(BaseHTTPRequestHandler):
                                 "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
                                 "32":"V-Line","42":"אפיקים"
                             }
-                            line_map = {}
+
+                            # Collect vehicles grouped by line (with positions)
+                            line_data = {}
                             for v in sv:
                                 lr = str(v.get("siri_route__line_ref",""))
                                 op = str(v.get("siri_route__operator_ref",""))
-                                if lr and lr.isdigit() and lr not in line_map:
-                                    line_map[lr] = _OP.get(op, f"מפעיל {op}")
+                                if not (lr and lr.isdigit()):
+                                    continue
+                                if lr not in line_data:
+                                    line_data[lr] = {
+                                        "operator": _OP.get(op, f"מפעיל {op}"),
+                                        "vehicles": []
+                                    }
+                                # Stride returns lat/lon (or calculated_lat/lon)
+                                try:
+                                    vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
+                                    vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
+                                    if vlat and vlon:
+                                        line_data[lr]["vehicles"].append({
+                                            "lat": vlat, "lon": vlon,
+                                            "vel": int(v.get("velocity") or 0)
+                                        })
+                                except (TypeError, ValueError):
+                                    pass
 
+                            # Sort: most vehicles first, then by line number
                             sorted_lr = sorted(
-                                line_map.items(),
-                                key=lambda x: int(x[0]) if x[0].isdigit() else 9999
+                                line_data.items(),
+                                key=lambda x: (-len(x[1]["vehicles"]),
+                                               int(x[0]) if x[0].isdigit() else 9999)
                             )[:12]
 
-                            routes_list = []
-                            for lr, op_name in sorted_lr:
-                                rinfo = {"line_ref": lr, "operator": op_name,
-                                         "origin_stop": "", "final_stop": ""}
+                            # GTFS stop names — parallel calls, 3s total timeout
+                            from concurrent.futures import (ThreadPoolExecutor,
+                                                            as_completed as _asc)
+                            stop_names = {}
+
+                            def _fetch_stops(lr_key):
                                 try:
                                     sd = _req.get(
                                         f"http://localhost:{BOT_PORT}/gtfs/route_stops",
-                                        params={"short_name": lr}, timeout=3
+                                        params={"short_name": lr_key}, timeout=1.5
                                     ).json()
                                     sts = sd.get("stops", [])
                                     if sts:
-                                        rinfo["origin_stop"] = sts[0].get("stop_name","")
-                                        rinfo["final_stop"]  = sts[-1].get("stop_name","")
+                                        return (lr_key,
+                                                sts[0].get("stop_name",""),
+                                                sts[-1].get("stop_name",""))
                                 except Exception:
                                     pass
-                                routes_list.append(rinfo)
+                                return (lr_key, "", "")
+
+                            try:
+                                top_keys = [lr for lr, _ in sorted_lr[:6]]
+                                with ThreadPoolExecutor(max_workers=6) as _pool:
+                                    futs = {_pool.submit(_fetch_stops, k): k
+                                            for k in top_keys}
+                                    for f in _asc(futs, timeout=3.5):
+                                        try:
+                                            k2, os2, fs2 = f.result(timeout=0.1)
+                                            if os2:
+                                                stop_names[k2] = (os2, fs2)
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+
+                            routes_list = []
+                            for lr, ldata in sorted_lr:
+                                o_stop, f_stop = stop_names.get(lr, ("",""))
+                                routes_list.append({
+                                    "line_ref":    lr,
+                                    "operator":    ldata["operator"],
+                                    "origin_stop": o_stop,
+                                    "final_stop":  f_stop,
+                                    "vehicles":    ldata["vehicles"][:8]
+                                })
 
                             if routes_list:
                                 lines_txt = []
                                 for r in routes_list:
+                                    cnt = len(r.get("vehicles",[]))
                                     s = f"🚌 **קו {r['line_ref']}** — {r['operator']}"
+                                    if cnt:
+                                        s += f" ({cnt} כלי רכב)"
                                     if r["origin_stop"] and r["final_stop"]:
                                         s += f"\n   {r['origin_stop']} ↔ {r['final_stop']}"
                                     lines_txt.append(s)
                                 reply = (
                                     f"**מסלול מ-{olabel} ל-{dlabel}**\n"
-                                    f"מצאתי {len(routes_list)} קווים פעילים באזור המסלול:\n\n"
+                                    f"מצאתי {len(routes_list)} קווים פעילים:\n\n"
                                     + "\n".join(lines_txt)
-                                    + "\n\n💡 לחצי **📍 תחנות** לרשימת תחנות הקו\n"
-                                      "💡 לחצי **🗺️ מפה** לסימון הקו על המפה"
                                 )
                                 route_data = {
-                                    "origin":      {"label": olabel, "lat": lat1, "lon": lon1},
-                                    "destination": {"label": dlabel, "lat": lat2, "lon": lon2},
+                                    "origin":      {"label": olabel,
+                                                    "lat": lat1, "lon": lon1},
+                                    "destination": {"label": dlabel,
+                                                    "lat": lat2, "lon": lon2},
                                     "routes":      routes_list
                                 }
                                 source = "stride"
                             else:
-                                reply = f"לא נמצאו אוטובוסים פעילים כרגע בין {olabel} ל-{dlabel}"
+                                reply = (f"לא נמצאו אוטובוסים פעילים כרגע "
+                                         f"בין {olabel} ל-{dlabel}")
                                 source = "stride"
                         else:
-                            reply = "לא הצלחתי לאתר את הכתובות — נסי עם כתובות מפורטות יותר"
+                            reply = ("לא הצלחתי לאתר את הכתובות — "
+                                     "נסי עם כתובות מפורטות יותר")
                             source = "error"
                     except Exception as _re:
                         reply = f"שגיאה בתכנון מסלול: {_re}"
