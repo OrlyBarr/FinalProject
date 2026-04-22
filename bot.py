@@ -775,7 +775,7 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── index.html — מוזרק Google Maps key ──────────────────────────────
+        # ── index.html ────────────────────────────────────────────────────────
         if path == "/" or path == "/transit" or path == "/agent":
             html_path = os.path.join(BASE_DIR, "index.html")
             if not os.path.exists(html_path):
@@ -783,16 +783,16 @@ class BotHandler(BaseHTTPRequestHandler):
             try:
                 with open(html_path, "r", encoding="utf-8") as f:
                     html_content = f.read()
-                # הזרקת Google Maps API key
-                html_content = html_content.replace(
-                    "GMAPS_KEY_PLACEHOLDER",
-                    GOOGLE_MAPS_API_KEY or ""
-                )
+                body = html_content.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(html_content.encode("utf-8"))))
+                self.send_header("Content-Length", str(len(body)))
+                # מונע cache בדפדפן — כל טעינה מחדש תביא את הגרסה העדכנית
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
                 self.end_headers()
-                self.wfile.write(html_content.encode("utf-8"))
+                self.wfile.write(body)
             except Exception as e:
                 self.send_json({"error": str(e)}, status=500)
 
