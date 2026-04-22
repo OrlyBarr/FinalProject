@@ -85,6 +85,10 @@ def index_delay_events(**context):
     _safe_index(context, "delays_n", "delay_events", max_msgs=200, consumer_timeout_ms=3000)
 
 
+def index_traffic_data(**context):
+    _safe_index(context, "traffic_n", "traffic_data", max_msgs=500, consumer_timeout_ms=5000)
+
+
 def index_minio_backfill(**context):
     """
     Read latest files from MinIO and index into ES (catches data missed by Kafka consumer).
@@ -127,6 +131,7 @@ def log_indexing_summary(**context):
         "train_positions": ti.xcom_pull(task_ids="index_train_positions", key="trains_n") or 0,
         "service_alerts":  ti.xcom_pull(task_ids="index_service_alerts",  key="alerts_n") or 0,
         "delay_events":    ti.xcom_pull(task_ids="index_delay_events",    key="delays_n") or 0,
+        "traffic_data":    ti.xcom_pull(task_ids="index_traffic_data",    key="traffic_n") or 0,
         "minio_backfill":  ti.xcom_pull(task_ids="index_minio_backfill",  key="minio_n")  or 0,
     }
 
@@ -153,8 +158,9 @@ with DAG(
     t_trips  = PythonOperator(task_id="index_trip_updates",    python_callable=index_trip_updates)
     t_trains = PythonOperator(task_id="index_train_positions", python_callable=index_train_positions)
     t_alerts = PythonOperator(task_id="index_service_alerts",  python_callable=index_service_alerts)
-    t_delays = PythonOperator(task_id="index_delay_events",    python_callable=index_delay_events)
-    t_minio  = PythonOperator(task_id="index_minio_backfill",  python_callable=index_minio_backfill)
+    t_delays  = PythonOperator(task_id="index_delay_events",    python_callable=index_delay_events)
+    t_traffic = PythonOperator(task_id="index_traffic_data",    python_callable=index_traffic_data)
+    t_minio   = PythonOperator(task_id="index_minio_backfill",  python_callable=index_minio_backfill)
 
     t_summary = PythonOperator(
         task_id="log_indexing_summary",
@@ -162,4 +168,4 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    [t_bus, t_trips, t_trains, t_alerts, t_delays, t_minio] >> t_summary
+    [t_bus, t_trips, t_trains, t_alerts, t_delays, t_traffic, t_minio] >> t_summary
