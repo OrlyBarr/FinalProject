@@ -307,6 +307,59 @@ class BotHandler(BaseHTTPRequestHandler):
 
             reply = None; source = None
 
+            # ── תחנות קו X (גם לרכבות, גם לאוטובוסים) ─────────────────────
+            m_stops = re.search(r'(?:תחנות|עצירות)\s*(?:קו\s*)?(\d+)', ml)
+            if m_stops and not reply:
+                line = m_stops.group(1)
+                # נסה GTFS
+                try:
+                    sd = _req.get(f"http://localhost:{BOT_PORT}/gtfs/route_stops",
+                                  params={"short_name": line}, timeout=5).json()
+                    stops = sd.get("stops", [])
+                    if stops:
+                        rd = _req.get(f"http://localhost:{BOT_PORT}/gtfs/routes",
+                                      params={"q": line, "limit": 1}, timeout=3).json()
+                        route = (rd.get("routes") or [{}])[0]
+                        rname = route.get("route_long_name", "")
+                        reply = (
+                            f"**תחנות קו {line}**"
+                            + (f" — {rname}" if rname else "") + "\n"
+                            f"סה\"כ {len(stops)} תחנות:\n\n"
+                            + "\n".join(f"{i+1}. {s['stop_name']}"
+                                        for i, s in enumerate(stops[:30]))
+                            + (f"\n... ועוד {len(stops)-30} תחנות" if len(stops) > 30 else "")
+                        )
+                        source = "gtfs"
+                except Exception:
+                    pass
+                # Stride fallback לרכבות (siri_ride_stops)
+                if not reply:
+                    try:
+                        veh = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
+                            params={"siri_route__line_ref": line,
+                                    "siri_route__operator_ref": "2",
+                                    "limit": 1, "order_by": "id desc"}, timeout=8).json()
+                        if veh:
+                            ride_id = veh[0].get("siri_ride__id") or veh[0].get("ride_id")
+                            if ride_id:
+                                rs = _req.get(f"{STRIDE}/siri_ride_stops/list",
+                                    params={"siri_ride__id": ride_id,
+                                            "limit": 50, "order_by": "order asc"}, timeout=8).json()
+                                if rs:
+                                    names = [s.get("gtfs_stop__name","")
+                                             or f"תחנה {i+1}" for i,s in enumerate(rs)]
+                                    reply = (
+                                        f"**תחנות רכבת קו {line}**\n"
+                                        f"סה\"כ {len(names)} תחנות:\n\n"
+                                        + "\n".join(f"{i+1}. {n}" for i,n in enumerate(names))
+                                    )
+                                    source = "stride"
+                    except Exception:
+                        pass
+                if not reply:
+                    reply = f"לא נמצאו תחנות לקו {line} — ייתכן שה-GTFS לא טעון"
+                    source = "error"
+
             # ── קו מספר ─────────────────────────────────────────────────────
             lm = re.search(r'(?:קו|line)[^\d]*(\d+)', ml)
             if lm and not reply:
@@ -355,13 +408,19 @@ class BotHandler(BaseHTTPRequestHandler):
                         pass
 
             # ── קווי מפעיל ──────────────────────────────────────────────────
+            OP_DISPLAY = {
+                "3":"דן","5":"אגד","6":"NTA מטרופולין","15":"אגד תעבורה",
+                "16":"תנופה","18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+                "14":"מטרופולין","32":"V-Line","42":"אפיקים",
+            }
             if not reply:
                 for op_name, op_id in OPERATOR_IDS.items():
-                    if op_name in ml and ("קו" in ml or "רשימ" in ml or "מפעיל" in ml or any(w in ml for w in ["של","מה"])):
+                    if op_name in ml and ("קו" in ml or "רשימ" in ml or "מפעיל" in ml or any(w in ml for w in ["של","מה","קווי"])):
+                        # נסה GTFS קודם
                         try:
                             gdata = _req.get(
                                 f"http://localhost:{BOT_PORT}/gtfs/routes",
-                                params={"operator_id": op_id, "limit": 200}, timeout=5
+                                params={"operator_id": op_id, "limit": 200}, timeout=4
                             ).json()
                             routes = gdata.get("routes", [])
                             if routes:
@@ -371,11 +430,40 @@ class BotHandler(BaseHTTPRequestHandler):
                                 reply = (
                                     f"**קווי {agency}** — {len(nums)} קווים\n"
                                     + ", ".join(str(n) for n in nums[:60])
-                                    + (f"  ועוד..." if len(nums)>60 else "")
+                                    + ("  ועוד..." if len(nums)>60 else "")
                                 )
                                 source = "gtfs"
                         except Exception:
                             pass
+
+                        # Stride fallback — כלי רכב פעילים כרגע
+                        if not reply:
+                            try:
+                                sr = _req.get(
+                                    f"{STRIDE}/siri_vehicle_locations/list",
+                                    params={"siri_route__operator_ref": op_id,
+                                            "limit": 200, "order_by": "id desc"},
+                                    timeout=9
+                                ).json()
+                                agency = OP_DISPLAY.get(op_id, op_name)
+                                if sr:
+                                    lines = sorted(
+                                        {str(v.get("siri_route__line_ref","")) for v in sr
+                                         if v.get("siri_route__line_ref")},
+                                        key=lambda x: int(x) if x.isdigit() else 9999
+                                    )
+                                    reply = (
+                                        f"**קווי {agency}** — {len(lines)} קווים פעילים כרגע\n"
+                                        + ", ".join(lines[:80])
+                                        + ("  ועוד..." if len(lines)>80 else "")
+                                    )
+                                else:
+                                    reply = f"**{agency}** — אין כלי רכב פעילים כרגע"
+                                source = "stride"
+                            except Exception:
+                                agency = OP_DISPLAY.get(op_id, op_name)
+                                reply = f"לא ניתן לשלוף קווי {agency} כרגע — נסי שוב"
+                                source = "error"
                         break
 
             # ── רכבות — תחנה ────────────────────────────────────────────────
@@ -402,11 +490,42 @@ class BotHandler(BaseHTTPRequestHandler):
                                 "limit":30,"order_by":"id desc"
                             }, timeout=10).json()
                         if sr:
-                            lines = [v.get("siri_route__line_ref","?") for v in sr[:10]]
+                            # קבץ לפי line_ref וספור כמה רכבות בכל קו
+                            line_groups = {}
+                            for v in sr:
+                                lr = str(v.get("siri_route__line_ref","?"))
+                                line_groups[lr] = line_groups.get(lr, 0) + 1
+
+                            # נסה לקבל שמות מסלול מ-GTFS
+                            route_names = {}
+                            try:
+                                for lr in list(line_groups.keys())[:8]:
+                                    gr = _req.get(
+                                        f"http://localhost:{BOT_PORT}/gtfs/routes",
+                                        params={"q": lr, "operator_id": "2", "limit": 1},
+                                        timeout=3
+                                    ).json()
+                                    routes = gr.get("routes", [])
+                                    if routes and routes[0].get("route_long_name"):
+                                        route_names[lr] = routes[0]["route_long_name"]
+                            except Exception:
+                                pass
+
+                            # בנה רשימה מסודרת
+                            lines_text = []
+                            for lr, cnt in sorted(line_groups.items(), key=lambda x: -x[1])[:8]:
+                                rname = route_names.get(lr, "")
+                                cnt_s = f"{cnt} רכבת" if cnt == 1 else f"{cnt} רכבות"
+                                if rname:
+                                    lines_text.append(f"🚆 {rname} ({cnt_s})")
+                                else:
+                                    lines_text.append(f"🚆 קו {lr} ({cnt_s})")
+
                             reply = (
                                 f"**רכבות ישראל — {name}**\n"
-                                f"{len(sr)} רכבות פעילות באזור כרגע\n"
-                                "קווים: " + ", ".join(str(l) for l in lines)
+                                f"{len(sr)} רכבות פעילות באזור כרגע:\n\n"
+                                + "\n".join(lines_text)
+                                + "\n\n💡 לתחנות: כתבי **תחנות קו [מספר]**"
                             )
                         else:
                             reply = f"**{name}** — אין רכבות פעילות באזור כרגע"
@@ -416,14 +535,16 @@ class BotHandler(BaseHTTPRequestHandler):
                         source = "error"
                 else:
                     reply = (
-                        "**תחנות רכבת עיקריות בגוש דן:**\n"
-                        "• תל אביב מרכז (ארלוזורוב)\n"
-                        "• תל אביב השלום\n"
-                        "• תל אביב הגנה\n"
-                        "• תל אביב אוניברסיטה\n"
-                        "• בני ברק\n"
-                        "• פתח תקווה סגולה\n\n"
-                        "ציני שם תחנה לקבלת רכבות פעילות"
+                        "**תחנות רכבת עיקריות בגוש דן:**\n\n"
+                        "🚉 תל אביב מרכז (ארלוזורוב)\n"
+                        "🚉 תל אביב השלום\n"
+                        "🚉 תל אביב הגנה\n"
+                        "🚉 תל אביב אוניברסיטה\n"
+                        "🚉 בני ברק\n"
+                        "🚉 פתח תקווה סגולה\n"
+                        "🚉 הרצליה\n\n"
+                        "כתבי שם תחנה לרכבות פעילות, או\n"
+                        "**תחנות קו [מספר]** לתחנות מסלול"
                     )
                     source = "static"
 
@@ -654,7 +775,7 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── index.html — מוזרק Google Maps key ──────────────────────────────
+        # ── index.html ────────────────────────────────────────────────────────
         if path == "/" or path == "/transit" or path == "/agent":
             html_path = os.path.join(BASE_DIR, "index.html")
             if not os.path.exists(html_path):
@@ -662,16 +783,16 @@ class BotHandler(BaseHTTPRequestHandler):
             try:
                 with open(html_path, "r", encoding="utf-8") as f:
                     html_content = f.read()
-                # הזרקת Google Maps API key
-                html_content = html_content.replace(
-                    "GMAPS_KEY_PLACEHOLDER",
-                    GOOGLE_MAPS_API_KEY or ""
-                )
+                body = html_content.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(html_content.encode("utf-8"))))
+                self.send_header("Content-Length", str(len(body)))
+                # מונע cache בדפדפן — כל טעינה מחדש תביא את הגרסה העדכנית
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
                 self.end_headers()
-                self.wfile.write(html_content.encode("utf-8"))
+                self.wfile.write(body)
             except Exception as e:
                 self.send_json({"error": str(e)}, status=500)
 
