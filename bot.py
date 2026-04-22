@@ -281,6 +281,233 @@ class BotHandler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
 
+        # ── /smart_ask — ענייה ישירה מ-Stride/GTFS ללא AI ─────────────────────
+        if path == "/smart_ask":
+          try:
+            import re, requests as _req
+            msg = payload.get("message", "").strip()
+            ml  = msg.lower()
+
+            STRIDE = "https://open-bus-stride-api.hasadna.org.il"
+            OPERATOR_IDS = {
+                "דן":"3","אגד תעבורה":"15","אגד":"5","nta":"6","מטרופולין":"6",
+                "סופרבוס":"18","קווים":"21","נתיב אקספרס":"25","נתיב":"25",
+                "תנופה":"16","v-line":"32","אפיקים":"42",
+            }
+            TRAIN_STATIONS = {
+                "מרכז":("תל אביב מרכז","32.0893","34.7773"),
+                "ארלוזורוב":("תל אביב מרכז","32.0893","34.7773"),
+                "השלום":("תל אביב השלום","32.0648","34.7751"),
+                "הגנה":("תל אביב הגנה","32.0530","34.7637"),
+                "אוניברסיטה":("תל אביב אוניברסיטה","32.1134","34.8043"),
+                "בני ברק":("בני ברק","32.0896","34.8299"),
+                "פתח תקווה":("פתח תקווה סגולה","32.0919","34.8836"),
+                "הרצליה":("הרצליה","32.1650","34.8430"),
+            }
+
+            reply = None; source = None
+
+            # ── קו מספר ─────────────────────────────────────────────────────
+            lm = re.search(r'(?:קו|line)[^\d]*(\d+)', ml)
+            if lm and not reply:
+                line = lm.group(1)
+                try:
+                    # נסה GTFS קודם
+                    gdata = _req.get(
+                        f"http://localhost:{BOT_PORT}/gtfs/route_stops",
+                        params={"short_name": line}, timeout=4
+                    ).json()
+                    stops = gdata.get("stops", [])
+                    rdata = _req.get(
+                        f"http://localhost:{BOT_PORT}/gtfs/routes",
+                        params={"q": line, "limit": 1}, timeout=4
+                    ).json()
+                    route = (rdata.get("routes") or [{}])[0]
+                    if stops:
+                        first = stops[0]["stop_name"]; last = stops[-1]["stop_name"]
+                        reply = (
+                            f"**קו {line}** — {route.get('route_long_name','')}\n"
+                            f"מפעיל: {route.get('agency_name','לא ידוע')}\n"
+                            f"מ: {first} → עד: {last}\n"
+                            f"סה\"כ {len(stops)} תחנות\n\n"
+                            + "\n".join(f"{i+1}. {s['stop_name']}" for i,s in enumerate(stops[:20]))
+                            + (f"\n... ועוד {len(stops)-20} תחנות" if len(stops)>20 else "")
+                        )
+                        source = "gtfs"
+                except Exception:
+                    pass
+
+                if not reply:
+                    # fallback — Stride live
+                    try:
+                        sr = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
+                            params={"siri_route__line_ref":line,"limit":20,"order_by":"id desc"},
+                            timeout=8).json()
+                        if sr:
+                            ops = list({v.get("siri_route__operator_ref","?") for v in sr})
+                            reply = (
+                                f"**קו {line}** — כרגע פעיל\n"
+                                f"{len(sr)} כלי רכב בשטח\n"
+                                f"מפעיל: {', '.join(str(o) for o in ops)}"
+                            )
+                            source = "stride"
+                    except Exception:
+                        pass
+
+            # ── קווי מפעיל ──────────────────────────────────────────────────
+            if not reply:
+                for op_name, op_id in OPERATOR_IDS.items():
+                    if op_name in ml and ("קו" in ml or "רשימ" in ml or "מפעיל" in ml or any(w in ml for w in ["של","מה"])):
+                        try:
+                            gdata = _req.get(
+                                f"http://localhost:{BOT_PORT}/gtfs/routes",
+                                params={"operator_id": op_id, "limit": 200}, timeout=5
+                            ).json()
+                            routes = gdata.get("routes", [])
+                            if routes:
+                                nums = sorted({r["route_short_name"] for r in routes if r.get("route_short_name")},
+                                              key=lambda x: int(x) if x.isdigit() else 9999)
+                                agency = routes[0].get("agency_name", op_name)
+                                reply = (
+                                    f"**קווי {agency}** — {len(nums)} קווים\n"
+                                    + ", ".join(str(n) for n in nums[:60])
+                                    + (f"  ועוד..." if len(nums)>60 else "")
+                                )
+                                source = "gtfs"
+                        except Exception:
+                            pass
+                        break
+
+            # ── רכבות — תחנה ────────────────────────────────────────────────
+            if not reply and ("רכבת" in ml or "תחנת" in ml or "רכבות" in ml):
+                matched_station = None
+                for kw,(name,lat,lon) in TRAIN_STATIONS.items():
+                    if kw in ml:
+                        matched_station = (name, lat, lon); break
+
+                if not matched_station and ("מרכז" in ml or "ת\"א" in ml or "תא " in ml):
+                    matched_station = ("תל אביב מרכז","32.0893","34.7773")
+
+                if matched_station:
+                    name, lat, lon = matched_station
+                    try:
+                        r_val = 0.15
+                        sr = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
+                            params={
+                                "siri_route__operator_ref":"2",
+                                "lat__greater_or_equal": float(lat)-r_val,
+                                "lat__lower_or_equal":   float(lat)+r_val,
+                                "lon__greater_or_equal": float(lon)-r_val,
+                                "lon__lower_or_equal":   float(lon)+r_val,
+                                "limit":30,"order_by":"id desc"
+                            }, timeout=10).json()
+                        if sr:
+                            lines = [v.get("siri_route__line_ref","?") for v in sr[:10]]
+                            reply = (
+                                f"**רכבות ישראל — {name}**\n"
+                                f"{len(sr)} רכבות פעילות באזור כרגע\n"
+                                "קווים: " + ", ".join(str(l) for l in lines)
+                            )
+                        else:
+                            reply = f"**{name}** — אין רכבות פעילות באזור כרגע"
+                        source = "stride"
+                    except Exception as e:
+                        reply = f"שגיאה בשליפת רכבות: {e}"
+                        source = "error"
+                else:
+                    reply = (
+                        "**תחנות רכבת עיקריות בגוש דן:**\n"
+                        "• תל אביב מרכז (ארלוזורוב)\n"
+                        "• תל אביב השלום\n"
+                        "• תל אביב הגנה\n"
+                        "• תל אביב אוניברסיטה\n"
+                        "• בני ברק\n"
+                        "• פתח תקווה סגולה\n\n"
+                        "ציני שם תחנה לקבלת רכבות פעילות"
+                    )
+                    source = "static"
+
+            # ── אוטובוסים ליד כתובת / קואורדינטות ─────────────────────────
+            if not reply and any(w in ml for w in ["ליד","קרוב","בקרבת","כתובת"]):
+                # חלץ קואורדינטות אם קיימות
+                coords = re.search(r'(\d+\.\d+)[,\s]+(\d+\.\d+)', msg)
+                lat = lon = None
+                addr_label = ""
+                if coords:
+                    lat = float(coords.group(1)); lon = float(coords.group(2))
+                    addr_label = f"{lat:.4f},{lon:.4f}"
+                else:
+                    # Nominatim geocoding
+                    addr = re.sub(r'אוטובוסים?\s*(ליד|קרוב\s*ל|בקרבת)?\s*', '', msg).strip()
+                    addr = addr or msg
+                    try:
+                        geo = _req.get(
+                            "https://nominatim.openstreetmap.org/search",
+                            params={"q": addr+", ישראל","format":"json","limit":1},
+                            headers={"User-Agent":"TransitBot/1.0"},
+                            timeout=6
+                        ).json()
+                        if geo:
+                            lat = float(geo[0]["lat"]); lon = float(geo[0]["lon"])
+                            addr_label = geo[0].get("display_name","").split(",")[0]
+                    except Exception:
+                        pass
+
+                if lat:
+                    try:
+                        near = _req.get(
+                            f"http://localhost:{BOT_PORT}/gtfs/nearby",
+                            params={"lat":lat,"lon":lon,"radius":500}, timeout=5
+                        ).json()
+                        stops = near.get("stops",[])
+                        if stops:
+                            lines_set = {}
+                            for s in stops[:6]:
+                                for r in (s.get("routes") or []):
+                                    n = r.get("route_short_name","")
+                                    if n: lines_set[n] = f"קו {n} — {s['stop_name']} ({s.get('distance_m',0):.0f}מ')"
+                            reply = (
+                                f"**אוטובוסים ליד {addr_label}**\n"
+                                f"{len(stops)} תחנות ב-500 מטר:\n\n"
+                                + "\n".join(list(lines_set.values())[:15])
+                            )
+                        else:
+                            reply = f"לא נמצאו תחנות ב-500 מטר מ-{addr_label}"
+                        source = "gtfs"
+                    except Exception as e:
+                        reply = f"שגיאה: {e}"
+
+            # ── רשימת מפעילים ───────────────────────────────────────────────
+            if not reply and any(w in ml for w in ["מפעיל","חברות","חברה","רשימ"]):
+                reply = (
+                    "**מפעילי תחבורה ציבורית — גוש דן**\n\n"
+                    "🚌 **אוטובוסים:**\n"
+                    "• דן (3) — תל אביב וסביבה\n"
+                    "• אגד (5) — בין-עירוני ותל אביב\n"
+                    "• NTA מטרופולין (6) — קו הסגול/אדום\n"
+                    "• קווים (21) — מרכז הארץ\n"
+                    "• סופרבוס (18) — שרון ומרכז\n"
+                    "• נתיב אקספרס (25) — בין-עירוני\n"
+                    "• מטרופולין (14) — מרכז וצפון\n"
+                    "• אגד תעבורה (15) — פרברים\n"
+                    "• תנופה (16) — שרון\n\n"
+                    "🚆 **רכבת:**\n"
+                    "• רכבת ישראל (2)\n\n"
+                    "ציני שם מפעיל לרשימת קוויו"
+                )
+                source = "static"
+
+            # ── לא זוהה — שלח None כדי ש-frontend ייפול ל-Gemini ─────────────
+            if reply:
+                self.send_json({"reply": reply, "source": source})
+            else:
+                self.send_json({"reply": None, "source": None})
+
+          except Exception as e:
+            log.error(f"/smart_ask error: {e}", exc_info=True)
+            self.send_json({"reply": None, "source": None})
+          return
+
         # ── /ask — Gemini (primary) → Ollama (fallback) ─────────────────────
         if path == "/ask":
           try:
@@ -427,20 +654,26 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
-        # ── Transit Query Tool ────────────────────────────────────────────────
-        # מגיש index.html (גרסה חדשה) עם fallback ל-agent_transit.html
-        if path == "/" or path == "/transit":
-            html = os.path.join(BASE_DIR, "index.html")
-            if not os.path.exists(html):
-                html = os.path.join(BASE_DIR, "agent_transit.html")
-            self.send_html(html)
-
-        # ── Agent dashboard ───────────────────────────────────────────────────
-        elif path == "/agent":
-            html = os.path.join(BASE_DIR, "index.html")
-            if not os.path.exists(html):
-                html = os.path.join(BASE_DIR, "agent_transit.html")
-            self.send_html(html)
+        # ── index.html — מוזרק Google Maps key ──────────────────────────────
+        if path == "/" or path == "/transit" or path == "/agent":
+            html_path = os.path.join(BASE_DIR, "index.html")
+            if not os.path.exists(html_path):
+                html_path = os.path.join(BASE_DIR, "agent_transit.html")
+            try:
+                with open(html_path, "r", encoding="utf-8") as f:
+                    html_content = f.read()
+                # הזרקת Google Maps API key
+                html_content = html_content.replace(
+                    "GMAPS_KEY_PLACEHOLDER",
+                    GOOGLE_MAPS_API_KEY or ""
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html_content.encode("utf-8"))))
+                self.end_headers()
+                self.wfile.write(html_content.encode("utf-8"))
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
 
         # ── health ────────────────────────────────────────────────────────────
         elif path == "/health":
