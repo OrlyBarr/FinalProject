@@ -305,7 +305,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 "הרצליה":("הרצליה","32.1650","34.8430"),
             }
 
-            reply = None; source = None
+            reply = None; source = None; route_data = None
 
             # ── תחנות קו X (גם לרכבות, גם לאוטובוסים) ─────────────────────
             m_stops = re.search(r'(?:תחנות|עצירות)\s*(?:קו\s*)?(\d+)', ml)
@@ -406,6 +406,110 @@ class BotHandler(BaseHTTPRequestHandler):
                             source = "stride"
                     except Exception:
                         pass
+
+            # ── מסלול: מ-X ל-Y  (Moovit style route planning) ───────────────
+            m_route = re.match(r'^(?:מסלול\s+)?מ[-\s]+(.+?)\s+ל[-\s]*(.+)$', ml.strip())
+            if not m_route:
+                m_route = re.search(
+                    r'(?:תכנן|מסלול|איך\s+מגיעים).*?מ[-\s]+(.+?)\s+ל[-\s]*(.+)',
+                    ml.strip()
+                )
+            if m_route and not reply:
+                origin_q = m_route.group(1).strip()
+                dest_q   = m_route.group(2).strip()
+                if len(origin_q) >= 2 and len(dest_q) >= 2:
+                    try:
+                        def _geo_req(addr):
+                            res = _req.get(
+                                "https://nominatim.openstreetmap.org/search",
+                                params={"q": addr+", ישראל","format":"json","limit":1},
+                                headers={"User-Agent":"IsraelTransitBot/1.0"},
+                                timeout=6
+                            ).json()
+                            if res:
+                                return (float(res[0]["lat"]), float(res[0]["lon"]),
+                                        res[0].get("display_name","").split(",")[0])
+                            return None, None, addr
+
+                        lat1, lon1, olabel = _geo_req(origin_q)
+                        lat2, lon2, dlabel = _geo_req(dest_q)
+
+                        if lat1 and lat2:
+                            lat_min = min(lat1,lat2)-0.025; lat_max = max(lat1,lat2)+0.025
+                            lon_min = min(lon1,lon2)-0.025; lon_max = max(lon1,lon2)+0.025
+
+                            sv = _req.get(f"{STRIDE}/siri_vehicle_locations/list", params={
+                                "lat__greater_or_equal": lat_min,
+                                "lat__lower_or_equal":   lat_max,
+                                "lon__greater_or_equal": lon_min,
+                                "lon__lower_or_equal":   lon_max,
+                                "limit": 200, "order_by": "id desc"
+                            }, timeout=10).json()
+
+                            _OP = {
+                                "2":"רכבת ישראל","3":"דן","5":"אגד","6":"NTA מטרופולין",
+                                "14":"מטרופולין","15":"אגד תעבורה","16":"תנופה",
+                                "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+                                "32":"V-Line","42":"אפיקים"
+                            }
+                            line_map = {}
+                            for v in sv:
+                                lr = str(v.get("siri_route__line_ref",""))
+                                op = str(v.get("siri_route__operator_ref",""))
+                                if lr and lr.isdigit() and lr not in line_map:
+                                    line_map[lr] = _OP.get(op, f"מפעיל {op}")
+
+                            sorted_lr = sorted(
+                                line_map.items(),
+                                key=lambda x: int(x[0]) if x[0].isdigit() else 9999
+                            )[:12]
+
+                            routes_list = []
+                            for lr, op_name in sorted_lr:
+                                rinfo = {"line_ref": lr, "operator": op_name,
+                                         "origin_stop": "", "final_stop": ""}
+                                try:
+                                    sd = _req.get(
+                                        f"http://localhost:{BOT_PORT}/gtfs/route_stops",
+                                        params={"short_name": lr}, timeout=3
+                                    ).json()
+                                    sts = sd.get("stops", [])
+                                    if sts:
+                                        rinfo["origin_stop"] = sts[0].get("stop_name","")
+                                        rinfo["final_stop"]  = sts[-1].get("stop_name","")
+                                except Exception:
+                                    pass
+                                routes_list.append(rinfo)
+
+                            if routes_list:
+                                lines_txt = []
+                                for r in routes_list:
+                                    s = f"🚌 **קו {r['line_ref']}** — {r['operator']}"
+                                    if r["origin_stop"] and r["final_stop"]:
+                                        s += f"\n   {r['origin_stop']} ↔ {r['final_stop']}"
+                                    lines_txt.append(s)
+                                reply = (
+                                    f"**מסלול מ-{olabel} ל-{dlabel}**\n"
+                                    f"מצאתי {len(routes_list)} קווים פעילים באזור המסלול:\n\n"
+                                    + "\n".join(lines_txt)
+                                    + "\n\n💡 לחצי **📍 תחנות** לרשימת תחנות הקו\n"
+                                      "💡 לחצי **🗺️ מפה** לסימון הקו על המפה"
+                                )
+                                route_data = {
+                                    "origin":      {"label": olabel, "lat": lat1, "lon": lon1},
+                                    "destination": {"label": dlabel, "lat": lat2, "lon": lon2},
+                                    "routes":      routes_list
+                                }
+                                source = "stride"
+                            else:
+                                reply = f"לא נמצאו אוטובוסים פעילים כרגע בין {olabel} ל-{dlabel}"
+                                source = "stride"
+                        else:
+                            reply = "לא הצלחתי לאתר את הכתובות — נסי עם כתובות מפורטות יותר"
+                            source = "error"
+                    except Exception as _re:
+                        reply = f"שגיאה בתכנון מסלול: {_re}"
+                        source = "error"
 
             # ── קווי מפעיל ──────────────────────────────────────────────────
             OP_DISPLAY = {
@@ -620,7 +724,10 @@ class BotHandler(BaseHTTPRequestHandler):
 
             # ── לא זוהה — שלח None כדי ש-frontend ייפול ל-Gemini ─────────────
             if reply:
-                self.send_json({"reply": reply, "source": source})
+                resp = {"reply": reply, "source": source}
+                if route_data:
+                    resp["route_data"] = route_data
+                self.send_json(resp)
             else:
                 self.send_json({"reply": None, "source": None})
 
@@ -917,6 +1024,128 @@ class BotHandler(BaseHTTPRequestHandler):
                 from gtfs_query import search_stops
                 rows = search_stops(q_) if q_ else []
                 self.send_json({"stops": rows})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
+
+        # ── Route plan — מסלול מ-X ל-Y ──────────────────────────────────────
+        # GET /route_plan?origin=ADDR&destination=ADDR
+        elif path == "/route_plan":
+            origin = urllib.parse.unquote_plus((qs.get("origin") or [""])[0]).strip()
+            destination = urllib.parse.unquote_plus((qs.get("destination") or [""])[0]).strip()
+            if not origin or not destination:
+                self.send_json({"error": "?origin= and ?destination= required"}, status=400)
+                return
+            try:
+                import requests as _rq
+                _OP = {
+                    "2":"רכבת ישראל","3":"דן","5":"אגד","6":"NTA מטרופולין",
+                    "14":"מטרופולין","15":"אגד תעבורה","16":"תנופה",
+                    "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+                    "32":"V-Line","42":"אפיקים"
+                }
+                def _geo(addr):
+                    res = _rq.get(
+                        NOMINATIM_URL,
+                        params={"q": addr+", ישראל","format":"json","limit":1},
+                        headers={"User-Agent":"IsraelTransitBot/1.0"}, timeout=6
+                    ).json()
+                    if res:
+                        return (float(res[0]["lat"]), float(res[0]["lon"]),
+                                res[0].get("display_name","").split(",")[0])
+                    return None, None, addr
+
+                lat1, lon1, olabel = _geo(origin)
+                lat2, lon2, dlabel = _geo(destination)
+                if not lat1 or not lat2:
+                    self.send_json({"error": "לא ניתן לאתר כתובות", "routes": []})
+                    return
+
+                lat_min=min(lat1,lat2)-0.025; lat_max=max(lat1,lat2)+0.025
+                lon_min=min(lon1,lon2)-0.025; lon_max=max(lon1,lon2)+0.025
+
+                sv = _rq.get(f"{HASADNA_URL}/siri_vehicle_locations/list", params={
+                    "lat__greater_or_equal": lat_min, "lat__lower_or_equal": lat_max,
+                    "lon__greater_or_equal": lon_min, "lon__lower_or_equal": lon_max,
+                    "limit": 200, "order_by": "id desc"
+                }, timeout=12).json()
+
+                line_map = {}
+                for v in sv:
+                    lr = str(v.get("siri_route__line_ref",""))
+                    op = str(v.get("siri_route__operator_ref",""))
+                    if lr and lr.isdigit() and lr not in line_map:
+                        line_map[lr] = _OP.get(op, f"מפעיל {op}")
+
+                routes_list = []
+                for lr, op_name in sorted(line_map.items(),
+                                          key=lambda x: int(x[0]) if x[0].isdigit() else 9999)[:15]:
+                    rinfo = {"line_ref": lr, "operator": op_name,
+                             "origin_stop": "", "final_stop": ""}
+                    try:
+                        sd = _rq.get(
+                            f"http://localhost:{BOT_PORT}/gtfs/route_stops",
+                            params={"short_name": lr}, timeout=3
+                        ).json()
+                        sts = sd.get("stops", [])
+                        if sts:
+                            rinfo["origin_stop"] = sts[0].get("stop_name","")
+                            rinfo["final_stop"]  = sts[-1].get("stop_name","")
+                    except Exception:
+                        pass
+                    routes_list.append(rinfo)
+
+                self.send_json({
+                    "origin":      {"label": olabel, "lat": lat1, "lon": lon1},
+                    "destination": {"label": dlabel, "lat": lat2, "lon": lon2},
+                    "routes":      routes_list,
+                    "count":       len(routes_list)
+                })
+            except Exception as e:
+                self.send_json({"error": str(e), "routes": []}, status=500)
+
+        # ── Live vehicles for a specific line ─────────────────────────────────
+        # GET /line_vehicles?line_ref=X
+        elif path == "/line_vehicles":
+            line_ref = (qs.get("line_ref") or [""])[0].strip()
+            if not line_ref:
+                self.send_json({"error": "?line_ref= required"}, status=400)
+                return
+            target = (
+                f"{HASADNA_URL}/siri_vehicle_locations/list?"
+                f"siri_route__line_ref={urllib.parse.quote(line_ref)}"
+                f"&limit=30&order_by=id+desc"
+            )
+            self._proxy(target)
+
+        # ── Future stops for a line / ride ───────────────────────────────────
+        # GET /line_stops?line_ref=X   OR   ?ride_id=Y
+        elif path == "/line_stops":
+            line_ref = (qs.get("line_ref") or [""])[0].strip()
+            ride_id  = (qs.get("ride_id")  or [""])[0].strip()
+            try:
+                import requests as _rq
+                STRIDE = HASADNA_URL
+                if not ride_id and line_ref:
+                    # Get most recent ride for this line
+                    veh = _rq.get(f"{STRIDE}/siri_vehicle_locations/list",
+                        params={"siri_route__line_ref": line_ref, "limit": 1,
+                                "order_by": "id desc"}, timeout=8).json()
+                    if veh:
+                        ride_id = str(veh[0].get("siri_ride__id",""))
+
+                if ride_id:
+                    rs = _rq.get(f"{STRIDE}/siri_ride_stops/list",
+                        params={"siri_ride__id": ride_id, "limit": 60,
+                                "order_by": "order asc"}, timeout=10).json()
+                    stops = [{"name": s.get("gtfs_stop__name") or f"תחנה {i+1}",
+                              "order": s.get("order",i),
+                              "lat": s.get("gtfs_stop__lat"),
+                              "lon": s.get("gtfs_stop__lon")}
+                             for i,s in enumerate(rs)]
+                    self.send_json({"stops": stops, "count": len(stops),
+                                   "ride_id": ride_id, "line_ref": line_ref})
+                else:
+                    self.send_json({"stops": [], "error": "no active ride found"})
             except Exception as e:
                 self.send_json({"error": str(e), "stops": []}, status=500)
 

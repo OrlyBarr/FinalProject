@@ -227,6 +227,70 @@ textarea::placeholder{color:var(--text3)}
   border-radius:8px;padding:5px 12px;margin-top:4px;
 }
 
+/* ── Route Planner ──────────────────────────────────────────────────────────── */
+.route-planner{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  padding:10px 14px;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(109,40,217,.06);
+  animation:slideDown .2s ease;
+}
+@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.rp-row{display:flex;gap:7px;align-items:stretch}
+.rp-field{
+  flex:1;display:flex;align-items:center;gap:6px;
+  background:var(--bg);border:1.5px solid var(--border);
+  border-radius:10px;padding:7px 10px;transition:border-color .15s;
+}
+.rp-field:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,40,217,.1)}
+.rp-field input{
+  flex:1;background:none;border:none;outline:none;
+  color:var(--text);font-family:'Heebo',sans-serif;
+  font-size:.8rem;direction:rtl;
+}
+.rp-field input::placeholder{color:var(--text3)}
+.rp-dot{font-size:.85rem;flex-shrink:0}
+.rp-sep{display:flex;align-items:center;color:var(--text3);font-size:1rem;padding:0 1px}
+.rp-go{
+  background:var(--accent);border:none;border-radius:10px;
+  padding:8px 16px;color:#fff;font-family:'Heebo',sans-serif;
+  font-size:.8rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.rp-go:hover{background:var(--acc2);box-shadow:var(--shadow)}
+.rp-hidden{display:none!important}
+
+/* ── Route Cards (Moovit-style) ─────────────────────────────────────────────── */
+.route-cards{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.route-card{
+  background:var(--surf2);border:1.5px solid var(--border);
+  border-radius:12px;padding:10px 12px;
+  display:flex;align-items:center;gap:10px;
+  transition:all .15s;
+}
+.route-card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+.rc-num{
+  min-width:44px;height:44px;
+  background:linear-gradient(135deg,var(--accent),var(--acc2));
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:800;font-size:.82rem;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(109,40,217,.25);
+}
+.rc-info{flex:1;min-width:0}
+.rc-line{font-weight:700;color:var(--text);font-size:.84rem}
+.rc-op{font-size:.7rem;color:var(--text3);margin-top:1px}
+.rc-stops{
+  font-size:.72rem;color:var(--accent);margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rc-actions{display:flex;gap:5px;flex-shrink:0}
+.rc-btn{
+  background:var(--surf);border:1.5px solid var(--border);
+  border-radius:8px;padding:5px 9px;
+  color:var(--accent);font-family:'Heebo',sans-serif;
+  font-size:.68rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.rc-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rc-btn:disabled{opacity:.5;cursor:not-allowed}
+
 /* ── Leaflet light theme overrides ─────────────────────────────────────────── */
 .leaflet-container{background:#E8E4F8;font-family:'Heebo',sans-serif}
 .leaflet-popup-content-wrapper{
@@ -279,14 +343,32 @@ textarea::placeholder{color:var(--text3)}
 
     <div class="quick-bar">
       <span class="qlabel">שאלות מהירות:</span>
+      <button class="qbtn" style="font-weight:700;border-color:var(--accent);color:var(--accent)" onclick="toggleRoutePlanner()">🗺️ מסלול</button>
       <button class="qbtn" onclick="promptLine()">🔢 קו מספר</button>
       <button class="qbtn" onclick="ask('קווי דן')">🚌 קווי דן</button>
       <button class="qbtn" onclick="ask('קווי אגד')">🚌 קווי אגד</button>
       <button class="qbtn" onclick="ask('קווי NTA')">🚇 קווי NTA</button>
       <button class="qbtn" onclick="promptAddress()">📍 אוטובוסים ליד כתובת</button>
       <button class="qbtn" onclick="ask('רכבות מתל אביב מרכז')">🚆 רכבות ת"א מרכז</button>
-      <button class="qbtn" onclick="ask('רכבות מתל אביב השלום')">🚆 רכבות ת"א השלום</button>
       <button class="qbtn" onclick="useMyLocation(true)">📍 ליד המיקום שלי</button>
+    </div>
+
+    <!-- ── Route Planner (Moovit-style) ── -->
+    <div class="route-planner rp-hidden" id="route-planner">
+      <div class="rp-row">
+        <div class="rp-field">
+          <span class="rp-dot">🟢</span>
+          <input id="rp-origin" placeholder="תחנת מוצא / כתובת..."
+                 onkeydown="if(event.key==='Enter')document.getElementById('rp-dest').focus()"/>
+        </div>
+        <div class="rp-sep">↕</div>
+        <div class="rp-field">
+          <span class="rp-dot">🔴</span>
+          <input id="rp-dest" placeholder="תחנת יעד / כתובת..."
+                 onkeydown="if(event.key==='Enter')planRoute()"/>
+        </div>
+        <button class="rp-go" onclick="planRoute()">🔍 חפש</button>
+      </div>
     </div>
 
     <div class="chat" id="chat">
@@ -294,7 +376,8 @@ textarea::placeholder{color:var(--text3)}
         <div class="w-ico">🚌</div>
         <div class="w-title">שלום! אני הסוכן שלך לתחבורה</div>
         <div class="w-desc">שאלי על קווי אוטובוס, רכבות, לוחות זמנים ותחנות בגוש דן</div>
-        <div class="w-hint">💡 לתחנות קו: כתבי "תחנות קו 63"</div>
+        <div class="w-hint">💡 לתכנון מסלול: לחצי 🗺️ מסלול בתפריט למעלה</div>
+        <div class="w-hint" style="margin-top:4px">💡 לתחנות קו: כתבי "תחנות קו 63"</div>
       </div>
     </div>
 
@@ -431,6 +514,146 @@ function useMyLocation(toChat) {
 
 window.transitChat = q => ask(q);
 
+// ── Route Planner ─────────────────────────────────────────────────────────────
+function toggleRoutePlanner() {
+  const rp = document.getElementById('route-planner');
+  rp.classList.toggle('rp-hidden');
+  if (!rp.classList.contains('rp-hidden')) {
+    setTimeout(() => document.getElementById('rp-origin').focus(), 80);
+  }
+}
+
+async function planRoute() {
+  const origin = document.getElementById('rp-origin').value.trim();
+  const dest   = document.getElementById('rp-dest').value.trim();
+  if (!origin || !dest) {
+    document.getElementById(origin ? 'rp-dest' : 'rp-origin').focus();
+    return;
+  }
+  document.getElementById('route-planner').classList.add('rp-hidden');
+  ask(`מסלול מ-${origin} ל-${dest}`);
+}
+
+// ── Route Cards Renderer ──────────────────────────────────────────────────────
+function addRouteCards(routeData, textReply) {
+  document.getElementById('welcome')?.remove();
+
+  // Header: first line of reply (strip markdown **)
+  const firstLine = (textReply || '').split('\n')[0].replace(/\*\*/g,'');
+  let html = `<div style="font-weight:700;color:var(--accent);margin-bottom:6px">🗺️ ${esc(firstLine)}</div>`;
+
+  if (routeData && routeData.routes && routeData.routes.length) {
+    html += `<div style="font-size:.72rem;color:var(--text3);margin-bottom:8px">${routeData.routes.length} קווים פעילים באזור המסלול</div>`;
+    html += '<div class="route-cards">';
+    for (const r of routeData.routes) {
+      const lr  = r.line_ref || '?';
+      const op  = r.operator || '?';
+      const ost = r.origin_stop;
+      const fst = r.final_stop;
+      const stopLine = ost && fst
+        ? `<div class="rc-stops">🚏 ${esc(ost)} ↔ ${esc(fst)}</div>`
+        : '';
+      html += `
+        <div class="route-card">
+          <div class="rc-num">${esc(lr)}</div>
+          <div class="rc-info">
+            <div class="rc-line">קו ${esc(lr)}</div>
+            <div class="rc-op">🏢 ${esc(op)}</div>
+            ${stopLine}
+          </div>
+          <div class="rc-actions">
+            <button class="rc-btn" title="הצג תחנות קו" onclick="ask('תחנות קו ${lr}')">📍 תחנות</button>
+            <button class="rc-btn" id="mapbtn-${lr}" title="סמן על מפה" onclick="showLineOnMap('${lr}',this)">🗺️ מפה</button>
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+    // Pan map to origin
+    if (routeData.origin && routeData.origin.lat) {
+      lmap.setView([routeData.origin.lat, routeData.origin.lon], 13);
+      addRouteEndpoints(routeData);
+    }
+  } else {
+    html += `<div style="color:var(--text3);font-size:.83rem;margin-top:6px">לא נמצאו קווים פעילים</div>`;
+  }
+
+  const d = document.createElement('div');
+  d.className = 'msg bot';
+  d.innerHTML = `<div class="av">🚌</div><div class="bbl">${html}<div class="src-badge">⚡ Stride API — זמן אמת</div></div>`;
+  document.getElementById('chat').appendChild(d);
+  setTimeout(() => { document.getElementById('chat').scrollTop = 9999; }, 40);
+  return d;
+}
+
+// Mark origin/destination pins on map
+let routeEndpointMarkers = [];
+function addRouteEndpoints(rd) {
+  routeEndpointMarkers.forEach(m => lmap.removeLayer(m));
+  routeEndpointMarkers = [];
+  if (rd.origin && rd.origin.lat) {
+    const m1 = L.circleMarker([rd.origin.lat, rd.origin.lon], {
+      radius:11, fillColor:'#059669', fillOpacity:.9, color:'#fff', weight:2.5, zIndexOffset:800
+    }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif"><b>🟢 מוצא</b><br>${esc(rd.origin.label)}</div>`);
+    routeEndpointMarkers.push(m1);
+  }
+  if (rd.destination && rd.destination.lat) {
+    const m2 = L.circleMarker([rd.destination.lat, rd.destination.lon], {
+      radius:11, fillColor:'#DC2626', fillOpacity:.9, color:'#fff', weight:2.5, zIndexOffset:800
+    }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif"><b>🔴 יעד</b><br>${esc(rd.destination.label)}</div>`);
+    routeEndpointMarkers.push(m2);
+  }
+}
+
+// Show live vehicles for a specific line on the map
+let activeLineMarkers = [];
+async function showLineOnMap(lineRef, btn) {
+  // Clear previous line markers
+  activeLineMarkers.forEach(m => lmap.removeLayer(m));
+  activeLineMarkers = [];
+
+  if (btn) { btn.textContent = '⌛'; btn.disabled = true; }
+
+  try {
+    const data = await fetch(`/line_vehicles?line_ref=${encodeURIComponent(lineRef)}`).then(r => r.json());
+    const vehicles = Array.isArray(data) ? data : [];
+
+    vehicles.forEach(v => {
+      const lat = parseFloat(v.lat || v.calculated_lat);
+      const lon = parseFloat(v.lon || v.calculated_lon);
+      if (!lat || !lon) return;
+      const spd = v.velocity ? Math.round(v.velocity) + ' קמ"ש' : 'לא ידוע';
+      const m = L.circleMarker([lat, lon], {
+        radius:12, fillColor:'#F59E0B', fillOpacity:.95,
+        color:'#5B21B6', weight:3, zIndexOffset:1200,
+      }).addTo(lmap);
+      m.bindPopup(
+        `<div style="direction:rtl;min-width:120px;font-family:Heebo,sans-serif">
+          <b style="color:#6D28D9;font-size:.95rem">🚌 קו ${lineRef}</b><br>
+          מהירות: ${spd}<br>
+          <a href="#" onclick="event.preventDefault();ask('תחנות קו ${lineRef}')"
+             style="color:#7C3AED;font-weight:600">תחנות הקו ▶</a>
+        </div>`
+      );
+      activeLineMarkers.push(m);
+    });
+
+    if (activeLineMarkers.length > 0) {
+      const first = activeLineMarkers[0].getLatLng();
+      lmap.setView([first.lat, first.lng], 14);
+      if (btn) { btn.textContent = `🗺️ ${activeLineMarkers.length}`; btn.disabled = false; }
+    } else {
+      if (btn) { btn.textContent = '🗺️ —'; btn.disabled = false; }
+      // subtle notification
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:.7rem;color:var(--text3);margin-top:4px;direction:rtl';
+      note.textContent = `לא נמצאו כלי רכב פעילים בקו ${lineRef} כרגע`;
+      btn.closest('.bbl')?.appendChild(note);
+    }
+  } catch(e) {
+    if (btn) { btn.textContent = '🗺️ מפה'; btn.disabled = false; }
+  }
+}
+
 // ── Chat ─────────────────────────────────────────────────────────────────────
 let busy = false;
 const history = [];
@@ -533,12 +756,18 @@ async function sendMsg() {
       clearTimeout(tid);
       typing.remove();
       history.push({role: 'assistant', content: d1.reply});
-      const el = addMsg('bot', fmt(d1.reply));
-      if (d1.source) {
-        const badge = document.createElement('div');
-        badge.className = 'src-badge';
-        badge.textContent = srcLabel(d1.source);
-        el.querySelector('.bbl').appendChild(badge);
+
+      if (d1.route_data) {
+        // Moovit-style route cards
+        addRouteCards(d1.route_data, d1.reply);
+      } else {
+        const el = addMsg('bot', fmt(d1.reply));
+        if (d1.source) {
+          const badge = document.createElement('div');
+          badge.className = 'src-badge';
+          badge.textContent = srcLabel(d1.source);
+          el.querySelector('.bbl').appendChild(badge);
+        }
       }
       busy = false; document.getElementById('sbtn').disabled = false; inp.focus();
       return;
