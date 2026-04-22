@@ -206,13 +206,28 @@ wait_for_service "Kafka UI"  "http://localhost:8085"        20
 wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 15
 wait_for_service "Airflow"   "http://localhost:8081/health"  60
 
+# Wait for Kafka broker to be healthy (health check uses localhost:9092 inside container)
+log "Waiting for Kafka broker to become healthy..."
+KAFKA_WAIT=0
+until [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] || [ $KAFKA_WAIT -ge 60 ]; do
+  echo -n "."
+  sleep 3
+  KAFKA_WAIT=$((KAFKA_WAIT + 3))
+done
+echo ""
+if [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ]; then
+  success "Kafka broker is healthy!"
+else
+  warn "Kafka broker did not become healthy within 60 seconds — continuing anyway"
+fi
+
 # ─────────────────────────────────────────────────────────────
 #  Step 4: Create Kafka Topics
 # ─────────────────────────────────────────────────────────────
 step "4 — Creating Kafka Topics"
 
-# Check if topics already exist
-EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
+# Check if topics already exist (use localhost:9092 — the PLAINTEXT_HOST listener inside the container)
+EXISTING=$(timeout 15 docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
 
 TOPICS_TO_CREATE=""
 for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors" "bus-delays" "train-delays" "bus-delays-historical" "train-delays-historical"; do
@@ -223,9 +238,9 @@ for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "
   fi
 done
 
-# Create all missing topics in minimal docker exec calls
+# Create all missing topics
 for topic in $TOPICS_TO_CREATE; do
-  docker exec kafka kafka-topics \
+  timeout 15 docker exec kafka kafka-topics \
     --create --if-not-exists \
     --bootstrap-server localhost:9092 \
     --partitions 4 \
