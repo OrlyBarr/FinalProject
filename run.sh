@@ -166,11 +166,17 @@ else
 fi
 
 log "Starting all services (skips already-running containers)..."
-docker compose up -d --remove-orphans 2>&1 || {
-  warn "docker compose up exited with an error — attempting to start created containers..."
+# NOTE: --remove-orphans is intentionally omitted — this machine runs other Docker
+# projects (NiFi, etc.) whose containers cannot be stopped without root permission.
+# Using --remove-orphans would cause a fatal permission-denied error and abort the
+# entire compose up, leaving airflow-webserver and other services uncreated.
+# --no-recreate prevents docker compose from trying to stop/restart already-running
+# containers started outside this compose project (avoids permission denied errors).
+docker compose up -d --no-recreate 2>&1 || {
+  warn "docker compose up exited with an error — attempting to start containers individually..."
   for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-    if [ "$STATUS" = "created" ]; then
+    if [ "$STATUS" = "created" ] || [ "$STATUS" = "exited" ]; then
       docker start "$container" 2>/dev/null || true
     fi
   done
@@ -196,7 +202,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "3 — Waiting for services to be ready"
 
-wait_for_service "Kafka UI"  "http://localhost:8080"        20
+wait_for_service "Kafka UI"  "http://localhost:8085"        20
 wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 15
 wait_for_service "Airflow"   "http://localhost:8081/health"  60
 
@@ -482,7 +488,7 @@ echo -e "${NC}"
 
 echo -e "${BOLD}  🔗  Access URLs:${NC}"
 echo -e "  ${CYAN}Airflow UI${NC}     →  http://localhost:8081  (admin / admin)"
-echo -e "  ${CYAN}Kafka UI${NC}       →  http://localhost:8080"
+echo -e "  ${CYAN}Kafka UI${NC}       →  http://localhost:8085"
 echo -e "  ${CYAN}MinIO Console${NC}  →  http://localhost:9001  (minioadmin / minioadmin123)"
 echo -e "  ${CYAN}Kibana${NC}         →  http://localhost:5601"
 echo -e "  ${CYAN}Bot API${NC}        →  http://localhost:5000  (GET /buses /stops /status)"
