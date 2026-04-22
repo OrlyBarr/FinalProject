@@ -291,6 +291,184 @@ textarea::placeholder{color:var(--text3)}
 .rc-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 .rc-btn:disabled{opacity:.5;cursor:not-allowed}
 
+/* ── Line View — Moovit-style dedicated line panel ─────────────────────────── */
+.chat-panel{position:relative}   /* needed for absolute child */
+
+.lv-panel{
+  position:absolute;inset:0;z-index:20;
+  background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
+  animation:slideIn .2s ease;
+}
+.lv-panel.lv-hidden{display:none!important}
+@keyframes slideIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+
+/* Header */
+.lv-header{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  padding:11px 14px;display:flex;align-items:center;gap:10px;
+  flex-shrink:0;box-shadow:0 2px 8px rgba(109,40,217,.07);
+}
+.lv-back{
+  background:var(--surf2);border:1.5px solid var(--border);
+  border-radius:8px;padding:5px 10px;color:var(--text2);
+  font-family:'Heebo',sans-serif;font-size:.75rem;font-weight:700;
+  cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.lv-back:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.lv-badge{
+  min-width:52px;height:52px;border-radius:13px;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:900;font-size:1.05rem;
+  flex-shrink:0;letter-spacing:-.01em;
+}
+
+.lv-meta{flex:1;min-width:0}
+.lv-op{font-size:.68rem;color:var(--text3);font-weight:500;margin-bottom:2px}
+.lv-dir-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.lv-dir-txt{font-size:.82rem;font-weight:700;color:var(--text);flex:1;min-width:0;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lv-dir-btn{
+  background:var(--surf2);border:1.5px solid var(--border);
+  border-radius:7px;padding:3px 9px;color:var(--accent);
+  font-family:'Heebo',sans-serif;font-size:.72rem;font-weight:700;
+  cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.lv-dir-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.lv-veh-count{
+  font-size:.64rem;color:var(--green);font-weight:600;margin-top:3px;
+  display:inline-flex;align-items:center;gap:4px;
+}
+
+/* Day bar */
+.lv-day-bar{
+  background:var(--surf2);border-bottom:1px solid var(--border);
+  padding:5px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.lv-day-btn{
+  background:none;border:none;font-size:.82rem;cursor:pointer;
+  color:var(--accent);padding:3px 7px;border-radius:5px;
+  transition:background .15s;font-family:'Heebo',sans-serif;
+}
+.lv-day-btn:hover{background:var(--border)}
+.lv-day-txt{font-size:.77rem;font-weight:600;color:var(--text);flex:1;text-align:center}
+
+/* Stop timeline */
+.lv-stops-wrap{flex:1;overflow-y:auto;overflow-x:hidden}
+.lv-stops-wrap::-webkit-scrollbar{width:4px}
+.lv-stops-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+.lv-stop-row{
+  display:flex;align-items:stretch;
+  padding:0 12px 0 8px;cursor:pointer;
+  transition:background .12s;min-height:50px;
+}
+.lv-stop-row:hover{background:rgba(109,40,217,.05)}
+.lv-stop-row.lv-active{background:var(--surf2)}
+
+/* Timeline column */
+.lv-tc{
+  width:34px;flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;
+}
+.lv-seg{width:3px;flex:1;min-height:10px}
+.lv-dot-circle{
+  width:13px;height:13px;border-radius:50%;flex-shrink:0;
+  border:3px solid #6D28D9;background:#fff;
+  transition:transform .15s;
+}
+.lv-stop-row:hover .lv-dot-circle{transform:scale(1.25)}
+.lv-dot-circle.lv-terminal{width:17px;height:17px;border-width:3px}
+
+/* Stop content */
+.lv-sc{
+  flex:1;display:flex;align-items:center;
+  padding:10px 8px;gap:8px;min-width:0;
+}
+.lv-sn{
+  flex:1;font-size:.83rem;color:var(--text);
+  font-weight:500;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.lv-sn.lv-terminal{font-weight:800;color:var(--accent);font-size:.86rem}
+.lv-sched-btn{
+  background:var(--surf);border:1.5px solid var(--border);
+  border-radius:7px;padding:4px 9px;
+  color:var(--text2);font-family:'Heebo',sans-serif;
+  font-size:.65rem;font-weight:700;cursor:pointer;
+  transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.lv-sched-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Loading */
+.lv-loading{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;padding:40px 20px;
+  color:var(--text3);font-size:.83rem;
+}
+.lv-spinner{
+  width:34px;height:34px;border:4px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Schedule modal */
+.lv-modal-overlay{
+  position:fixed;inset:0;z-index:999;
+  background:rgba(30,27,75,.45);backdrop-filter:blur(3px);
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:fadeIn .2s ease;
+}
+.lv-modal-overlay.lv-hidden{display:none!important}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.lv-modal{
+  background:var(--surf);border-radius:20px 20px 0 0;
+  width:100%;max-width:520px;max-height:70vh;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 -4px 32px rgba(109,40,217,.22);
+  animation:slideUp .22s ease;
+}
+@keyframes slideUp{from{transform:translateY(30px)}to{transform:none}}
+.lv-modal-hdr{
+  display:flex;align-items:center;padding:14px 18px;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+  background:linear-gradient(135deg,#5B21B6,#7C3AED);
+}
+.lv-modal-title{
+  flex:1;font-weight:700;font-size:.9rem;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.lv-modal-close{
+  background:rgba(255,255,255,.2);border:none;
+  border-radius:7px;padding:4px 9px;color:#fff;
+  font-size:.8rem;cursor:pointer;font-family:'Heebo',sans-serif;
+  transition:background .15s;
+}
+.lv-modal-close:hover{background:rgba(255,255,255,.35)}
+.lv-modal-body{
+  flex:1;overflow-y:auto;padding:12px 0;
+}
+.lv-modal-body::-webkit-scrollbar{width:4px}
+.lv-modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.lv-sched-row{
+  display:flex;align-items:center;padding:8px 18px;gap:10px;
+  border-bottom:1px solid var(--surf2);transition:background .1s;
+}
+.lv-sched-row:hover{background:var(--surf2)}
+.lv-sched-time{
+  font-size:.92rem;font-weight:800;color:var(--accent);
+  min-width:52px;font-variant-numeric:tabular-nums;
+}
+.lv-sched-line{
+  font-size:.75rem;background:var(--accent);color:#fff;
+  border-radius:6px;padding:2px 7px;font-weight:700;flex-shrink:0;
+}
+.lv-sched-op{font-size:.73rem;color:var(--text3);flex:1}
+.lv-modal-empty{
+  padding:28px;text-align:center;color:var(--text3);font-size:.83rem;
+}
+
 /* ── Leaflet light theme overrides ─────────────────────────────────────────── */
 .leaflet-container{background:#E8E4F8;font-family:'Heebo',sans-serif}
 .leaflet-popup-content-wrapper{
@@ -344,13 +522,44 @@ textarea::placeholder{color:var(--text3)}
     <div class="quick-bar">
       <span class="qlabel">שאלות מהירות:</span>
       <button class="qbtn" style="font-weight:700;border-color:var(--accent);color:var(--accent)" onclick="toggleRoutePlanner()">🗺️ מסלול</button>
-      <button class="qbtn" onclick="promptLine()">🔢 קו מספר</button>
+      <button class="qbtn" onclick="promptLineView()">🔢 קו מספר</button>
       <button class="qbtn" onclick="ask('קווי דן')">🚌 קווי דן</button>
       <button class="qbtn" onclick="ask('קווי אגד')">🚌 קווי אגד</button>
       <button class="qbtn" onclick="ask('קווי NTA')">🚇 קווי NTA</button>
       <button class="qbtn" onclick="promptAddress()">📍 אוטובוסים ליד כתובת</button>
       <button class="qbtn" onclick="ask('רכבות מתל אביב מרכז')">🚆 רכבות ת"א מרכז</button>
       <button class="qbtn" onclick="useMyLocation(true)">📍 ליד המיקום שלי</button>
+    </div>
+
+    <!-- ── Line View — Moovit-style dedicated line panel ── -->
+    <div class="lv-panel lv-hidden" id="line-view">
+
+      <!-- Header -->
+      <div class="lv-header">
+        <button class="lv-back" onclick="closeLineView()">← חזרה</button>
+        <div class="lv-badge" id="lv-badge" style="background:#6D28D9;box-shadow:0 3px 10px #6D28D955">1</div>
+        <div class="lv-meta">
+          <div class="lv-op" id="lv-op">מפעיל</div>
+          <div class="lv-dir-row">
+            <div class="lv-dir-txt" id="lv-dir-txt">טוען מסלול...</div>
+            <button class="lv-dir-btn" id="lv-dir-btn" onclick="switchDirection()" style="display:none">⇄ כיוון</button>
+          </div>
+          <div class="lv-veh-count" id="lv-veh-count"></div>
+        </div>
+      </div>
+
+      <!-- Day selector -->
+      <div class="lv-day-bar">
+        <button class="lv-day-btn" onclick="lvChangeDay(-1)">◀</button>
+        <div class="lv-day-txt" id="lv-day">היום</div>
+        <button class="lv-day-btn" onclick="lvChangeDay(1)">▶</button>
+        <div id="lv-day-note" style="font-size:.65rem;color:var(--text3);flex:1;text-align:left"></div>
+      </div>
+
+      <!-- Stops timeline -->
+      <div class="lv-stops-wrap" id="lv-stops">
+        <div class="lv-loading"><div class="lv-spinner"></div><span>טוען תחנות ומסלול...</span></div>
+      </div>
     </div>
 
     <!-- ── Route Planner (Moovit-style) ── -->
@@ -390,6 +599,17 @@ textarea::placeholder{color:var(--text3)}
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Schedule modal -->
+<div class="lv-modal-overlay lv-hidden" id="lv-modal" onclick="closeLvModal()">
+  <div class="lv-modal" onclick="event.stopPropagation()">
+    <div class="lv-modal-hdr">
+      <div class="lv-modal-title" id="lv-modal-title">📍 תחנה</div>
+      <button class="lv-modal-close" onclick="closeLvModal()">✕ סגור</button>
+    </div>
+    <div class="lv-modal-body" id="lv-modal-body"></div>
   </div>
 </div>
 
@@ -437,12 +657,15 @@ async function refreshBuses() {
       }).addTo(lmap);
 
       m.bindPopup(
-        `<div style="direction:rtl;min-width:130px;font-family:Heebo,sans-serif">
-          <b style="color:#6D28D9">קו ${line}</b><br>
+        `<div style="direction:rtl;min-width:140px;font-family:Heebo,sans-serif">
+          <b style="color:#6D28D9;font-size:.95rem">קו ${line}</b><br>
           מפעיל: ${op || '?'}<br>
           מהירות: ${spd}<br>
-          <a href="#" onclick="event.preventDefault();window.transitChat('קו ${line}')"
-             style="color:#7C3AED;font-weight:600">פרטי קו ▶</a>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+            <a href="#" onclick="event.preventDefault();lmap.closePopup();openLineView('${line}')"
+               style="color:#fff;background:#6D28D9;padding:3px 8px;border-radius:6px;
+                      font-size:.72rem;font-weight:700;text-decoration:none">📍 צפה בקו</a>
+          </div>
         </div>`
       );
       busMarkers.push(m);
@@ -532,10 +755,13 @@ async function fetchNearbyForCoords(lat, lon) {
           color: '#fff', weight: 1.5, zIndexOffset: 600,
         }).addTo(lmap);
         m.bindPopup(
-          `<div style="direction:rtl;font-family:Heebo,sans-serif">
-            <b style="color:#6D28D9">🚌 קו ${lr}</b><br>
-            <a href="#" onclick="event.preventDefault();ask('תחנות קו ${lr}')"
-               style="color:#7C3AED;font-weight:600">תחנות ▶</a>
+          `<div style="direction:rtl;font-family:Heebo,sans-serif;min-width:130px">
+            <b style="color:#6D28D9;font-size:.9rem">🚌 קו ${lr}</b><br>
+            <div style="margin-top:5px">
+              <a href="#" onclick="event.preventDefault();lmap.closePopup();openLineView('${lr}')"
+                 style="color:#fff;background:#6D28D9;padding:3px 8px;border-radius:6px;
+                        font-size:.72rem;font-weight:700;text-decoration:none">📍 צפה בקו</a>
+            </div>
           </div>`
         );
         nearbyMarkers.push(m);
@@ -635,7 +861,7 @@ function addRouteCards(routeData, textReply) {
             ${stopLine}
           </div>
           <div class="rc-actions">
-            <button class="rc-btn" onclick="ask('תחנות קו ${lr}')">📍 תחנות</button>
+            <button class="rc-btn" onclick="openLineView('${lr}','${col}')">📍 תחנות</button>
             <button class="rc-btn" id="mapbtn-${lr}"
               onclick="zoomToLine('${lr}',${i})">🗺️ מפה</button>
           </div>
@@ -816,6 +1042,39 @@ function promptAddress() {
   inp.dataset.mode = 'address';
 }
 
+function promptLineView() {
+  // Show an inline mini-prompt in the chat panel for line number
+  document.getElementById('welcome')?.remove();
+  const d = document.createElement('div');
+  d.className = 'msg bot';
+  d.innerHTML = `<div class="av">🚌</div><div class="bbl">
+    <div style="font-weight:700;color:var(--accent);margin-bottom:8px">הזיני מספר קו לצפייה</div>
+    <div style="display:flex;gap:6px;align-items:center;direction:ltr">
+      <input id="lv-line-inp" type="text" inputmode="numeric" placeholder="לדוגמה: 1, 63, 240"
+        style="flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;
+               padding:7px 12px;color:var(--text);font-family:Heebo,sans-serif;font-size:.85rem;
+               outline:none;direction:rtl"
+        onkeydown="if(event.key==='Enter'){const v=this.value.trim();if(v)openLineView(v);}"
+        onfocus="this.style.borderColor='var(--accent)'"/>
+      <button onclick="const v=document.getElementById('lv-line-inp').value.trim();if(v)openLineView(v);"
+        style="background:var(--accent);border:none;border-radius:9px;padding:8px 14px;
+               color:#fff;font-family:Heebo,sans-serif;font-size:.8rem;font-weight:700;
+               cursor:pointer;white-space:nowrap">
+        🗺️ פתח קו
+      </button>
+    </div>
+    <div style="font-size:.7rem;color:var(--text3);margin-top:6px">
+      ניתן לחפש כל קו אוטובוס בגוש דן — דן, אגד, NTA, קווים ועוד
+    </div>
+  </div>`;
+  const chat = document.getElementById('chat');
+  chat.appendChild(d);
+  setTimeout(() => {
+    chat.scrollTop = 9999;
+    document.getElementById('lv-line-inp')?.focus();
+  }, 60);
+}
+
 function setStatus(txt, ok) {
   document.getElementById('status-txt').textContent = txt;
   document.querySelector('.dot').style.background = ok ? '#4ADE80' : '#FCD34D';
@@ -916,6 +1175,314 @@ async function sendMsg() {
   }
 
   busy = false; document.getElementById('sbtn').disabled = false; inp.focus();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LINE VIEW — Moovit-style dedicated line page
+// ══════════════════════════════════════════════════════════════════════════════
+
+let lvLineRef    = '';
+let lvColor      = '#6D28D9';
+let lvDirections = [];     // [{first_stop, last_stop, stops:[{name,stop_id,lat,lon}]}]
+let lvDirIdx     = 0;
+let lvStopsData  = [];     // current direction's stops
+let lvVehicles   = [];     // live vehicles
+
+// map layers for line view
+let lvMapRoute   = null;
+let lvMapStops   = [];
+let lvMapVehs    = [];
+
+// ── Open ──────────────────────────────────────────────────────────────────────
+async function openLineView(lineRef, color) {
+  lvLineRef = String(lineRef);
+  lvColor   = color || LINE_COLORS[0];
+  lvDirIdx  = 0;
+
+  // Show panel
+  document.getElementById('line-view').classList.remove('lv-hidden');
+  document.getElementById('route-planner').classList.add('rp-hidden');
+
+  // Reset header
+  const badge = document.getElementById('lv-badge');
+  badge.textContent  = lvLineRef;
+  badge.style.background  = lvColor;
+  badge.style.boxShadow   = `0 3px 10px ${lvColor}55`;
+  document.getElementById('lv-op').textContent         = 'טוען...';
+  document.getElementById('lv-dir-txt').textContent    = 'טוען מסלול...';
+  document.getElementById('lv-dir-btn').style.display  = 'none';
+  document.getElementById('lv-veh-count').textContent  = '';
+  document.getElementById('lv-stops').innerHTML =
+    '<div class="lv-loading"><div class="lv-spinner"></div><span>טוען תחנות ומסלול...</span></div>';
+
+  // Clear map layers
+  _lvClearMap();
+
+  try {
+    const data = await fetch(`/line_info?line_ref=${encodeURIComponent(lvLineRef)}`)
+      .then(r => r.json());
+
+    lvDirections = data.directions || [];
+    lvVehicles   = data.vehicles   || [];
+
+    // Header
+    document.getElementById('lv-op').textContent =
+      `🚌 קו ${lvLineRef}  ·  ${data.operator || ''}`;
+
+    const vCount = lvVehicles.length;
+    document.getElementById('lv-veh-count').textContent =
+      vCount ? `🟢 ${vCount} כלי רכב בשטח כרגע` : '';
+
+    if (lvDirections.length >= 2) {
+      document.getElementById('lv-dir-btn').style.display = 'inline-flex';
+    }
+
+    // Render stops + map
+    _lvRenderStops();
+    _lvDrawMap();
+
+  } catch(e) {
+    document.getElementById('lv-stops').innerHTML =
+      `<div class="lv-loading">⚠️ שגיאה בטעינה: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Close ─────────────────────────────────────────────────────────────────────
+function closeLineView() {
+  document.getElementById('line-view').classList.add('lv-hidden');
+  _lvClearMap();
+  lvLineRef = ''; lvDirections = []; lvVehicles = [];
+}
+
+// ── Direction toggle ──────────────────────────────────────────────────────────
+function switchDirection() {
+  if (lvDirections.length < 2) return;
+  lvDirIdx = (lvDirIdx + 1) % lvDirections.length;
+  _lvRenderStops();
+  // Redraw route stops on map
+  lvMapStops.forEach(m => lmap.removeLayer(m)); lvMapStops = [];
+  if (lvMapRoute) { lmap.removeLayer(lvMapRoute); lvMapRoute = null; }
+  const dir = lvDirections[lvDirIdx];
+  if (dir) _lvDrawRoute(dir.stops);
+}
+
+// ── Day selector (stub — GTFS timetable) ─────────────────────────────────────
+const _lvDays = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+let   _lvDayOffset = 0;
+function lvChangeDay(delta) {
+  _lvDayOffset += delta;
+  const d = new Date(); d.setDate(d.getDate() + _lvDayOffset);
+  const dayName = _lvDays[d.getDay()];
+  document.getElementById('lv-day').textContent =
+    _lvDayOffset === 0 ? 'היום' : _lvDayOffset === 1 ? 'מחר' : dayName;
+  document.getElementById('lv-day-note').textContent =
+    _lvDayOffset !== 0 ? '(לוח זמנים דורש GTFS)' : '';
+}
+
+// ── Render stop timeline ──────────────────────────────────────────────────────
+function _lvRenderStops() {
+  const dir = lvDirections[lvDirIdx];
+  if (!dir || !dir.stops?.length) {
+    document.getElementById('lv-stops').innerHTML =
+      '<div class="lv-loading">⚠️ לא נמצאו תחנות לקו זה</div>';
+    return;
+  }
+
+  lvStopsData = dir.stops;
+  const c = lvColor;
+  document.getElementById('lv-dir-txt').textContent =
+    `${dir.first_stop}  ←  ${dir.last_stop}`;
+
+  const n = lvStopsData.length;
+  let html = '';
+
+  lvStopsData.forEach((s, i) => {
+    const isFirst = i === 0;
+    const isLast  = i === n - 1;
+    const isTerm  = isFirst || isLast;
+
+    const topVis  = isFirst ? 'visibility:hidden;' : '';
+    const botVis  = isLast  ? 'visibility:hidden;' : '';
+    const dotBg   = isTerm  ? `background:${c};` : 'background:#fff;';
+    const dotSize = isTerm  ? '17px' : '13px';
+    const dotShadow = isTerm ? `box-shadow:0 0 0 4px ${c}22;` : '';
+    const nameCls = isTerm  ? 'lv-sn lv-terminal' : 'lv-sn';
+    const sid     = (s.stop_id || '').replace(/'/g, "\\'");
+    const sname   = (s.name || '').replace(/'/g, "\\'");
+
+    html += `
+<div class="lv-stop-row" id="lvsr-${i}" onclick="lvStopClick(${i})">
+  <div class="lv-tc">
+    <div class="lv-seg" style="${topVis}background:${c}"></div>
+    <div style="width:${dotSize};height:${dotSize};border-radius:50%;
+                border:3px solid ${c};${dotBg}${dotShadow}
+                flex-shrink:0;transition:transform .15s;z-index:1"></div>
+    <div class="lv-seg" style="${botVis}background:${c}"></div>
+  </div>
+  <div class="lv-sc">
+    <div class="${nameCls}">${esc(s.name)}</div>
+    <button class="lv-sched-btn"
+            onclick="event.stopPropagation();showStopSchedule('${sid}','${sname}')">
+      🕐 לוח
+    </button>
+  </div>
+</div>`;
+  });
+
+  document.getElementById('lv-stops').innerHTML = html;
+}
+
+// ── Stop click ────────────────────────────────────────────────────────────────
+function lvStopClick(idx) {
+  const s = lvStopsData[idx];
+  if (!s) return;
+
+  // Highlight row
+  document.querySelectorAll('.lv-stop-row').forEach(r => r.classList.remove('lv-active'));
+  document.getElementById(`lvsr-${idx}`)?.classList.add('lv-active');
+
+  // Zoom map to stop
+  if (s.lat && s.lon) {
+    lmap.setView([parseFloat(s.lat), parseFloat(s.lon)], 16);
+    // Open popup on the corresponding stop marker
+    const m = lvMapStops[idx];
+    if (m) m.openPopup();
+  }
+}
+
+// ── Schedule modal ────────────────────────────────────────────────────────────
+async function showStopSchedule(stopId, stopName) {
+  document.getElementById('lv-modal-title').textContent = `📍 ${stopName}`;
+  document.getElementById('lv-modal-body').innerHTML =
+    '<div class="lv-modal-empty"><div class="lv-spinner" style="margin:0 auto 10px"></div>טוען לוח זמנים...</div>';
+  document.getElementById('lv-modal').classList.remove('lv-hidden');
+
+  let schedHtml = '';
+  try {
+    if (stopId) {
+      const now = new Date();
+      const fromTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const data = await fetch(`/gtfs/schedule?stop_id=${encodeURIComponent(stopId)}&from=${fromTime}`)
+        .then(r => r.json());
+      const rows = data.schedule || [];
+
+      if (rows.length > 0) {
+        schedHtml = rows.slice(0, 12).map(s => {
+          const t = s.arrival_time || s.departure_time || '';
+          const ln = s.route_short_name || s.route_id || '?';
+          const op = s.agency_name || s.operator_name || '';
+          return `<div class="lv-sched-row">
+            <div class="lv-sched-time">${esc(t.slice(0,5))}</div>
+            <div class="lv-sched-line" style="background:${lvColor}">קו ${esc(ln)}</div>
+            <div class="lv-sched-op">${esc(op)}</div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch(e) {}
+
+  if (!schedHtml) {
+    // Show Stride live vehicles near this stop as fallback
+    const s = lvStopsData.find(s2 => s2.name === stopName);
+    schedHtml = `<div class="lv-modal-empty">
+      <div style="font-size:1.4rem;margin-bottom:8px">⚡</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">נתוני זמן אמת בלבד</div>
+      <div>GTFS לא מחובר — לא ניתן להציג לוח זמנים מלא</div>
+      ${s && s.lat && s.lon
+        ? `<div style="margin-top:10px;font-size:.75rem;color:var(--acc2)">
+             <a href="#" onclick="event.preventDefault();closeLvModal();lmap.setView([${s.lat},${s.lon}],17)"
+                style="color:var(--accent);font-weight:600">🗺️ הצג על המפה ▶</a>
+           </div>`
+        : ''}
+    </div>`;
+  }
+
+  document.getElementById('lv-modal-body').innerHTML = schedHtml;
+}
+
+function closeLvModal() {
+  document.getElementById('lv-modal').classList.add('lv-hidden');
+}
+
+// ── Map helpers ───────────────────────────────────────────────────────────────
+function _lvClearMap() {
+  lvMapStops.forEach(m => lmap.removeLayer(m)); lvMapStops = [];
+  lvMapVehs.forEach(m  => lmap.removeLayer(m)); lvMapVehs  = [];
+  if (lvMapRoute) { lmap.removeLayer(lvMapRoute); lvMapRoute = null; }
+}
+
+function _lvDrawMap() {
+  const dir = lvDirections[lvDirIdx];
+  if (dir) _lvDrawRoute(dir.stops);
+
+  // Live vehicles
+  const c = lvColor;
+  lvVehicles.forEach(v => {
+    if (!v.lat || !v.lon) return;
+    const m = L.circleMarker([v.lat, v.lon], {
+      radius:11, fillColor:'#F59E0B', fillOpacity:.95,
+      color:c, weight:3, zIndexOffset:1200,
+    }).addTo(lmap);
+    m.bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif">
+      <b style="color:${c}">🚌 קו ${lvLineRef}</b>
+      ${v.vel ? '<br>מהירות: '+v.vel+' קמ"ש' : ''}
+      <br><small style="color:#6B7280">GPS זמן אמת · Stride</small>
+    </div>`);
+    lvMapVehs.push(m);
+  });
+
+  // Fit bounds: all stops + vehicles
+  const dir2 = lvDirections[lvDirIdx];
+  const stopPts = (dir2?.stops || [])
+    .filter(s => s.lat && s.lon)
+    .map(s => [parseFloat(s.lat), parseFloat(s.lon)]);
+  const vehPts  = lvVehicles
+    .filter(v => v.lat && v.lon)
+    .map(v => [v.lat, v.lon]);
+  const allPts  = [...stopPts, ...vehPts];
+  if (allPts.length > 1) {
+    lmap.fitBounds(allPts, {padding:[30,40]});
+  } else if (allPts.length === 1) {
+    lmap.setView(allPts[0], 14);
+  }
+}
+
+function _lvDrawRoute(stops) {
+  if (!stops || !stops.length) return;
+  const c = lvColor;
+  const valid = stops.filter(s => s.lat && s.lon);
+
+  // Route polyline
+  if (valid.length > 1) {
+    lvMapRoute = L.polyline(
+      valid.map(s => [parseFloat(s.lat), parseFloat(s.lon)]),
+      {color:c, weight:5, opacity:.75}
+    ).addTo(lmap);
+  }
+
+  // Stop markers (aligned with lvStopsData index so lvStopClick works)
+  stops.forEach((s, i) => {
+    const isFirst = i === 0;
+    const isLast  = i === stops.length - 1;
+    const isTerm  = isFirst || isLast;
+    if (!s.lat || !s.lon) { lvMapStops.push(null); return; }
+    const sid   = (s.stop_id || '').replace(/'/g, "\\'");
+    const sname = (s.name    || '').replace(/'/g, "\\'");
+    const m = L.circleMarker([parseFloat(s.lat), parseFloat(s.lon)], {
+      radius: isTerm ? 10 : 5,
+      fillColor: isTerm ? c : '#fff',
+      fillOpacity: isTerm ? 1 : .9,
+      color: c, weight: isTerm ? 3 : 2,
+      zIndexOffset: isTerm ? 900 : 400,
+    }).addTo(lmap);
+    m.bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif;min-width:120px">
+      <b>${esc(s.name)}</b>
+      <br><small style="color:#6B7280">${isTerm ? (isFirst?'🟢 תחנת מוצא':'🔴 תחנת יעד') : '⚪ תחנת ביניים'}</small>
+      <br><a href="#" onclick="event.preventDefault();showStopSchedule('${sid}','${sname}')"
+         style="color:#7C3AED;font-weight:600">🕐 לוח זמנים ▶</a>
+    </div>`);
+    lvMapStops.push(m);
+  });
 }
 
 window.addEventListener('load', initMap);

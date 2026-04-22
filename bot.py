@@ -1479,6 +1479,139 @@ class BotHandler(BaseHTTPRequestHandler):
             target = f"{HASADNA_URL.rstrip('/')}/siri_vehicle_locations/list?{stride_params}"
             self._proxy(target)
 
+        # ── Line info — Moovit-style (stops × 2 directions + live vehicles) ─────
+        # GET /line_info?line_ref=X
+        elif path == "/line_info":
+            line_ref = (qs.get("line_ref") or [""])[0].strip()
+            if not line_ref:
+                self.send_json({"error": "?line_ref= required"}, status=400)
+                return
+            try:
+                import requests as _rq
+                from concurrent.futures import (ThreadPoolExecutor as _TPX,
+                                                as_completed as _fasc)
+                STRIDE = HASADNA_URL
+                _OP2 = {
+                    "2":"רכבת ישראל","3":"דן","5":"אגד","6":"NTA מטרופולין",
+                    "14":"מטרופולין","15":"אגד תעבורה","16":"תנופה",
+                    "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+                    "32":"V-Line","42":"אפיקים"
+                }
+
+                # Step 1: active vehicles for this line
+                vehs = _rq.get(
+                    f"{STRIDE}/siri_vehicle_locations/list",
+                    params={"siri_route__line_ref": line_ref,
+                            "limit": 20, "order_by": "id desc"},
+                    timeout=10
+                ).json()
+                if not isinstance(vehs, list):
+                    vehs = []
+
+                op_id    = str((vehs[0] if vehs else {}).get("siri_route__operator_ref",""))
+                operator = _OP2.get(op_id, f"מפעיל {op_id}" if op_id else "לא ידוע")
+
+                vehicles = []
+                for v in vehs:
+                    try:
+                        vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
+                        vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
+                        if vlat and vlon:
+                            vehicles.append({
+                                "lat": vlat, "lon": vlon,
+                                "vel": int(v.get("velocity") or 0),
+                                "ride_id": v.get("siri_ride__id"),
+                            })
+                    except Exception:
+                        pass
+
+                # Step 2: unique ride_ids (up to 8, to find 2 distinct directions)
+                ride_ids = []
+                for v in vehs:
+                    rid = v.get("siri_ride__id")
+                    if rid and rid not in ride_ids:
+                        ride_ids.append(rid)
+                ride_ids = ride_ids[:8]
+
+                def _fetch_stops(rid):
+                    rs = _rq.get(
+                        f"{STRIDE}/siri_ride_stops/list",
+                        params={"siri_ride__id": rid,
+                                "limit": 80, "order_by": "order asc"},
+                        timeout=6
+                    ).json()
+                    if not isinstance(rs, list):
+                        return []
+                    out = []
+                    for i, s in enumerate(rs):
+                        name = s.get("gtfs_stop__name","") or f"תחנה {i+1}"
+                        out.append({
+                            "name":    name,
+                            "stop_id": str(s.get("gtfs_stop__id") or ""),
+                            "lat":     s.get("gtfs_stop__lat"),
+                            "lon":     s.get("gtfs_stop__lon"),
+                            "order":   s.get("order", i),
+                        })
+                    return out
+
+                # Parallel fetch — find up to 2 distinct directions
+                dirs = []
+                if ride_ids:
+                    with _TPX(max_workers=4) as _pool:
+                        futs = {_pool.submit(_fetch_stops, rid): rid
+                                for rid in ride_ids}
+                        for fut in _fasc(futs, timeout=12):
+                            try:
+                                stops = fut.result(timeout=0.2)
+                            except Exception:
+                                continue
+                            if not stops:
+                                continue
+                            first = stops[0]["name"]
+                            if not dirs:
+                                dirs.append(stops)
+                            elif len(dirs) == 1 and first != dirs[0][0]["name"]:
+                                dirs.append(stops)
+                                break   # found 2 directions — done
+
+                # Also try GTFS as fallback when no active rides
+                gtfs_stops = []
+                if not dirs:
+                    try:
+                        from gtfs_query import get_route_stops_by_short_name
+                        rows = get_route_stops_by_short_name(line_ref)
+                        if rows:
+                            gtfs_stops = [{
+                                "name":    r.get("stop_name",""),
+                                "stop_id": str(r.get("stop_id","")),
+                                "lat":     r.get("stop_lat"),
+                                "lon":     r.get("stop_lon"),
+                                "order":   r.get("stop_sequence", i),
+                            } for i, r in enumerate(rows)]
+                            if gtfs_stops:
+                                dirs.append(gtfs_stops)
+                    except Exception:
+                        pass
+
+                directions = [
+                    {
+                        "first_stop": d[0]["name"],
+                        "last_stop":  d[-1]["name"],
+                        "stops":      d,
+                    }
+                    for d in dirs if d
+                ]
+
+                self.send_json({
+                    "line_ref":   line_ref,
+                    "operator":   operator,
+                    "directions": directions,
+                    "vehicles":   vehicles[:12],
+                    "source":     "stride" if ride_ids else ("gtfs" if gtfs_stops else "none"),
+                })
+            except Exception as e:
+                self.send_json({"error": str(e), "directions": [], "vehicles": []}, status=500)
+
         else:
             self.send_json({"error": "Not found", "path": self.path}, status=404)
 
