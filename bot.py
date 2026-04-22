@@ -241,7 +241,7 @@ class BotHandler(BaseHTTPRequestHandler):
                     "User-Agent": "IsraelTransitBot/1.0",
                 },
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 body   = resp.read()
                 status = resp.status
             self.send_response(status)
@@ -258,6 +258,8 @@ class BotHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
+        except TimeoutError:
+            self.send_json({"error": "timeout — השרת החיצוני לא הגיב בזמן, נסי שוב"}, status=504)
         except Exception as e:
             self.send_json({"error": f"proxy error: {e}"}, status=502)
 
@@ -326,6 +328,8 @@ class BotHandler(BaseHTTPRequestHandler):
                 reply  = result.get("message", {}).get("content", "לא התקבלה תשובה")
                 self.send_json({"reply": reply})
 
+            except TimeoutError:
+                self.send_json({"error": "timeout — Ollama לא הגיב בזמן, נסי שוב"}, status=504)
             except Exception as e:
                 self.send_json({"error": f"Ollama: {str(e)}"}, status=500)
 

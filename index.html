@@ -161,22 +161,20 @@ textarea::placeholder{color:var(--text3)}
     </div>
     <div class="sidebar-list" id="qlist">
       <div class="q-section">🚌 אוטובוסים</div>
-      <button class="q-item" onclick="ask('אילו אוטובוסים עוברים ליד דיזנגוף 50 תל אביב?')"><span class="q-ico">📍</span>אוטובוסים ליד כתובת</button>
-      <button class="q-item" onclick="ask('מה הקווים של חברת דן?')"><span class="q-ico">🏢</span>קווי דן</button>
-      <button class="q-item" onclick="ask('מה הקווים של NTA מטרופולין?')"><span class="q-ico">🏢</span>קווי NTA</button>
-      <button class="q-item" onclick="ask('מה הקווים של אגד בגוש דן?')"><span class="q-ico">🏢</span>קווי אגד</button>
-      <button class="q-item" onclick="ask('מה התחנות של קו 63?')"><span class="q-ico">🛣️</span>תחנות קו 63</button>
-      <button class="q-item" onclick="ask('מה התחנות של קו 189?')"><span class="q-ico">🛣️</span>תחנות קו 189</button>
+      <button class="q-item" onclick="startFlow('address_buses')"><span class="q-ico">📍</span>אוטובוסים ליד כתובת</button>
+      <button class="q-item" onclick="startFlow('dan_line')"><span class="q-ico">🏢</span>קווי דן</button>
+      <button class="q-item" onclick="startFlow('nta_line')"><span class="q-ico">🏢</span>קווי NTA</button>
+      <button class="q-item" onclick="startFlow('egged_line')"><span class="q-ico">🏢</span>קווי אגד</button>
       <div class="q-divider"></div>
       <div class="q-section">🚆 רכבת</div>
-      <button class="q-item" onclick="ask('מתי הרכבת הבאה מתחנת תל אביב מרכז?')"><span class="q-ico">⏱️</span>רכבות מת"א מרכז</button>
-      <button class="q-item" onclick="ask('מתי הרכבת הבאה מתחנת תל אביב השלום?')"><span class="q-ico">⏱️</span>רכבות מת"א השלום</button>
-      <button class="q-item" onclick="ask('מה תחנות הרכבת בגוש דן?')"><span class="q-ico">🚉</span>תחנות רכבת</button>
+      <button class="q-item" onclick="startFlow('train_ta_merkaz')"><span class="q-ico">⏱️</span>רכבות מת"א מרכז</button>
+      <button class="q-item" onclick="startFlow('train_ta_shalom')"><span class="q-ico">⏱️</span>רכבות מת"א השלום</button>
+      <button class="q-item" onclick="startFlow('train_station')"><span class="q-ico">🚉</span>תחנת רכבת</button>
       <div class="q-divider"></div>
       <div class="q-section">🗺️ כללי</div>
-      <button class="q-item" onclick="ask('כמה זמן לוקח מתל אביב לרמת גן באוטובוס?')"><span class="q-ico">⏱️</span>זמן נסיעה</button>
-      <button class="q-item" onclick="ask('מה מפעילי האוטובוסים בגוש דן?')"><span class="q-ico">📋</span>רשימת מפעילים</button>
-      <button class="q-item" onclick="ask('איזה קו לוקח אותי מחולון לתל אביב?')"><span class="q-ico">🧭</span>חולון → ת"א</button>
+      <button class="q-item" onclick="startFlow('route_plan')"><span class="q-ico">🧭</span>מיקום נוכחי → יעד</button>
+      <button class="q-item" onclick="startFlow('travel_time')"><span class="q-ico">⏱️</span>זמן נסיעה</button>
+      <button class="q-item" onclick="startFlow('operators_list')"><span class="q-ico">📋</span>רשימת מפעילים</button>
     </div>
   </div>
 
@@ -208,16 +206,105 @@ textarea::placeholder{color:var(--text3)}
 const GTFS   = "/gtfs";
 const STRIDE = "/proxy/stride";
 
-let history  = [];
-let busy     = false;
-let gtfsOk   = false;
-let recentQs = []; // שאלות אחרונות
+let history      = [];
+let busy         = false;
+let gtfsOk       = false;
+let recentQs     = [];
+let pendingFlow  = null;   // שם הפלואו הנוכחי
+let pendingData  = {};     // נתונים שנאספו (למשל קואורדינטות)
 
 fetch(`${GTFS}/status`).then(r=>r.json()).then(d=>{ gtfsOk=d.available; }).catch(()=>{});
 
 // Sidebar
 function toggleSidebar() {
   document.getElementById("sidebar").classList.toggle("collapsed");
+}
+
+// ── Conversational flows ─────────────────────────────────
+function startFlow(type) {
+  document.getElementById("welcome")?.remove();
+  pendingFlow = type;
+  pendingData = {};
+
+  const questions = {
+    address_buses:   "📍 בשמחה! מה הכתובת שאת מחפשת אוטובוסים בקרבתה?\n*(לדוגמה: דיזנגוף 50 תל אביב)*",
+    dan_line:        "🚌 **קווי דן** — הזיני מספר קו לפרטים (לדוגמה: 5, 89, 240)\nאו כתבי **כל הקווים** לרשימה מלאה.",
+    nta_line:        "🚇 **קווי NTA מטרופולין** — הזיני מספר קו\nאו כתבי **כל הקווים** לרשימה מלאה.",
+    egged_line:      "🚌 **קווי אגד** — הזיני מספר קו\nאו כתבי **כל הקווים** לרשימה מלאה.",
+    train_ta_merkaz: "⏱️ **תל אביב מרכז** — מתי תרצי לנסוע? (ניתן לכתוב \"עכשיו\" או שעה ספציפית)",
+    train_ta_shalom: "⏱️ **תל אביב השלום** — מתי תרצי לנסוע? (ניתן לכתוב \"עכשיו\" או שעה ספציפית)",
+    train_station:   "🚉 **תחנת רכבת** — איזו תחנה מעניינת אותך?\n(ת\"א מרכז, השלום, הגנה, אוניברסיטה, בני ברק...)",
+    travel_time:     "⏱️ **זמן נסיעה** — מאיפה לאיפה?\n*(לדוגמה: מתל אביב לרמת גן)*",
+    operators_list:  "📋 **מפעילי אוטובוסים** — האם תרצי מידע על מפעיל ספציפי?\nמפעילים: דן, אגד, NTA, סופרבוס, קווים, נתיב אקספרס",
+    route_plan:      "🧭 **תכנון מסלול** — לאן את רוצה להגיע?\n*(מאתרת מיקום נוכחי...)*",
+  };
+
+  addMsg("bot", fmt(questions[type] || "במה אוכל לעזור?"));
+
+  // מיקום נוכחי — בקש GPS מהדפדפן
+  if (type === "route_plan") {
+    if (!navigator.geolocation) {
+      pendingFlow = "route_plan_manual";
+      addMsg("bot", fmt("⚠️ הדפדפן לא תומך ב-Geolocation. הזיני כתובת מוצא ידנית."));
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          pendingData.lat = pos.coords.latitude;
+          pendingData.lon = pos.coords.longitude;
+          // עדכן הודעה — המיקום נמצא
+          addMsg("bot", fmt(`✅ מיקום נוכחי נמצא (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}).\n**לאן את רוצה להגיע?**`));
+        },
+        () => {
+          pendingFlow = "route_plan_manual";
+          addMsg("bot", fmt("⚠️ לא הצלחתי לאתר מיקום אוטומטי. הזיני: **מאיפה לאיפה** תרצי לנסוע."));
+        },
+        { timeout: 8000 }
+      );
+    }
+  }
+
+  document.getElementById("inp").focus();
+}
+
+// בנה שאילתה טבעית מהפלואו + תשובת המשתמש
+function buildFlowQuery(flow, data, userText) {
+  switch (flow) {
+    case "address_buses":
+      return `אילו אוטובוסים עוברים ליד ${userText}? מה הקווים הקרובים לכתובת הזו?`;
+    case "dan_line":
+      return userText.match(/כל|רשימ/)
+        ? "מה כל הקווים של חברת דן בגוש דן?"
+        : `מה מסלול קו ${userText} של חברת דן? מה התחנות שלו?`;
+    case "nta_line":
+      return userText.match(/כל|רשימ/)
+        ? "מה כל הקווים של NTA מטרופולין בגוש דן?"
+        : `מה מסלול קו ${userText} של NTA מטרופולין? מה התחנות שלו?`;
+    case "egged_line":
+      return userText.match(/כל|רשימ/)
+        ? "מה כל הקווים של אגד בגוש דן?"
+        : `מה מסלול קו ${userText} של אגד? מה התחנות שלו?`;
+    case "train_ta_merkaz":
+      return `מתי הרכבות מתחנת תל אביב מרכז — ${userText}?`;
+    case "train_ta_shalom":
+      return `מתי הרכבות מתחנת תל אביב השלום — ${userText}?`;
+    case "train_station":
+      return `מה הרכבות בתחנת ${userText}? מתי הרכבת הבאה?`;
+    case "travel_time":
+      return `כמה זמן לוקח לנסוע ${userText} באוטובוס? ואיזה קווים יש?`;
+    case "operators_list":
+      return userText.match(/כל|רשימ|מפעיל/)
+        ? "מה כל מפעילי האוטובוסים בגוש דן?"
+        : `ספרי לי על המפעיל ${userText} — אילו קווים יש להם?`;
+    case "route_plan":
+      if (data.lat) {
+        return `אני נמצאת ב-${data.lat.toFixed(4)},${data.lon.toFixed(4)}. אני רוצה להגיע ל: ${userText}. אילו קווי אוטובוס או רכבת יקחו אותי לשם? מה המסלול המומלץ?`;
+      }
+      return `אני רוצה להגיע ל-${userText}. אילו קווי תחבורה ציבורית יש?`;
+    case "route_plan_manual":
+      return `אני רוצה לנסוע ${userText} בתחבורה ציבורית. אילו קווים מומלצים?`;
+    default:
+      return userText;
+  }
 }
 
 // הוסף שאלה לרשימה המהירה
@@ -350,15 +437,26 @@ async function sendMsg(){
   inp.value=""; inp.style.height="auto";
   busy=true; document.getElementById("sbtn").disabled=true;
 
+  // הצג את מה שהמשתמשת כתבה
   addMsg("user", esc(text));
-  history.push({role:"user",content:text});
-  addToQuickList(text); // הוסף לשאלות מהירות
+  addToQuickList(text);
+
+  // אם יש פלואו פתוח — בנה שאילתה מלאה מהתשובה
+  let queryText = text;
+  if (pendingFlow) {
+    queryText = buildFlowQuery(pendingFlow, pendingData, text);
+    pendingFlow = null;
+    pendingData = {};
+  }
+
+  history.push({role:"user", content:queryText});
+  if(history.length>24) history=history.slice(-24);
 
   const typing=addTyping();
 
-  // שלב 1: נתונים
+  // שלב 1: נתונים (עם השאילתה המועשרת)
   const lastBot = history.filter(m=>m.role==="assistant").slice(-1)[0]?.content||"";
-  const toolData = await fetchToolData(text, lastBot);
+  const toolData = await fetchToolData(queryText, lastBot);
 
   // שלב 2: קרא ל-/ask (דרך bot.py — לא ישיר ל-Claude)
   try {
@@ -386,7 +484,8 @@ async function sendMsg(){
 
   } catch(e){
     typing.remove();
-    addMsg("bot",`<div class="err">⚠️ ${esc(e.message)}</div><br><span style="font-size:.82rem;color:var(--text3)">ודאי ש-bot.py רץ ו-GOOGLE_MAPS_API_KEY מוגדר ב-.env</span>`);
+    const isTimeout = e.message.includes("502") || e.message.includes("504") || e.message.includes("timeout") || e.message.includes("Failed to fetch");
+    addMsg("bot",`<div class="err">⚠️ ${esc(e.message)}</div><br><span style="font-size:.82rem;color:var(--text3)">${isTimeout ? "הבקשה לקחה יותר מדי זמן — נסי שוב." : "ודאי ש-bot.py רץ ו-GEMINI_API_KEY מוגדר ב-.env"}</span>`);
   }
 
   busy=false; document.getElementById("sbtn").disabled=false; inp.focus();
