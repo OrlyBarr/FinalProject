@@ -54,6 +54,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 GOOGLE_MAPS_API_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
 ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY       = os.getenv("GEMINI_API_KEY", "")
 
 # ── גוש דן ותל אביב — Bounding Box ──────────────────────────────────────────
 GUSH_DAN = {
@@ -280,58 +281,111 @@ class BotHandler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
 
-        # ── /ask — Ollama (מקומי, ללא API Key) ──────────────────────────────
+        # ── /ask — Gemini (primary, fast) → Ollama (fallback) ───────────────
         # POST /ask  { messages: [...], tool_data: "..." }
         if path == "/ask":
-            try:
-                messages  = payload.get("messages", [])
-                tool_data = payload.get("tool_data", "")
+            messages  = payload.get("messages", [])
+            tool_data = payload.get("tool_data", "")
 
-                system_text = (
-                    "אתה סוכן תחבורה ציבורית חכם לגוש דן ותל אביב, ישראל. "
-                    "ענה תמיד בעברית. "
-                    "שאל שאלות המשך כדי לקבל מידע חסר. "
-                    "כשמישהו שואל על אוטובוסים ליד כתובת — שאל מה הכתובת. "
-                    "כשמישהו שואל על קו — שאל מאיפה לאן. "
-                    "כשמישהו שואל על רכבת — שאל מאיזו תחנה. "
-                    "אל תמציא מספרי קווים או שעות. "
-                    + (f"נתונים: {tool_data}" if tool_data else "")
-                )
+            SYSTEM_TEXT = (
+                "אתה סוכן תחבורה ציבורית חכם לגוש דן ותל אביב, ישראל. "
+                "ענה תמיד בעברית בתשובות קצרות וברורות. "
+                "שאל שאלות המשך כדי לקבל מידע חסר. "
+                "כשמישהו שואל על אוטובוסים ליד כתובת — שאל מה הכתובת. "
+                "כשמישהו שואל על קו — שאל מאיפה לאן. "
+                "כשמישהו שואל על רכבת — שאל מאיזו תחנה. "
+                "אל תמציא מספרי קווים או שעות שאינך בטוח בהם. "
+                + (f"\nנתונים רלוונטיים: {tool_data}" if tool_data else "")
+            )
 
-                ollama_messages = [{"role": "system", "content": system_text}]
-                for msg in messages[-8:]:
-                    ollama_messages.append({
-                        "role":    msg.get("role", "user"),
-                        "content": msg.get("content", ""),
-                    })
+            import http.client, ssl
 
-                import http.client
-                req_body = json.dumps({
-                    "model":    "tinyllama",
-                    "messages": ollama_messages,
-                    "stream":   False,
-                    "options":  {"num_predict": 300, "temperature": 0.7, "num_ctx": 1024},
+            # ── helpers ────────────────────────────────────────────────────────
+            def _call_gemini(msgs, system, api_key, timeout=12):
+                """Gemini 2.0 Flash — מהיר, חינמי (1500/יום)."""
+                contents = []
+                for m in msgs[-6:]:   # רק 6 הודעות אחרונות — מהיר יותר
+                    role = "model" if m.get("role") == "assistant" else "user"
+                    contents.append({"role": role, "parts": [{"text": m.get("content", "")}]})
+
+                body = json.dumps({
+                    "system_instruction": {"parts": [{"text": system}]},
+                    "contents": contents,
+                    "generationConfig": {
+                        "maxOutputTokens": 400,
+                        "temperature":     0.7,
+                        "topP":            0.9,
+                    },
                 }, ensure_ascii=False).encode("utf-8")
 
-                conn = http.client.HTTPConnection("127.0.0.1", 11434, timeout=120)
-                conn.request("POST", "/api/chat", body=req_body,
-                             headers={"Content-Type": "application/json"})
-                http_resp = conn.getresponse()
-                raw = http_resp.read().decode("utf-8")
+                ctx  = ssl.create_default_context()
+                conn = http.client.HTTPSConnection(
+                    "generativelanguage.googleapis.com", timeout=timeout, context=ctx)
+                conn.request(
+                    "POST",
+                    f"/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+                    body=body,
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                )
+                resp = conn.getresponse()
+                raw  = resp.read().decode("utf-8")
                 conn.close()
+                if resp.status != 200:
+                    raise RuntimeError(f"Gemini HTTP {resp.status}: {raw[:200]}")
+                data  = json.loads(raw)
+                parts = data["candidates"][0]["content"]["parts"]
+                return "".join(p.get("text", "") for p in parts)
 
-                if http_resp.status != 200:
-                    self.send_json({"error": f"Ollama error {http_resp.status}: {raw[:200]}"}, status=500)
+            def _call_ollama(msgs, system, timeout=90):
+                """Ollama tinyllama — גיבוי מקומי."""
+                body = json.dumps({
+                    "model":   "tinyllama",
+                    "messages": [{"role": "system", "content": system}]
+                              + [{"role": m.get("role","user"), "content": m.get("content","")}
+                                 for m in msgs[-6:]],
+                    "stream":  False,
+                    "options": {"num_predict": 300, "temperature": 0.7, "num_ctx": 1024},
+                }, ensure_ascii=False).encode("utf-8")
+
+                conn = http.client.HTTPConnection("127.0.0.1", 11434, timeout=timeout)
+                conn.request("POST", "/api/chat", body=body,
+                             headers={"Content-Type": "application/json"})
+                resp = conn.getresponse()
+                raw  = resp.read().decode("utf-8")
+                conn.close()
+                if resp.status != 200:
+                    raise RuntimeError(f"Ollama HTTP {resp.status}: {raw[:200]}")
+                return json.loads(raw).get("message", {}).get("content", "לא התקבלה תשובה")
+
+            # ── ראשי: Gemini → גיבוי: Ollama ──────────────────────────────────
+            reply  = None
+            source = None
+            error  = None
+
+            if GEMINI_API_KEY:
+                try:
+                    reply  = _call_gemini(messages, SYSTEM_TEXT, GEMINI_API_KEY, timeout=12)
+                    source = "gemini"
+                except Exception as e:
+                    log.warning(f"/ask Gemini failed ({e}) — falling back to Ollama")
+                    error = str(e)
+
+            if reply is None:
+                # גיבוי — Ollama
+                try:
+                    reply  = _call_ollama(messages, SYSTEM_TEXT, timeout=90)
+                    source = "ollama"
+                    if error:
+                        log.info(f"/ask using Ollama fallback (Gemini error: {error})")
+                except Exception as e:
+                    if not GEMINI_API_KEY:
+                        msg = "GEMINI_API_KEY חסר ב-.env וגם Ollama לא זמין"
+                    else:
+                        msg = f"Gemini נכשל ({error}) וגם Ollama לא זמין ({e})"
+                    self.send_json({"error": msg}, status=503)
                     return
 
-                result = json.loads(raw)
-                reply  = result.get("message", {}).get("content", "לא התקבלה תשובה")
-                self.send_json({"reply": reply})
-
-            except TimeoutError:
-                self.send_json({"error": "timeout — Ollama לא הגיב בזמן, נסי שוב"}, status=504)
-            except Exception as e:
-                self.send_json({"error": f"Ollama: {str(e)}"}, status=500)
+            self.send_json({"reply": reply, "source": source})
 
 
 
