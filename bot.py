@@ -419,25 +419,40 @@ class BotHandler(BaseHTTPRequestHandler):
                 dest_q   = m_route.group(2).strip()
                 if len(origin_q) >= 2 and len(dest_q) >= 2:
                     try:
+                        from concurrent.futures import (ThreadPoolExecutor as _TPEX,
+                                                        as_completed as _asc)
+
                         def _geo_req(addr):
                             res = _req.get(
                                 "https://nominatim.openstreetmap.org/search",
-                                params={"q": addr+", ישראל","format":"json","limit":1},
-                                headers={"User-Agent":"IsraelTransitBot/1.0"},
-                                timeout=5
+                                params={"q": addr + ", ישראל",
+                                        "format": "json", "limit": 1},
+                                headers={"User-Agent": "IsraelTransitBot/1.0"},
+                                timeout=6
                             ).json()
                             if res:
                                 return (float(res[0]["lat"]), float(res[0]["lon"]),
                                         res[0].get("display_name","").split(",")[0])
                             return None, None, addr
 
-                        lat1, lon1, olabel = _geo_req(origin_q)
-                        lat2, lon2, dlabel = _geo_req(dest_q)
+                        # ── Step 1: Parallel geocoding (saves ~5s) ────────────
+                        with _TPEX(max_workers=2) as _gp:
+                            _fo = _gp.submit(_geo_req, origin_q)
+                            _fd = _gp.submit(_geo_req, dest_q)
+                            try:
+                                lat1, lon1, olabel = _fo.result(timeout=8)
+                            except Exception:
+                                lat1, lon1, olabel = None, None, origin_q
+                            try:
+                                lat2, lon2, dlabel = _fd.result(timeout=8)
+                            except Exception:
+                                lat2, lon2, dlabel = None, None, dest_q
 
                         if lat1 and lat2:
                             lat_min = min(lat1,lat2)-0.025; lat_max = max(lat1,lat2)+0.025
                             lon_min = min(lon1,lon2)-0.025; lon_max = max(lon1,lon2)+0.025
 
+                            # ── Step 2: Stride bbox call ───────────────────────
                             sv = _req.get(f"{STRIDE}/siri_vehicle_locations/list", params={
                                 "lat__greater_or_equal": lat_min,
                                 "lat__lower_or_equal":   lat_max,
@@ -453,7 +468,7 @@ class BotHandler(BaseHTTPRequestHandler):
                                 "32":"V-Line","42":"אפיקים"
                             }
 
-                            # Collect vehicles grouped by line (with positions)
+                            # ── Step 3: Group by line, keep first ride_id ──────
                             line_data = {}
                             for v in sv:
                                 lr = str(v.get("siri_route__line_ref",""))
@@ -463,12 +478,14 @@ class BotHandler(BaseHTTPRequestHandler):
                                 if lr not in line_data:
                                     line_data[lr] = {
                                         "operator": _OP.get(op, f"מפעיל {op}"),
-                                        "vehicles": []
+                                        "vehicles": [],
+                                        "ride_id":  v.get("siri_ride__id")
                                     }
-                                # Stride returns lat/lon (or calculated_lat/lon)
                                 try:
-                                    vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
-                                    vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
+                                    vlat = float(v.get("lat") or
+                                                 v.get("calculated_lat") or 0)
+                                    vlon = float(v.get("lon") or
+                                                 v.get("calculated_lon") or 0)
                                     if vlat and vlon:
                                         line_data[lr]["vehicles"].append({
                                             "lat": vlat, "lon": vlon,
@@ -477,43 +494,49 @@ class BotHandler(BaseHTTPRequestHandler):
                                 except (TypeError, ValueError):
                                     pass
 
-                            # Sort: most vehicles first, then by line number
                             sorted_lr = sorted(
                                 line_data.items(),
                                 key=lambda x: (-len(x[1]["vehicles"]),
                                                int(x[0]) if x[0].isdigit() else 9999)
                             )[:12]
 
-                            # GTFS stop names — parallel calls, 3s total timeout
-                            from concurrent.futures import (ThreadPoolExecutor,
-                                                            as_completed as _asc)
-                            stop_names = {}
-
-                            def _fetch_stops(lr_key):
+                            # ── Step 4: Get stop names from Stride ride_stops ──
+                            # (no GTFS needed — uses live siri_ride_stops data)
+                            def _get_ride_stops(lr_rid):
+                                lr_k, rid = lr_rid
+                                if not rid:
+                                    return (lr_k, "", "")
                                 try:
-                                    sd = _req.get(
-                                        f"http://localhost:{BOT_PORT}/gtfs/route_stops",
-                                        params={"short_name": lr_key}, timeout=1.5
+                                    rs = _req.get(
+                                        f"{STRIDE}/siri_ride_stops/list",
+                                        params={"siri_ride__id": rid,
+                                                "limit": 60,
+                                                "order_by": "order asc"},
+                                        timeout=4
                                     ).json()
-                                    sts = sd.get("stops", [])
-                                    if sts:
-                                        return (lr_key,
-                                                sts[0].get("stop_name",""),
-                                                sts[-1].get("stop_name",""))
+                                    names = [s.get("gtfs_stop__name","") or ""
+                                             for s in rs]
+                                    names = [n for n in names if n]
+                                    if names:
+                                        return (lr_k, names[0], names[-1])
                                 except Exception:
                                     pass
-                                return (lr_key, "", "")
+                                return (lr_k, "", "")
 
+                            stop_names = {}
+                            top_lr_rids = [
+                                (lr, ld.get("ride_id"))
+                                for lr, ld in sorted_lr[:8]
+                            ]
                             try:
-                                top_keys = [lr for lr, _ in sorted_lr[:6]]
-                                with ThreadPoolExecutor(max_workers=6) as _pool:
-                                    futs = {_pool.submit(_fetch_stops, k): k
-                                            for k in top_keys}
-                                    for f in _asc(futs, timeout=3.5):
+                                with _TPEX(max_workers=6) as _pool:
+                                    futs = {_pool.submit(_get_ride_stops, x): x[0]
+                                            for x in top_lr_rids}
+                                    for f in _asc(futs, timeout=5):
                                         try:
-                                            k2, os2, fs2 = f.result(timeout=0.1)
+                                            k, os2, fs2 = f.result(timeout=0.1)
                                             if os2:
-                                                stop_names[k2] = (os2, fs2)
+                                                stop_names[k] = (os2, fs2)
                                         except Exception:
                                             pass
                             except Exception:
@@ -538,7 +561,8 @@ class BotHandler(BaseHTTPRequestHandler):
                                     if cnt:
                                         s += f" ({cnt} כלי רכב)"
                                     if r["origin_stop"] and r["final_stop"]:
-                                        s += f"\n   {r['origin_stop']} ↔ {r['final_stop']}"
+                                        s += (f"\n   📍 {r['origin_stop']}"
+                                              f" → {r['final_stop']}")
                                     lines_txt.append(s)
                                 reply = (
                                     f"**מסלול מ-{olabel} ל-{dlabel}**\n"
@@ -1081,6 +1105,24 @@ class BotHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": str(e), "stops": []}, status=500)
 
+        # ── Nearby buses via Stride (fallback when GTFS unavailable) ─────────
+        # GET /nearby_buses?lat=32.08&lon=34.78&radius=600
+        elif path == "/nearby_buses":
+            try:
+                lat    = float((qs.get("lat")    or ["0"])[0])
+                lon    = float((qs.get("lon")    or ["0"])[0])
+                radius = int((qs.get("radius")   or ["600"])[0])
+                deg = radius / 111000.0  # rough m → degrees
+                target = (
+                    f"{HASADNA_URL}/siri_vehicle_locations/list?"
+                    f"lat__greater_or_equal={lat-deg}&lat__lower_or_equal={lat+deg}"
+                    f"&lon__greater_or_equal={lon-deg}&lon__lower_or_equal={lon+deg}"
+                    f"&limit=50&order_by=id+desc"
+                )
+                self._proxy(target)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=400)
+
         # ── Route plan — מסלול מ-X ל-Y ──────────────────────────────────────
         # GET /route_plan?origin=ADDR&destination=ADDR
         elif path == "/route_plan":
@@ -1231,7 +1273,11 @@ class BotHandler(BaseHTTPRequestHandler):
             if not address:
                 self.send_json({"error": "?q=address parameter required"}, status=400)
                 return
-            q = address if "israel" in address.lower() else address + ", Israel"
+            # Don't add Israel if already present (English or Hebrew)
+            if "israel" in address.lower() or "ישראל" in address:
+                q = address
+            else:
+                q = address + ", Israel"
             target = NOMINATIM_URL + "?" + urllib.parse.urlencode({
                 "q": q, "format": "json", "limit": 1,
                 "countrycodes": "il", "accept-language": "he",

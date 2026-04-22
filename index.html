@@ -459,13 +459,21 @@ async function searchAddress() {
   const addr = document.getElementById('addr-inp').value.trim();
   if (!addr) return;
   try {
-    const geo = await fetch(`/geocode?q=${encodeURIComponent(addr + ', ישראל')}`).then(r => r.json());
-    if (!geo.lat) { alert('כתובת לא נמצאה'); return; }
+    // Don't append ישראל — the backend adds it, avoids duplication
+    const geo = await fetch(`/geocode?q=${encodeURIComponent(addr)}`).then(r => r.json());
+    if (!geo.lat) {
+      // Try appending ישראל explicitly as fallback
+      const geo2 = await fetch(`/geocode?q=${encodeURIComponent(addr + ' ישראל')}`).then(r => r.json());
+      if (!geo2.lat) { alert('כתובת לא נמצאה — נסי לכתוב את הכתובת המלאה'); return; }
+      const lat = parseFloat(geo2.lat), lon = parseFloat(geo2.lon);
+      lmap.setView([lat, lon], 15);
+      fetchNearbyForCoords(lat, lon);
+      return;
+    }
     const lat = parseFloat(geo.lat), lon = parseFloat(geo.lon);
     lmap.setView([lat, lon], 15);
     fetchNearbyForCoords(lat, lon);
-    ask(`אוטובוסים ליד ${addr}`);
-  } catch(e) { alert('שגיאת גאוקוד: ' + e.message); }
+  } catch(e) { console.warn('geocode error:', e); }
 }
 
 async function fetchNearbyForCoords(lat, lon) {
@@ -474,32 +482,66 @@ async function fetchNearbyForCoords(lat, lon) {
   if (userMarker) lmap.removeLayer(userMarker);
 
   userMarker = L.circleMarker([lat, lon], {
-    radius: 10, fillColor: '#F59E0B', fillOpacity: .9,
+    radius: 11, fillColor: '#F59E0B', fillOpacity: .92,
     color: '#fff', weight: 2.5, zIndexOffset: 999,
-  }).addTo(lmap).bindPopup('<div style="direction:rtl">📍 מיקום נבחר</div>').openPopup();
+  }).addTo(lmap).bindPopup('<div style="direction:rtl;font-family:Heebo,sans-serif">📍 <b>מיקום נבחר</b></div>').openPopup();
 
+  // Try GTFS first
+  let gtfsOk = false;
   try {
     const data = await fetch(`/gtfs/nearby?lat=${lat}&lon=${lon}&radius=500`)
       .then(r => r.json()).catch(() => null);
     const stops = data?.stops || [];
-    stops.slice(0, 8).forEach(s => {
-      const slat = parseFloat(s.stop_lat || lat);
-      const slon = parseFloat(s.stop_lon || lon);
-      const lines = (s.routes || []).map(r => `קו ${r.route_short_name}`).join(', ') || 'אין קווים';
-      const m = L.circleMarker([slat, slon], {
-        radius: 8, fillColor: '#059669', fillOpacity: .85,
-        color: '#fff', weight: 2,
-      }).addTo(lmap);
-      m.bindPopup(
-        `<div style="direction:rtl;font-family:Heebo,sans-serif">
-          <b>${s.stop_name}</b><br>
-          📏 ${Math.round(s.distance_m || 0)} מ'<br>
-          ${lines}
-        </div>`
-      );
-      nearbyMarkers.push(m);
-    });
+    if (stops.length > 0) {
+      gtfsOk = true;
+      stops.slice(0, 8).forEach(s => {
+        const slat = parseFloat(s.stop_lat || lat);
+        const slon = parseFloat(s.stop_lon || lon);
+        const lines = (s.routes || []).map(r => `קו ${r.route_short_name}`).join(', ') || '';
+        const m = L.circleMarker([slat, slon], {
+          radius: 8, fillColor: '#059669', fillOpacity: .85,
+          color: '#fff', weight: 2,
+        }).addTo(lmap);
+        m.bindPopup(
+          `<div style="direction:rtl;font-family:Heebo,sans-serif">
+            <b>${s.stop_name}</b><br>
+            📏 ${Math.round(s.distance_m || 0)} מ'<br>
+            <small>${lines}</small>
+          </div>`
+        );
+        nearbyMarkers.push(m);
+      });
+    }
   } catch(e) {}
+
+  // Stride fallback — show live buses near this point
+  if (!gtfsOk) {
+    try {
+      const sv = await fetch(`/nearby_buses?lat=${lat}&lon=${lon}&radius=700`)
+        .then(r => r.json()).catch(() => []);
+      const buses = Array.isArray(sv) ? sv : [];
+      const seen = new Set();
+      buses.forEach(v => {
+        const vlat = parseFloat(v.lat || v.calculated_lat);
+        const vlon = parseFloat(v.lon || v.calculated_lon);
+        const lr   = String(v.siri_route__line_ref || '?');
+        const op   = v.siri_route__operator_ref || '';
+        if (!vlat || !vlon) return;
+        const m = L.circleMarker([vlat, vlon], {
+          radius: 8, fillColor: '#6D28D9', fillOpacity: .8,
+          color: '#fff', weight: 1.5, zIndexOffset: 600,
+        }).addTo(lmap);
+        m.bindPopup(
+          `<div style="direction:rtl;font-family:Heebo,sans-serif">
+            <b style="color:#6D28D9">🚌 קו ${lr}</b><br>
+            <a href="#" onclick="event.preventDefault();ask('תחנות קו ${lr}')"
+               style="color:#7C3AED;font-weight:600">תחנות ▶</a>
+          </div>`
+        );
+        nearbyMarkers.push(m);
+      });
+    } catch(e) {}
+  }
 }
 
 function useMyLocation(toChat) {
@@ -573,7 +615,11 @@ function addRouteCards(routeData, textReply) {
       const col = LINE_COLORS[i % LINE_COLORS.length];
 
       const stopLine = (r.origin_stop && r.final_stop)
-        ? `<div class="rc-stops">🚏 ${esc(r.origin_stop)} ↔ ${esc(r.final_stop)}</div>`
+        ? `<div class="rc-stops">
+             <span style="color:#059669;font-weight:600">●</span> ${esc(r.origin_stop)}
+             <span style="color:var(--text3);padding:0 3px">→</span>
+             <span style="color:#DC2626;font-weight:600">●</span> ${esc(r.final_stop)}
+           </div>`
         : '';
       const cntBadge = cnt
         ? `<span style="background:${col};color:#fff;border-radius:6px;` +
