@@ -332,7 +332,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "8 — Enabling Airflow DAGs"
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic" "dag_hourly_coverage"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
