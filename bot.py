@@ -960,8 +960,71 @@ class BotHandler(BaseHTTPRequestHandler):
         path   = parsed.path
         qs     = urllib.parse.parse_qs(parsed.query)
 
+        # ── Gush Dan Transit App ─────────────────────────────────────────────
+        if path == "/gushdan":
+            self.send_html(os.path.join(BASE_DIR, "gushdan_app.html"))
+
+        # ── Dankal Red Line — live vehicles + alert status ────────────────────
+        elif path == "/api/dankal":
+            try:
+                import requests as _rq
+                # Fetch NTA/Dankal vehicles (operator_ref=6) along Red Line corridor
+                # Red Line runs roughly: lat 32.02-32.12, lon 34.74-34.89
+                vehs_raw = _rq.get(
+                    f"{HASADNA_URL}/siri_vehicle_locations/list",
+                    params={
+                        "siri_route__operator_ref": "6",
+                        "lat__greater_or_equal": 32.02,
+                        "lat__lower_or_equal":   32.13,
+                        "lon__greater_or_equal": 34.74,
+                        "lon__lower_or_equal":   34.90,
+                        "limit": 40, "order_by": "id desc",
+                    },
+                    timeout=10,
+                ).json()
+                vehicles = []
+                if isinstance(vehs_raw, list):
+                    for v in vehs_raw:
+                        try:
+                            vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
+                            vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
+                            if vlat and vlon:
+                                vehicles.append({
+                                    "lat": vlat, "lon": vlon,
+                                    "line": v.get("siri_route__line_ref", ""),
+                                    "speed": int(v.get("velocity") or 0),
+                                })
+                        except Exception:
+                            pass
+
+                # Check service alerts from MOT GTFS-RT
+                alert = ""
+                try:
+                    import urllib.request as _ureq
+                    head_resp = _ureq.urlopen(
+                        "https://gtfs.mot.gov.il/gtfsfiles/ServiceAlerts.pb",
+                        timeout=5,
+                    )
+                    # If reachable, line is operating
+                    head_resp.close()
+                    alert = "הקו האדום פועל כסדרו" if not vehicles else ""
+                except Exception:
+                    alert = ""
+
+                self.send_json({
+                    "vehicles": vehicles,
+                    "alert":    alert,
+                    "count":    len(vehicles),
+                    "status":   "ok",
+                })
+            except Exception as e:
+                self.send_json({
+                    "vehicles": [], "alert": "",
+                    "count": 0, "status": "error", "error": str(e),
+                })
+
         # ── index.html ────────────────────────────────────────────────────────
-        if path == "/" or path == "/transit" or path == "/agent":
+        elif path == "/" or path == "/transit" or path == "/agent":
             html_path = os.path.join(BASE_DIR, "index.html")
             if not os.path.exists(html_path):
                 html_path = os.path.join(BASE_DIR, "agent_transit.html")
@@ -996,13 +1059,14 @@ class BotHandler(BaseHTTPRequestHandler):
                     "lon": f"{GUSH_DAN['lon_min']}–{GUSH_DAN['lon_max']}",
                 },
                 "endpoints": {
-                    "Transit Query Tool": f"http://localhost:{BOT_PORT}/",
-                    "Agent Dashboard":    f"http://localhost:{BOT_PORT}/agent",
-                    "Airflow UI":         "http://localhost:8081",
-                    "Kafka UI":           "http://localhost:8080",
-                    "MinIO Console":      "http://localhost:9001",
-                    "Kibana":             "http://localhost:5601",
-                    "Bot API":            f"http://localhost:{BOT_PORT}",
+                    "Gush Dan Transit App": f"http://localhost:{BOT_PORT}/gushdan",
+                    "Transit Query Tool":   f"http://localhost:{BOT_PORT}/",
+                    "Agent Dashboard":      f"http://localhost:{BOT_PORT}/agent",
+                    "Airflow UI":           "http://localhost:8081",
+                    "Kafka UI":             "http://localhost:8080",
+                    "MinIO Console":        "http://localhost:9001",
+                    "Kibana":               "http://localhost:5601",
+                    "Bot API":              f"http://localhost:{BOT_PORT}",
                 }
             })
 
@@ -1627,6 +1691,7 @@ def main():
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
+    print(f"   /gushdan                  → 🚌 Gush Dan Transit App (Moovit-style)")
     print(f"   /                         → Transit Query Tool (index.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
     print(f"   /health                   → health check")

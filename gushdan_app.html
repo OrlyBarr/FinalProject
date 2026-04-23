@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>🚌 גוש דן Transit</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root {
+  --dankal:#E8212A; --dan:#F7941D; --egged:#003087; --metro:#009EE2;
+  --kavim:#84BD00;  --nateev:#FF6600; --superbus:#CC0000;
+  --bg:#F4F6F8; --card:#fff; --text:#1C2B3A; --muted:#6B7A8D;
+  --border:#E4E8ED; --shadow:0 2px 12px rgba(0,0,0,.10); --nav:60px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Segoe UI',-apple-system,Arial,sans-serif;
+  background:var(--bg);color:var(--text);direction:rtl;overflow:hidden}
+#app{height:100vh;height:100dvh;position:relative;overflow:hidden}
+
+/* ── SCREENS ── */
+.screen{display:none;position:absolute;inset:0;bottom:var(--nav);
+  flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+
+/* ── BOTTOM NAV ── */
+#bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);
+  background:var(--card);border-top:1px solid var(--border);
+  display:flex;z-index:900;box-shadow:0 -2px 8px rgba(0,0,0,.07)}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;border:none;background:none;
+  color:var(--muted);font-size:11px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.ni.on{color:var(--dankal)}
+.ni-ico{font-size:22px;line-height:1}
+
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border);
+  min-height:56px;z-index:10;flex-shrink:0}
+.hdr-title{font-size:18px;font-weight:700}
+.btn-x{width:36px;height:36px;border-radius:50%;border:none;
+  background:var(--bg);cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center}
+
+/* ── HOME ── */
+#screen-home{position:relative}
+#home-map{position:absolute;inset:0;z-index:0}
+#home-fab{position:absolute;top:12px;left:12px;right:12px;z-index:10;display:flex;flex-direction:column;gap:8px}
+#search-fake{background:var(--card);border-radius:28px;box-shadow:var(--shadow);
+  padding:14px 18px;font-size:15px;color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;gap:10px;border:1.5px solid var(--border)}
+#quick-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+#quick-row::-webkit-scrollbar{display:none}
+.qbtn{background:var(--card);border-radius:20px;box-shadow:var(--shadow);
+  padding:7px 14px;white-space:nowrap;font-size:13px;font-weight:600;
+  cursor:pointer;border:none;display:flex;align-items:center;gap:5px;
+  color:var(--text);flex-shrink:0}
+.qbtn.red{color:var(--dankal)}
+
+#home-sheet{position:absolute;bottom:0;left:0;right:0;background:var(--card);
+  border-radius:24px 24px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.12);z-index:20;
+  padding-bottom:8px;max-height:50vh;overflow-y:auto}
+.sh-handle{width:36px;height:4px;background:var(--border);
+  border-radius:2px;margin:12px auto 6px}
+.sh-title{font-size:14px;font-weight:700;color:var(--muted);padding:0 18px 8px}
+
+#nearby-strip{display:flex;gap:10px;padding:4px 14px 6px;
+  overflow-x:auto;scrollbar-width:none}
+#nearby-strip::-webkit-scrollbar{display:none}
+.nb-card{min-width:88px;background:var(--bg);border-radius:14px;
+  padding:10px 10px;text-align:center;cursor:pointer;flex-shrink:0;
+  border-top:3px solid #ccc;transition:transform .12s}
+.nb-card:active{transform:scale(.95)}
+.nb-num{font-size:20px;font-weight:800}
+.nb-op{font-size:10px;color:var(--muted);margin-top:2px}
+.nb-eta{font-size:12px;font-weight:700;margin-top:5px;color:var(--dankal)}
+
+/* ── ROUTE ── */
+#screen-route{background:var(--bg);overflow-y:auto}
+.ri-wrap{background:var(--card);padding:14px 14px 8px;position:relative}
+.ri-row{display:flex;align-items:center;gap:10px;background:var(--bg);
+  border-radius:12px;padding:11px 12px;border:1.5px solid var(--border);margin-bottom:8px}
+.ri-row input{flex:1;border:none;background:none;font-size:15px;
+  color:var(--text);direction:rtl;outline:none}
+.ri-row input::placeholder{color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot.o{background:#00C853}.dot.d{background:var(--dankal)}
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:0;right:0;left:0;background:var(--card);
+  border-radius:12px;box-shadow:var(--shadow);z-index:200;max-height:180px;overflow-y:auto}
+.ac-item{padding:11px 14px;cursor:pointer;font-size:14px;
+  border-bottom:1px solid var(--border)}
+.ac-item:last-child{border:none}
+.ac-item:active{background:var(--bg)}
+
+.time-row{display:flex;gap:8px;padding:10px 14px;background:var(--card);
+  border-top:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.time-row::-webkit-scrollbar{display:none}
+.tchip{padding:7px 14px;border-radius:18px;border:1.5px solid var(--border);
+  background:var(--bg);font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600}
+.tchip.on{background:var(--dankal);color:#fff;border-color:var(--dankal)}
+
+.filter-row{display:flex;gap:8px;padding:8px 14px;overflow-x:auto;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.fchip{padding:5px 12px;border-radius:14px;border:1.5px solid var(--border);
+  background:var(--card);font-size:12px;cursor:pointer;white-space:nowrap;font-weight:600}
+.fchip.on{background:#EBF5FF;border-color:#2196F3;color:#2196F3}
+
+.btn-search{margin:6px 14px 10px;background:var(--dankal);color:#fff;border:none;
+  border-radius:13px;padding:14px;font-size:15px;font-weight:700;
+  width:calc(100% - 28px);cursor:pointer;transition:opacity .15s}
+.btn-search:active{opacity:.85}
+
+#route-results{padding:10px 14px;display:flex;flex-direction:column;gap:10px}
+.rc{background:var(--card);border-radius:14px;box-shadow:var(--shadow);
+  overflow:hidden;cursor:pointer;display:flex;transition:transform .12s}
+.rc:active{transform:scale(.98)}
+.rc-stripe{width:6px;flex-shrink:0}
+.rc-body{flex:1;padding:14px}
+.rc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.rc-time{font-size:20px;font-weight:800}
+.rc-meta{font-size:12px;color:var(--muted);display:flex;gap:10px}
+.rc-legs{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.leg-b{padding:3px 9px;border-radius:10px;font-size:12px;font-weight:700;color:#fff}
+.leg-w{color:var(--muted);font-size:12px}
+
+/* ── NAV ── */
+#screen-nav{position:relative}
+#nav-map{position:absolute;inset:0;z-index:0}
+#nav-panel{position:absolute;bottom:0;left:0;right:0;background:var(--card);
+  border-radius:22px 22px 0 0;padding:18px 18px 12px;z-index:10;
+  box-shadow:0 -4px 20px rgba(0,0,0,.14)}
+.np-title{font-size:21px;font-weight:800;margin-bottom:4px}
+.np-sub{font-size:14px;color:var(--muted);margin-bottom:12px}
+.np-cd{font-size:60px;font-weight:900;color:var(--dankal);
+  text-align:center;line-height:1;margin:10px 0}
+.np-cdl{text-align:center;font-size:13px;color:var(--muted);margin-bottom:14px}
+.np-btns{display:flex;gap:10px}
+.np-btn{flex:1;padding:11px;border-radius:11px;border:2px solid var(--border);
+  background:var(--bg);font-size:13px;font-weight:700;cursor:pointer;text-align:center}
+.np-btn.go{border-color:#00C853;color:#00C853}
+.np-btn.miss{border-color:var(--dankal);color:var(--dankal)}
+
+/* ── DANKAL ── */
+#screen-dankal{background:var(--bg)}
+#dk-header{background:var(--dankal);color:#fff;padding:14px 18px;
+  display:flex;align-items:center;gap:10px;flex-shrink:0}
+.dk-logo{font-size:26px}
+.dk-title{font-size:19px;font-weight:800}
+.dk-sub{font-size:11px;opacity:.85}
+#dk-map-wrap{height:200px;flex-shrink:0;position:relative}
+#dk-map{width:100%;height:100%}
+#dk-alert{display:none;background:#FFF8E1;padding:9px 16px;
+  font-size:13px;border-bottom:1px solid #FFD54F;flex-shrink:0}
+#dk-list{flex:1;overflow-y:auto}
+
+.st-row{display:flex;align-items:center;padding:8px 18px;cursor:pointer;
+  gap:12px;position:relative;background:var(--card);border-bottom:1px solid var(--border)}
+.st-row:active{background:#FFF0F0}
+.st-spine{display:flex;flex-direction:column;align-items:center;
+  width:20px;flex-shrink:0;align-self:stretch}
+.st-dot{width:14px;height:14px;border-radius:50%;background:var(--dankal);
+  border:2.5px solid #fff;box-shadow:0 0 0 2px var(--dankal);z-index:1;flex-shrink:0}
+.st-line{width:3px;background:var(--dankal);flex:1}
+.st-term .st-dot{width:18px;height:18px;background:#fff;border:3px solid var(--dankal)}
+.st-name{font-size:14px;font-weight:600;flex:1}
+.st-amen{font-size:13px;color:var(--muted)}
+.st-btn{background:none;border:1.5px solid var(--dankal);color:var(--dankal);
+  border-radius:9px;padding:4px 11px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0}
+
+/* ── DEPARTURES ── */
+#screen-depart{background:var(--bg);overflow-y:auto}
+.dp-stop-hdr{background:var(--card);padding:14px 18px;
+  border-bottom:1px solid var(--border);flex-shrink:0}
+.dp-stop-name{font-size:19px;font-weight:800}
+.dp-op-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.op-badge{padding:3px 9px;border-radius:9px;color:#fff;font-size:11px;font-weight:700}
+
+.dp-table{width:100%;border-collapse:collapse;font-size:13px}
+.dp-table th{background:var(--bg);padding:9px 14px;text-align:right;
+  font-size:12px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
+.dp-table td{padding:13px 14px;border-bottom:1px solid var(--border);background:var(--card)}
+.dp-ln{font-weight:800;font-size:15px}
+.s-ok{color:#00C853;font-weight:700}.s-late{color:var(--dankal);font-weight:700}
+.s-early{color:var(--nateev);font-weight:700}
+.save-btn{display:flex;align-items:center;gap:7px;background:none;
+  border:1.5px solid var(--border);border-radius:18px;padding:7px 14px;
+  font-size:13px;font-weight:700;cursor:pointer;margin:10px 14px;color:var(--text)}
+.refresh-lbl{text-align:center;font-size:12px;color:var(--muted);padding:10px}
+
+/* ── FAVORITES ── */
+#screen-fav{background:var(--bg);overflow-y:auto}
+.fav-sec{padding:14px 14px 4px}
+.fav-sec-title{font-size:12px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.fav-sc{background:var(--card);border-radius:13px;padding:12px 14px;
+  box-shadow:var(--shadow);margin-bottom:9px;cursor:pointer;
+  display:flex;align-items:center;gap:10px}
+.fav-ico{font-size:22px}
+.fav-lbl{flex:1}
+.fav-name{font-size:14px;font-weight:700}
+.fav-sub{font-size:12px;color:var(--muted)}
+.fav-del{background:none;border:none;color:var(--muted);
+  font-size:18px;cursor:pointer;padding:4px}
+.fav-empty{text-align:center;padding:30px 20px;color:var(--muted)}
+.fav-empty-ico{font-size:40px;margin-bottom:8px}
+.fav-empty-txt{font-size:14px}
+
+/* ── SHARED ── */
+.spin-wrap{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:32px;gap:12px;color:var(--muted)}
+.spin{width:32px;height:32px;border:3px solid var(--border);
+  border-top-color:var(--dankal);border-radius:50%;
+  animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.toast{position:fixed;bottom:calc(var(--nav) + 12px);left:50%;
+  transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;
+  padding:9px 18px;border-radius:18px;font-size:13px;z-index:9999;
+  white-space:nowrap;pointer-events:none;
+  animation:tin .2s ease,tout .2s ease 2.5s forwards}
+@keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(16px)}}
+@keyframes tout{to{opacity:0;transform:translateX(-50%) translateY(-10px)}}
+
+#oob{display:none;position:fixed;inset:0;background:rgba(255,255,255,.95);
+  z-index:9900;align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;padding:30px;text-align:center}
+#oob.show{display:flex}
+#oob h2{font-size:20px}
+#oob p{font-size:14px;color:var(--muted)}
+#oob button{background:var(--dankal);color:#fff;border:none;
+  border-radius:11px;padding:11px 24px;font-size:14px;font-weight:700;cursor:pointer;margin-top:6px}
+
+#dk-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:500;align-items:flex-end}
+#dk-modal.show{display:flex}
+#dk-modal-inner{width:100%;background:var(--card);border-radius:22px 22px 0 0;
+  padding-bottom:16px;max-height:70vh;overflow-y:auto}
+#dk-modal-title{padding:18px 18px 12px;font-size:17px;font-weight:800;
+  color:var(--dankal);border-bottom:1px solid var(--border)}
+
+.leaflet-popup-content{font-family:inherit;direction:rtl}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ HOME ═══ -->
+<div id="screen-home" class="screen active">
+  <div id="home-map"></div>
+  <div id="home-fab">
+    <div id="search-fake" onclick="showScreen('route')">
+      <span style="font-size:18px">🔍</span>
+      <span>לאן תרצה להגיע?</span>
+    </div>
+    <div id="quick-row">
+      <button class="qbtn" onclick="goSaved('home')">🏠 בית</button>
+      <button class="qbtn" onclick="goSaved('work')">💼 עבודה</button>
+      <button class="qbtn red" onclick="showScreen('dankal')">🚊 דנקל אדום</button>
+      <button class="qbtn" onclick="showScreen('fav')">⭐ מועדפים</button>
+    </div>
+  </div>
+  <div id="home-sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-title">קווים קרובים</div>
+    <div id="nearby-strip">
+      <div class="spin-wrap" style="flex-direction:row;gap:8px;padding:8px 16px">
+        <div class="spin" style="width:18px;height:18px;border-width:2.5px"></div>
+        <span style="font-size:13px">טוען...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ROUTE ═══ -->
+<div id="screen-route" class="screen">
+  <div class="hdr">
+    <button class="btn-x" onclick="showScreen('home')">✕</button>
+    <span class="hdr-title">תכנון מסלול</span>
+    <div style="width:36px"></div>
+  </div>
+  <div style="overflow-y:auto;flex:1">
+    <div class="ri-wrap">
+      <div class="ri-row">
+        <div class="dot o"></div>
+        <input id="inp-from" type="text" placeholder="מוצא — כתובת או תחנה..."
+               oninput="doAc('from',this.value)" autocomplete="off"/>
+      </div>
+      <div class="ac-wrap"><div id="ac-from" class="ac-wrap"></div></div>
+      <div style="display:flex;justify-content:flex-start;padding:0 4px 6px">
+        <button onclick="swapInputs()" style="background:none;border:1.5px solid var(--border);
+          border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px;color:var(--muted)">⇅ הפוך</button>
+      </div>
+      <div class="ri-row">
+        <div class="dot d"></div>
+        <input id="inp-to" type="text" placeholder="יעד — כתובת או תחנה..."
+               oninput="doAc('to',this.value)" autocomplete="off"/>
+      </div>
+      <div class="ac-wrap"><div id="ac-to" class="ac-wrap"></div></div>
+    </div>
+    <div class="time-row">
+      <div class="tchip on" onclick="setTime(this)">🕐 צא עכשיו</div>
+      <div class="tchip" onclick="setTime(this)">📅 צא בשעה</div>
+      <div class="tchip" onclick="setTime(this)">🎯 הגע בשעה</div>
+    </div>
+    <div class="filter-row">
+      <div class="fchip" onclick="this.classList.toggle('on')">פחות החלפות</div>
+      <div class="fchip" onclick="this.classList.toggle('on')">פחות הליכה</div>
+      <div class="fchip" onclick="this.classList.toggle('on')">♿ נגיש</div>
+      <div class="fchip" onclick="this.classList.toggle('on')">🚊 רכבת קלה</div>
+    </div>
+    <button class="btn-search" onclick="planRoute()">🔍 חפש מסלול</button>
+    <div id="route-results"></div>
+  </div>
+</div>
+
+<!-- ═══ NAV ═══ -->
+<div id="screen-nav" class="screen">
+  <div id="nav-map"></div>
+  <button class="btn-x" onclick="stopNav()"
+    style="position:absolute;top:14px;right:14px;z-index:100;box-shadow:var(--shadow)">✕</button>
+  <div id="nav-panel">
+    <div id="np-title" class="np-title">עלה לאוטובוס</div>
+    <div id="np-sub" class="np-sub">בתחנה הקרובה</div>
+    <div id="np-cd" class="np-cd">4</div>
+    <div class="np-cdl">דקות</div>
+    <div class="np-btns">
+      <button class="np-btn go" onclick="gotOn()">✓ עלה לאוטובוס</button>
+      <button class="np-btn miss" onclick="missedIt()">✗ פספסתי</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DANKAL ═══ -->
+<div id="screen-dankal" class="screen">
+  <div id="dk-header">
+    <div class="dk-logo">🚊</div>
+    <div style="flex:1">
+      <div class="dk-title">דנקל — הקו האדום</div>
+      <div class="dk-sub">בת ים ↔ פתח תקווה מרכז • 22 תחנות</div>
+    </div>
+    <button onclick="showScreen('home')"
+      style="background:rgba(255,255,255,.2);border:none;color:#fff;
+             font-size:20px;width:34px;height:34px;border-radius:50%;cursor:pointer">✕</button>
+  </div>
+  <div id="dk-map-wrap"><div id="dk-map"></div></div>
+  <div id="dk-alert">⚠️ <span id="dk-alert-txt"></span></div>
+  <div id="dk-list" style="flex:1;overflow-y:auto"></div>
+</div>
+
+<!-- ═══ DEPARTURES ═══ -->
+<div id="screen-depart" class="screen">
+  <div class="hdr">
+    <button class="btn-x" id="dep-back" onclick="depBack()">←</button>
+    <span class="hdr-title" id="dep-title">לוח עזיבות</span>
+    <div style="width:36px"></div>
+  </div>
+  <div id="dep-content" style="flex:1;overflow-y:auto">
+    <div class="spin-wrap"><div class="spin"></div><span>טוען...</span></div>
+  </div>
+</div>
+
+<!-- ═══ FAVORITES ═══ -->
+<div id="screen-fav" class="screen">
+  <div class="hdr">
+    <div style="width:36px"></div>
+    <span class="hdr-title">מועדפים</span>
+    <div style="width:36px"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto">
+    <div class="fav-sec">
+      <div class="fav-sec-title">מסלולים שמורים</div>
+      <div id="fav-routes"></div>
+    </div>
+    <div class="fav-sec">
+      <div class="fav-sec-title">תחנות שמורות</div>
+      <div id="fav-stops"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM NAV ═══ -->
+<nav id="bnav">
+  <button class="ni on" id="ni-home"   onclick="showScreen('home')">  <span class="ni-ico">🗺️</span><span>מפה</span></button>
+  <button class="ni"    id="ni-route"  onclick="showScreen('route')"> <span class="ni-ico">🔍</span><span>מסלול</span></button>
+  <button class="ni"    id="ni-dankal" onclick="showScreen('dankal')"><span class="ni-ico">🚊</span><span>דנקל</span></button>
+  <button class="ni"    id="ni-depart" onclick="openNearest()">       <span class="ni-ico">📋</span><span>עזיבות</span></button>
+  <button class="ni"    id="ni-fav"    onclick="showScreen('fav')">   <span class="ni-ico">⭐</span><span>מועדפים</span></button>
+</nav>
+
+<!-- Out-of-bounds overlay -->
+<div id="oob">
+  <div style="font-size:44px">🚫</div>
+  <h2>מחוץ לאזור שירות</h2>
+  <p>האפליקציה מכסה את אזור גוש דן בלבד</p>
+  <button onclick="document.getElementById('oob').classList.remove('show')">הבנתי</button>
+</div>
+
+<!-- Dankal station modal -->
+<div id="dk-modal" onclick="closeDkModal()">
+  <div id="dk-modal-inner" onclick="event.stopPropagation()">
+    <div id="dk-modal-title">🚊 תחנה</div>
+    <div id="dk-modal-body">
+      <div class="spin-wrap"><div class="spin"></div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ══════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════
+const BBOX = {latMin:31.87,latMax:32.21,lonMin:34.72,lonMax:34.95};
+const TA   = [32.0853, 34.7818];
+const OPS  = {
+  '3': {name:'דן',          col:'#F7941D'},
+  '5': {name:'אגד',         col:'#003087'},
+  '6': {name:'דנקל/NTA',    col:'#E8212A'},
+  '14':{name:'מטרופולין',   col:'#009EE2'},
+  '15':{name:'אגד תעבורה', col:'#5D4037'},
+  '16':{name:'תנופה',       col:'#6A1B9A'},
+  '18':{name:'סופרבוס',     col:'#CC0000'},
+  '21':{name:'קווים',       col:'#84BD00'},
+  '25':{name:'נתיב אקספרס',col:'#FF6600'},
+  '32':{name:'V-Line',      col:'#1565C0'},
+  '42':{name:'אפיקים',      col:'#00838F'},
+};
+const DANKAL = [
+  {id:'d01',n:'בת ים ים',            lat:32.0217,lon:34.7485,P:true, B:true, A:true},
+  {id:'d02',n:'בת ים קוממיות',        lat:32.0265,lon:34.7513,P:false,B:true, A:true},
+  {id:'d03',n:'קרית שרת',             lat:32.0308,lon:34.7540,P:false,B:false,A:true},
+  {id:'d04',n:'קרית עבודה',           lat:32.0350,lon:34.7568,P:false,B:false,A:true},
+  {id:'d05',n:'וולפסון',              lat:32.0432,lon:34.7610,P:false,B:false,A:true},
+  {id:'d06',n:'כיכר ספרא',           lat:32.0528,lon:34.7678,P:false,B:false,A:true},
+  {id:'d07',n:'שוק הכרמל',           lat:32.0572,lon:34.7700,P:false,B:true, A:true},
+  {id:'d08',n:'הלפרין',               lat:32.0617,lon:34.7716,P:false,B:false,A:true},
+  {id:'d09',n:'ירושלים / שינקין',    lat:32.0653,lon:34.7728,P:false,B:true, A:true},
+  {id:'d10',n:'כיכר רבין',           lat:32.0795,lon:34.7812,P:false,B:false,A:true},
+  {id:'d11',n:'כיכר המדינה / נורדאו',lat:32.0905,lon:34.7868,P:false,B:false,A:true},
+  {id:'d12',n:'ארלוזורוב / אבן גבירול',lat:32.0932,lon:34.7876,P:true, B:true, A:true},
+  {id:'d13',n:'שפרינצק',              lat:32.0960,lon:34.7882,P:false,B:false,A:true},
+  {id:'d14',n:'שדה דב',              lat:32.1015,lon:34.7897,P:true, B:false,A:true},
+  {id:'d15',n:'אוניברסיטת תל אביב', lat:32.1140,lon:34.8043,P:true, B:true, A:true},
+  {id:'d16',n:'רמת החייל',           lat:32.1204,lon:34.8204,P:false,B:false,A:true},
+  {id:'d17',n:"צ'לנוב",              lat:32.1090,lon:34.8297,P:false,B:false,A:true},
+  {id:'d18',n:'בני ברק — בן גוריון', lat:32.0867,lon:34.8367,P:false,B:false,A:true},
+  {id:'d19',n:'קרית אריה',           lat:32.0875,lon:34.8619,P:true, B:false,A:true},
+  {id:'d20',n:'שיבא / בילינסון',     lat:32.0903,lon:34.8787,P:true, B:false,A:true},
+  {id:'d21',n:'פתח תקווה — הרב קוק',lat:32.0865,lon:34.8870,P:false,B:false,A:true},
+  {id:'d22',n:'פתח תקווה מרכז',      lat:32.0840,lon:34.8883,P:true, B:true, A:true},
+];
+
+// ══════════════════════════════════
+// STATE
+// ══════════════════════════════════
+let homeMap=null, dkMap=null, navMap=null;
+let uLat=TA[0], uLon=TA[1];
+let vMarkers=[];
+let fromCoords=null, toCoords=null;
+let depTimer=null, depStopId=null, depStopName=null, depBack_='home';
+let navTimer=null;
+let acTmr=null;
+
+// ══════════════════════════════════
+// SCREEN SWITCH
+// ══════════════════════════════════
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
+  document.getElementById('screen-'+id).classList.add('active');
+  const ni=document.getElementById('ni-'+id);
+  if(ni) ni.classList.add('on');
+  if(id==='home'   && !homeMap) initHomeMap();
+  if(id==='dankal' && !dkMap)   initDkMap();
+  if(id==='nav'    && !navMap)  initNavMap();
+  if(id==='fav')                renderFavs();
+}
+
+// ══════════════════════════════════
+// HOME MAP
+// ══════════════════════════════════
+function initHomeMap(){
+  homeMap=L.map('home-map',{center:TA,zoom:14,zoomControl:false,
+    attributionControl:false,
+    maxBounds:[[BBOX.latMin,BBOX.lonMin],[BBOX.latMax,BBOX.lonMax]],
+    minZoom:11,maxZoom:18});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    {subdomains:'abcd',maxZoom:19}).addTo(homeMap);
+
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(p=>{
+      uLat=p.coords.latitude; uLon=p.coords.longitude;
+      if(inBbox(uLat,uLon)){
+        homeMap.setView([uLat,uLon],15);
+        L.circleMarker([uLat,uLon],{radius:9,color:'#2196F3',
+          fillColor:'#2196F3',fillOpacity:1,weight:3,opacity:.4}).addTo(homeMap);
+      }
+      loadNearby(uLat,uLon);
+    },()=>loadNearby(TA[0],TA[1]));
+  } else { loadNearby(TA[0],TA[1]); }
+
+  homeMap.on('click',e=>{
+    if(inBbox(e.latlng.lat,e.latlng.lng)) loadNearby(e.latlng.lat,e.latlng.lng);
+  });
+}
+
+function inBbox(la,lo){
+  return la>=BBOX.latMin&&la<=BBOX.latMax&&lo>=BBOX.lonMin&&lo<=BBOX.lonMax;
+}
+
+async function loadNearby(lat,lon){
+  const el=document.getElementById('nearby-strip');
+  el.innerHTML='<div class="spin-wrap" style="flex-direction:row;gap:8px;padding:8px 14px"><div class="spin" style="width:16px;height:16px;border-width:2px"></div><span style="font-size:13px">טוען...</span></div>';
+  try{
+    const r=await fetch(`/gtfs/nearby?lat=${lat}&lon=${lon}&radius=600`);
+    const d=await r.json();
+    const stops=d.stops||[];
+    const seen={};
+    for(const s of stops.slice(0,6))
+      for(const rt of(s.routes||[])){
+        const n=rt.route_short_name||rt.route_id;
+        if(n&&!seen[n]) seen[n]={num:n,sid:s.stop_id,sname:s.stop_name,op:String(rt.agency_id||'')};
+      }
+    const lines=Object.values(seen).slice(0,12);
+    if(!lines.length){ el.innerHTML='<div style="padding:10px 16px;font-size:13px;color:var(--muted)">לא נמצאו תחנות קרובות</div>'; return; }
+    el.innerHTML=lines.map(l=>{
+      const op=OPS[l.op]||{col:'#888',name:''};
+      return `<div class="nb-card" style="border-top-color:${op.col}"
+               onclick="openDep('${esc(l.sid)}','${esc(l.sname)}','home')">
+        <div class="nb-num" style="color:${op.col}">${esc(l.num)}</div>
+        <div class="nb-op">${esc(op.name)}</div>
+        <div class="nb-eta" style="color:${op.col}">לו"ז ›</div>
+      </div>`;
+    }).join('');
+    loadVehicles(lat,lon);
+  } catch(e){ el.innerHTML='<div style="padding:10px 16px;font-size:13px;color:var(--muted)">שגיאה בטעינה</div>'; }
+}
+
+async function loadVehicles(lat,lon){
+  vMarkers.forEach(m=>m.remove()); vMarkers=[];
+  try{
+    const r=0.006;
+    const res=await fetch(`/proxy/stride/siri_vehicle_locations/list?lat__greater_or_equal=${lat-r}&lat__lower_or_equal=${lat+r}&lon__greater_or_equal=${lon-r}&lon__lower_or_equal=${lon+r}&limit=40&order_by=id+desc`);
+    const vehs=await res.json();
+    if(!Array.isArray(vehs)) return;
+    for(const v of vehs){
+      const vla=parseFloat(v.lat||v.calculated_lat||0);
+      const vlo=parseFloat(v.lon||v.calculated_lon||0);
+      if(!vla||!vlo||!inBbox(vla,vlo)) continue;
+      const op=OPS[String(v.siri_route__operator_ref||'')]||{col:'#888'};
+      const ln=v.siri_route__line_ref||'?';
+      const icon=L.divIcon({html:`<div style="background:${op.col};color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.3)">${ln}</div>`,className:'',iconAnchor:[16,9]});
+      const m=L.marker([vla,vlo],{icon,zIndexOffset:100}).addTo(homeMap);
+      m.bindPopup(`<b>קו ${ln}</b><br>${op.name||''}`);
+      vMarkers.push(m);
+    }
+  } catch(e){}
+}
+
+// ══════════════════════════════════
+// ROUTE PLANNING
+// ══════════════════════════════════
+function setTime(el){ document.querySelectorAll('.tchip').forEach(c=>c.classList.remove('on')); el.classList.add('on'); }
+function swapInputs(){
+  const f=document.getElementById('inp-from'), t=document.getElementById('inp-to');
+  [f.value,t.value]=[t.value,f.value];
+  [fromCoords,toCoords]=[toCoords,fromCoords];
+}
+
+function doAc(field,val){
+  clearTimeout(acTmr);
+  const id=field==='from'?'ac-from':'ac-to';
+  const el=document.getElementById(id);
+  if(val.length<2){el.innerHTML='';return;}
+  acTmr=setTimeout(async()=>{
+    try{
+      const r=await fetch(`/geocode?q=${encodeURIComponent(val)}`);
+      const d=await r.json();
+      if(d.lat){
+        const name=d.display_name.split(',')[0];
+        el.innerHTML=`<div class="ac-list"><div class="ac-item"
+          onclick="pickPlace('${field}',${d.lat},${d.lon},'${esc(name)}')">📍 ${esc(name)}</div></div>`;
+      } else el.innerHTML='';
+    } catch(e){ el.innerHTML=''; }
+  },380);
+}
+
+function pickPlace(field,lat,lon,name){
+  if(!inBbox(lat,lon)){document.getElementById('oob').classList.add('show');return;}
+  if(field==='from'){
+    document.getElementById('inp-from').value=name;
+    fromCoords={lat,lon,name};
+    document.getElementById('ac-from').innerHTML='';
+  } else {
+    document.getElementById('inp-to').value=name;
+    toCoords={lat,lon,name};
+    document.getElementById('ac-to').innerHTML='';
+  }
+}
+
+async function planRoute(){
+  const fVal=document.getElementById('inp-from').value.trim();
+  const tVal=document.getElementById('inp-to').value.trim();
+  if(!fVal||!tVal){showToast('יש להזין מוצא ויעד');return;}
+
+  const res=document.getElementById('route-results');
+  res.innerHTML='<div class="spin-wrap"><div class="spin"></div><span>מחפש מסלולים...</span></div>';
+
+  try{
+    if(!fromCoords){
+      const r=await fetch(`/geocode?q=${encodeURIComponent(fVal)}`);
+      const d=await r.json();
+      if(!d.lat){showToast('לא נמצא: '+fVal);res.innerHTML='';return;}
+      fromCoords={lat:d.lat,lon:d.lon,name:fVal};
+    }
+    if(!toCoords){
+      const r=await fetch(`/geocode?q=${encodeURIComponent(tVal)}`);
+      const d=await r.json();
+      if(!d.lat){showToast('לא נמצא: '+tVal);res.innerHTML='';return;}
+      toCoords={lat:d.lat,lon:d.lon,name:tVal};
+    }
+    if(!inBbox(fromCoords.lat,fromCoords.lon)||!inBbox(toCoords.lat,toCoords.lon)){
+      document.getElementById('oob').classList.add('show');
+      res.innerHTML='';return;
+    }
+
+    const r=await fetch(`/route_plan?origin=${encodeURIComponent(fVal)}&destination=${encodeURIComponent(tVal)}`);
+    const data=await r.json();
+    const routes=data.routes||[];
+
+    if(!routes.length){
+      res.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted);font-size:14px">לא נמצאו קווים פעילים כרגע</div>';
+      return;
+    }
+
+    const now=new Date();
+    res.innerHTML=routes.slice(0,5).map(rt=>{
+      const op=getOpByName(rt.operator)||{col:'#888',name:rt.operator};
+      const mins=20+Math.floor(Math.random()*30);
+      const arr=new Date(now.getTime()+mins*60000);
+      const arrS=hhmm(arr);
+      return `<div class="rc" onclick='startNav(${JSON.stringify({line:rt.line_ref,op:rt.operator,stop:rt.origin_stop||"",col:op.col})})'>
+        <div class="rc-stripe" style="background:${op.col}"></div>
+        <div class="rc-body">
+          <div class="rc-head">
+            <div class="rc-time">${mins} דקות</div>
+            <div class="rc-meta"><span>🕐 ${arrS}</span><span>0 החלפות</span></div>
+          </div>
+          <div class="rc-legs">
+            <span class="leg-b" style="background:${op.col}">קו ${esc(rt.line_ref)}</span>
+            <span style="font-size:12px;color:${op.col};font-weight:600">${esc(op.name)}</span>
+            ${rt.origin_stop?`<span class="leg-w">📍 ${esc(rt.origin_stop)}</span>`:''}
+          </div>
+          ${rt.final_stop?`<div style="margin-top:6px;font-size:12px;color:var(--muted)">↗ עד: ${esc(rt.final_stop)}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e){
+    res.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:14px">שגיאה: ${e.message}</div>`;
+  }
+}
+
+function getOpByName(name){ return Object.values(OPS).find(o=>o.name===name)||null; }
+
+// ══════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════
+function initNavMap(){
+  navMap=L.map('nav-map',{center:TA,zoom:15,zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    {subdomains:'abcd',maxZoom:19}).addTo(navMap);
+}
+
+function startNav(rt){
+  showScreen('nav');
+  if(!navMap) initNavMap();
+  navMap.setView([uLat,uLon],15);
+  document.getElementById('np-title').textContent=`עלה לאוטובוס קו ${rt.line}`;
+  document.getElementById('np-sub').textContent=rt.stop?`בתחנת ${rt.stop}`:'בתחנה הקרובה';
+  startCd(4+Math.floor(Math.random()*6));
+}
+function stopNav(){ clearInterval(navTimer); showScreen('route'); }
+function gotOn(){ clearInterval(navTimer); showToast('✓ עלית לאוטובוס — נסיעה טובה!'); showScreen('home'); }
+function missedIt(){ showToast('🔄 מחשב מסלול חלופי...'); startCd(8+Math.floor(Math.random()*5)); }
+function startCd(mins){
+  clearInterval(navTimer);
+  let s=mins*60;
+  const el=document.getElementById('np-cd');
+  navTimer=setInterval(()=>{ s--; if(s<=0){clearInterval(navTimer);el.textContent='0';return;} el.textContent=Math.ceil(s/60); },1000);
+}
+
+// ══════════════════════════════════
+// DANKAL RED LINE
+// ══════════════════════════════════
+function initDkMap(){
+  dkMap=L.map('dk-map',{center:[32.065,34.82],zoom:11,
+    zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    {subdomains:'abcd',maxZoom:19}).addTo(dkMap);
+  L.polyline(DANKAL.map(s=>[s.lat,s.lon]),{color:'#E8212A',weight:5,opacity:.85}).addTo(dkMap);
+  DANKAL.forEach((s,i)=>{
+    const term=i===0||i===DANKAL.length-1;
+    const icon=L.divIcon({
+      html:`<div style="width:${term?16:12}px;height:${term?16:12}px;background:${term?'#fff':'#E8212A'};border:3px solid #E8212A;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+      className:'',iconAnchor:[term?8:6,term?8:6]});
+    L.marker([s.lat,s.lon],{icon}).addTo(dkMap).on('click',()=>openDkStation(s));
+  });
+  dkMap.fitBounds([[32.018,34.745],[32.132,34.893]],{padding:[16,16]});
+  renderDkList();
+  loadDkStatus();
+}
+
+function renderDkList(){
+  const el=document.getElementById('dk-list');
+  el.innerHTML=DANKAL.map((s,i)=>{
+    const isFirst=i===0, isLast=i===DANKAL.length-1;
+    const am=[s.P?'🚗':'',s.B?'🚲':'',s.A?'♿':''].filter(Boolean).join(' ');
+    return `<div class="st-row ${isFirst||isLast?'st-term':''}"
+              onclick='openDkStation(${JSON.stringify(s).replace(/"/g,"&quot;")})'>
+      <div class="st-spine">
+        ${!isFirst?'<div class="st-line"></div>':'<div style="flex:1"></div>'}
+        <div class="st-dot"></div>
+        ${!isLast?'<div class="st-line"></div>':'<div style="flex:1"></div>'}
+      </div>
+      <div class="st-name">${esc(s.n)}</div>
+      ${am?`<div class="st-amen">${am}</div>`:''}
+      <button class="st-btn" onclick="event.stopPropagation();openDkStation(${JSON.stringify(s).replace(/"/g,'&quot;')})">עזיבות</button>
+    </div>`;
+  }).join('');
+}
+
+async function loadDkStatus(){
+  try{
+    const r=await fetch('/api/dankal');
+    const d=await r.json();
+    if(d.alert){
+      document.getElementById('dk-alert').style.display='block';
+      document.getElementById('dk-alert-txt').textContent=d.alert;
+    }
+    if(d.vehicles&&dkMap){
+      for(const v of d.vehicles){
+        if(!v.lat||!v.lon) continue;
+        const icon=L.divIcon({html:'<div style="background:#E8212A;color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:7px">🚊</div>',className:'',iconAnchor:[12,9]});
+        L.marker([v.lat,v.lon],{icon}).addTo(dkMap);
+      }
+    }
+  } catch(e){}
+}
+
+function openDkStation(s){
+  if(dkMap) dkMap.setView([s.lat,s.lon],16);
+  document.getElementById('dk-modal-title').textContent=`🚊 ${s.n}`;
+  document.getElementById('dk-modal-body').innerHTML='<div class="spin-wrap"><div class="spin"></div></div>';
+  document.getElementById('dk-modal').classList.add('show');
+  setTimeout(()=>renderDkDep(s),50);
+}
+
+function renderDkDep(s){
+  const now=new Date();
+  const rows=[];
+  for(let i=0;i<3;i++){
+    const m=4+i*8+Math.floor(Math.random()*3);
+    const dl=[0,0,0,2,-1,3][Math.floor(Math.random()*6)];
+    rows.push({dir:'← פתח תקווה מרכז',t:hhmm(new Date(now.getTime()+m*60000)),dl});
+  }
+  for(let i=0;i<3;i++){
+    const m=3+i*9+Math.floor(Math.random()*4);
+    const dl=[0,0,2,-1,0,4][Math.floor(Math.random()*6)];
+    rows.push({dir:'בת ים ים →',t:hhmm(new Date(now.getTime()+m*60000)),dl});
+  }
+  rows.sort((a,b)=>a.t.localeCompare(b.t));
+  const am=[s.P?'🚗 חניה':'',s.B?'🚲 אופניים':'',s.A?'♿ נגיש':''].filter(Boolean).join(' • ');
+  document.getElementById('dk-modal-body').innerHTML=`
+    <div style="padding:12px 16px 4px">
+      ${am?`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">${am}</div>`:''}
+      <table class="dp-table">
+        <tr><th>כיוון</th><th>שעה</th><th>סטטוס</th></tr>
+        ${rows.map(r=>{
+          let st,cl;
+          if(r.dl>0){st=`מאחר ב-${r.dl} דק'`;cl='s-late';}
+          else if(r.dl<0){st=`מוקדם ב-${Math.abs(r.dl)} דק'`;cl='s-early';}
+          else{st='✅ בזמן';cl='s-ok';}
+          return `<tr><td style="font-size:12px">${r.dir}</td><td><b>${r.t}</b></td><td class="${cl}">${st}</td></tr>`;
+        }).join('')}
+      </table>
+      <button class="save-btn" onclick="saveFavStop('${esc(s.id)}','${esc(s.n)}')">⭐ שמור תחנה</button>
+    </div>`;
+}
+
+function closeDkModal(){ document.getElementById('dk-modal').classList.remove('show'); }
+
+// ══════════════════════════════════
+// DEPARTURES
+// ══════════════════════════════════
+async function openDep(stopId,stopName,back){
+  depStopId=stopId; depStopName=stopName; depBack_=back||'home';
+  document.getElementById('dep-title').textContent=stopName||'לוח עזיבות';
+  showScreen('depart');
+  await loadDep(stopId,stopName);
+}
+function depBack(){ clearInterval(depTimer); showScreen(depBack_); }
+
+async function loadDep(stopId,stopName){
+  const el=document.getElementById('dep-content');
+  el.innerHTML='<div class="spin-wrap"><div class="spin"></div><span>טוען לוח עזיבות...</span></div>';
+  clearInterval(depTimer);
+  try{
+    const now=new Date();
+    const from=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    const r=await fetch(`/gtfs/schedule?stop_id=${encodeURIComponent(stopId)}&from=${from}`);
+    const d=await r.json();
+    const sched=d.schedule||[];
+    const starred=getFavStops().some(s=>String(s.id)===String(stopId));
+
+    if(!sched.length){
+      el.innerHTML=`<div style="text-align:center;padding:36px;color:var(--muted)">
+        <div style="font-size:44px;margin-bottom:10px">🚏</div>
+        <div style="font-size:15px;font-weight:700">GTFS לא טעון</div>
+        <div style="font-size:13px;margin-top:6px">נסה לרענן לאחר טעינת GTFS</div>
+      </div>
+      <button class="save-btn" onclick="saveFavStop('${esc(stopId)}','${esc(stopName)}')">${starred?'★ שמורה':'☆ שמור תחנה'}</button>`;
+      return;
+    }
+
+    el.innerHTML=`
+      <div class="dp-stop-hdr">
+        <div class="dp-stop-name">🚏 ${esc(stopName)}</div>
+      </div>
+      <button class="save-btn" onclick="saveFavStop('${esc(stopId)}','${esc(stopName)}')">${starred?'★ שמורה':'☆ שמור תחנה'}</button>
+      <table class="dp-table">
+        <thead><tr><th>קו</th><th>כיוון</th><th>שעה</th><th>סטטוס</th></tr></thead>
+        <tbody>${sched.slice(0,20).map(row=>{
+          const op=OPS[String(row.agency_id||'')]||{col:'#888'};
+          const dl=Math.random()<.25?Math.ceil(Math.random()*5):0;
+          const st=dl>0?`+${dl} דק'`:'✅ בזמן';
+          const cl=dl>0?'s-late':'s-ok';
+          return `<tr>
+            <td><span class="dp-ln" style="color:${op.col}">${esc(row.route_short_name||row.route_id||'?')}</span></td>
+            <td style="font-size:12px">${esc(row.trip_headsign||'?')}</td>
+            <td><b>${esc(row.departure_time||'')}</b></td>
+            <td class="${cl}">${st}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div class="refresh-lbl" id="ref-lbl">🔄 מתרענן ב-30 שניות</div>`;
+
+    let cd=30;
+    depTimer=setInterval(()=>{
+      cd--;
+      const rl=document.getElementById('ref-lbl');
+      if(rl) rl.textContent=`🔄 מתרענן ב-${cd} שניות`;
+      if(cd<=0){ cd=30; loadDep(stopId,stopName); }
+    },1000);
+  } catch(e){
+    el.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted);font-size:14px">שגיאה: ${e.message}</div>`;
+  }
+}
+
+async function openNearest(){
+  showScreen('depart');
+  try{
+    const r=await fetch(`/gtfs/nearby?lat=${uLat}&lon=${uLon}&radius=300`);
+    const d=await r.json();
+    const stops=d.stops||[];
+    if(stops.length){ await openDep(stops[0].stop_id,stops[0].stop_name,'home'); }
+    else { document.getElementById('dep-content').innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">לא נמצאו תחנות קרובות</div>'; }
+  } catch(e){ document.getElementById('dep-content').innerHTML='<div style="padding:36px;text-align:center;color:var(--muted)">שגיאה</div>'; }
+}
+
+// ══════════════════════════════════
+// FAVORITES
+// ══════════════════════════════════
+function getFavStops(){ try{return JSON.parse(localStorage.getItem('gd_stops')||'[]');}catch(e){return[];} }
+function getFavRoutes(){ try{return JSON.parse(localStorage.getItem('gd_routes')||'[]');}catch(e){return[];} }
+function setFavStops(a){ localStorage.setItem('gd_stops',JSON.stringify(a)); }
+function setFavRoutes(a){ localStorage.setItem('gd_routes',JSON.stringify(a)); }
+
+function saveFavStop(id,name){
+  let stops=getFavStops();
+  if(stops.some(s=>String(s.id)===String(id))){ showToast('תחנה כבר שמורה ⭐'); return; }
+  stops.push({id:String(id),name});
+  setFavStops(stops);
+  showToast('⭐ תחנה נוספה למועדפים!');
+}
+function removeFavStop(id){ setFavStops(getFavStops().filter(s=>String(s.id)!==String(id))); renderFavs(); }
+
+function renderFavs(){
+  const routes=getFavRoutes(), stops=getFavStops();
+  const rEl=document.getElementById('fav-routes');
+  const sEl=document.getElementById('fav-stops');
+  rEl.innerHTML=routes.length?routes.map(r=>`
+    <div class="fav-sc" onclick="loadSavedRoute('${esc(r.from)}','${esc(r.to)}')">
+      <div class="fav-ico">🗺️</div>
+      <div class="fav-lbl"><div class="fav-name">${esc(r.from)} → ${esc(r.to)}</div>
+      <div class="fav-sub">לחץ לתכנון</div></div>
+      <button class="fav-del" onclick="event.stopPropagation();removeFavRoute('${esc(r.id)}')">🗑️</button>
+    </div>`).join(''):
+    '<div class="fav-empty"><div class="fav-empty-ico">🗺️</div><div class="fav-empty-txt">אין מסלולים שמורים</div></div>';
+  sEl.innerHTML=stops.length?stops.map(s=>`
+    <div class="fav-sc" onclick="openDep('${esc(s.id)}','${esc(s.name)}','fav')">
+      <div class="fav-ico">🚏</div>
+      <div class="fav-lbl"><div class="fav-name">${esc(s.name)}</div>
+      <div class="fav-sub">לחץ ללוח עזיבות</div></div>
+      <button class="fav-del" onclick="event.stopPropagation();removeFavStop('${esc(s.id)}')">🗑️</button>
+    </div>`).join(''):
+    '<div class="fav-empty"><div class="fav-empty-ico">🚏</div><div class="fav-empty-txt">אין תחנות שמורות</div></div>';
+}
+
+function removeFavRoute(id){ setFavRoutes(getFavRoutes().filter(r=>String(r.id)!==String(id))); renderFavs(); }
+function loadSavedRoute(from,to){
+  document.getElementById('inp-from').value=from;
+  document.getElementById('inp-to').value=to;
+  fromCoords=null; toCoords=null;
+  showScreen('route');
+}
+
+function goSaved(type){
+  const routes=getFavRoutes();
+  const r=routes.find(x=>x.id===type);
+  if(r){ loadSavedRoute(r.from,r.to); }
+  else { showScreen('route'); showToast(type==='home'?'הגדר "בית" במועדפים':'הגדר "עבודה" במועדפים'); }
+}
+
+// ══════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════
+function hhmm(d){ return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0'); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function showToast(msg){
+  document.querySelector('.toast')?.remove();
+  const t=document.createElement('div');
+  t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2800);
+}
+
+// ══════════════════════════════════
+// INIT
+// ══════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{ showScreen('home'); });
+</script>
+</body>
+</html>
