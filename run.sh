@@ -226,28 +226,64 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "4 — Creating Kafka Topics"
 
-# Check if topics already exist (use localhost:9092 — the PLAINTEXT_HOST listener inside the container)
-EXISTING=$(timeout 15 docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
+# ── Portable timeout helper ────────────────────────────────────────────────────
+# The system 'timeout' command is unavailable on macOS and unreliable on Git Bash.
+# This helper runs a 'docker exec kafka' command in the background and kills it
+# if it hasn't finished within <secs> seconds.
+# Usage: _kafka <secs> <kafka-subcommand> [args...]
+_kafka() {
+  local secs=$1; shift
+  docker exec kafka "$@" &
+  local _pid=$! _elapsed=0
+  while [ $_elapsed -lt $secs ] && kill -0 "$_pid" 2>/dev/null; do
+    sleep 1; _elapsed=$((_elapsed + 1))
+  done
+  if kill -0 "$_pid" 2>/dev/null; then
+    kill "$_pid" 2>/dev/null
+    wait "$_pid" 2>/dev/null
+    return 1   # timed out
+  fi
+  wait "$_pid"
+  return $?
+}
 
-TOPICS_TO_CREATE=""
-for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors" "bus-delays" "train-delays" "bus-delays-historical" "train-delays-historical"; do
-  if echo "$EXISTING" | grep -q "^${topic}$"; then
-    warn "Topic '${topic}' already exists — skipping"
+# ── Wait for Kafka broker to accept client connections ────────────────────────
+# Docker marks the container "healthy" as soon as ZooKeeper registration is done,
+# but the PLAINTEXT_HOST listener on port 9092 may still be binding.
+# We loop here (up to 90 s) until a real kafka-topics command succeeds.
+log "Waiting for Kafka broker to accept client connections..."
+KAFKA_READY=false
+for i in $(seq 1 30); do
+  if _kafka 5 kafka-topics --list --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+    KAFKA_READY=true
+    success "Kafka broker is accepting connections!"
+    break
+  fi
+  echo -n "."
+  sleep 3
+done
+echo ""
+if [ "$KAFKA_READY" = "false" ]; then
+  warn "Kafka not responding after 90s — attempting topic creation anyway"
+fi
+
+# ── Create topics (idempotent — --if-not-exists makes re-runs safe) ───────────
+ALL_TOPICS="bus-positions train-positions trip-updates service-alerts \
+            delay-events traffic-data pipeline-errors \
+            bus-delays train-delays bus-delays-historical train-delays-historical"
+
+for topic in $ALL_TOPICS; do
+  if _kafka 20 kafka-topics \
+       --create --if-not-exists \
+       --bootstrap-server localhost:9092 \
+       --partitions 4 \
+       --replication-factor 1 \
+       --topic "$topic" 2>/dev/null; then
+    success "Topic ready: $topic"
   else
-    TOPICS_TO_CREATE="$TOPICS_TO_CREATE $topic"
+    warn "Could not create '$topic' (Kafka may be busy) — will retry on next run"
   fi
 done
-
-# Create all missing topics
-for topic in $TOPICS_TO_CREATE; do
-  timeout 15 docker exec kafka kafka-topics \
-    --create --if-not-exists \
-    --bootstrap-server localhost:9092 \
-    --partitions 4 \
-    --replication-factor 1 \
-    --topic "$topic" 2>/dev/null && success "Topic created: $topic"
-done
-[ -z "$TOPICS_TO_CREATE" ] && success "All Kafka topics already exist"
 
 # ─────────────────────────────────────────────────────────────
 #  Step 5: Initialize Airflow
