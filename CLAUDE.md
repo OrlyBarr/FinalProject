@@ -201,12 +201,28 @@ docker-compose up -d
 python bot.py
 
 # גישה:
-# http://localhost:5000       → צ'אט AI (index.html)
-# http://localhost:5000/agent → לוח שאילתות (agent_transit.html)
-# http://localhost:8080       → Kafka UI
-# http://localhost:9001       → MinIO Console
-# http://localhost:5601       → Kibana
-# http://localhost:8081       → Airflow UI
+# http://localhost:5000         → צ'אט AI (index.html)
+# http://localhost:5000/agent   → לוח שאילתות (agent_transit.html)
+# http://localhost:5000/gushdan → אפליקציית גוש דן (Moovit-style)
+# http://localhost:8085         → Kafka UI  ← שונה מ-8080!
+# http://localhost:9001         → MinIO Console
+# http://localhost:5601         → Kibana
+# http://localhost:8081         → Airflow UI
+```
+
+### הפעלה על linub-vm (שרת Linux)
+
+```bash
+# SSH אל השרת
+ssh linub-vm   # ~/.ssh/config מוגדר: Host linub-vm → 192.168.1.110, User local_admin
+
+# הרצת run.sh (מאתחל את כל השירותים)
+cd /home/local_admin/finalproject
+bash run.sh
+
+# אם Docker containers לא נטענים — הרץ עם sudo (containers הופעלו ע"י root)
+sudo docker-compose up -d
+sudo docker stop <container>
 ```
 
 ---
@@ -217,6 +233,7 @@ python bot.py
 |--------|------|-------|
 | GET | `/` | index.html (צ'אט AI) |
 | GET | `/agent` | agent_transit.html (לוח שאילתות) |
+| GET | `/gushdan` | gushdan_app.html (אפליקציית Moovit-style) ← **חדש** |
 | GET | `/health` | בדיקת תקינות |
 | GET | `/status` | סטטוס מערכת + URLs |
 | GET | `/buses` | מיקומי אוטובוסים מ-cache |
@@ -231,23 +248,8 @@ python bot.py
 | GET | `/proxy/stride/*` | proxy לHasadna Stride API |
 | GET | `/proxy/hasadna/*` | alias ל-/proxy/stride |
 | GET | `/proxy/rail?stationId=X` | רכבות פעילות ליד תחנה (Stride operator=2) |
+| GET | `/api/dankal` | רכבת קלה NTA (operator=6) — bbox מסלול האדום ← **חדש** |
 | POST | `/ask` | צ'אט AI דרך Gemini |
-
----
-
-## Kafka Topics
-
-| Topic | מקור | Partitions |
-|-------|------|-----------|
-| `bus-positions` | BusPositionsProducer | 4 |
-| `train-positions` | TrainPositionsProducer | 4 |
-| `trip-updates` | TripUpdatesProducer | 2 |
-| `service-alerts` | ServiceAlertsProducer | 2 |
-| `traffic-data` | TrafficProducer | 2 |
-| `delay-events` | ETL DAG | 1 |
-| `pipeline-errors` | כל ה-producers | 1 |
-| `bus-delays` | BusDelayCollector | 3 |
-| `train-delays` | TrainDelayCollector | 3 |
 
 ---
 
@@ -266,6 +268,8 @@ GUSH_DAN = {
 
 ## תיקונים שבוצעו (אפריל 2026)
 
+### גל 1 — תיקוני API ו-UI
+
 1. **`bot.py`** — `log` לא היה מוגדר → `NameError` ב-`/streets`
 2. **`bot.py`** — bbox params שגויים: `lat__gte` → `lat__greater_or_equal`
 3. **`bot.py`** — `/proxy/rail` התעלם מ-`stationId` → עכשיו מסנן לפי קואורדינטות התחנה
@@ -276,6 +280,133 @@ GUSH_DAN = {
 8. **`transit_query.py`** — `siri_routes__` (רבים) → `siri_route__` (יחיד)
 9. **`.env.example`** — נוסף `GEMINI_API_KEY` ו-`GOOGLE_MAPS_API_KEY`
 
+### גל 2 — run.sh (תיקון Step 4)
+
+10. **`run.sh`** — Step 4 נתקע לנצח: פקודת `timeout` לא קיימת ב-macOS/Git Bash
+    - **פתרון**: פונקציית `_kafka()` נוספת — מריצה את הפקודה ב-background וממתינה לה עם `kill -0`
+    - לולאת readiness של 90 שניות (30 × sleep 3) לפני יצירת topics
+    - `--if-not-exists` בכל יצירת topic (idempotent)
+    - commit `28aeb57` — pushed to GitHub
+
+### גל 3 — אפליקציית גוש דן (`gushdan_app.html`)
+
+11. **`gushdan_app.html`** — **קובץ חדש** (947 שורות) — אפליקציית Moovit-style לגוש דן:
+    - 5 מסכים + ניווט תחתון: בית (מפה + תחנות קרובות), תכנון מסלול, ניווט פעיל, דנקל קו אדום, לוח עזיבות, מועדפים
+    - 22 תחנות דנקל עם קואורדינטות מקורבות (בת ים → פתח תקווה)
+    - `BBOX = {latMin:31.87, latMax:32.21, lonMin:34.72, lonMax:34.95}`
+    - guard "מחוץ לתחום" — overlay אם המשתמש מחוץ לגוש דן
+    - צבעי מפעילים: דן כתום, אגד כחול כהה, דנקל/NTA אדום, מטרופולין תכלת
+    - Hebrew RTL PWA — `direction:rtl`, mobile-first
+    - Leaflet.js עם CartoDB Positron tiles (ללא API key)
+
+12. **`bot.py`** — נוספו endpoints:
+    - `/gushdan` — מגיש את `gushdan_app.html`
+    - `/api/dankal` — שאילתת Stride ל-NTA vehicles (operator_ref=6) בבbox של קו האדום
+    - עדכון `/status` לכלול Gush Dan Transit App URL
+    - commit `1caea02` — pushed to GitHub
+
+### גל 4 — linub-vm: הרמת ה-VM
+
+13. **linub-vm** — VM לא עלה עקב Hyper-V Saved State + מחסור בזיכרון:
+    - שגיאה: `0x800705AA` — ה-VM ניסה לשחזר 12,265 MB RAM; המארח לא היה עם מספיק זיכרון פנוי
+    - **פתרון (PowerShell מורם)**:
+      1. `Remove-VMSavedState 'linub-vm'` — מחיקת Saved State
+      2. `Set-VMMemory -StartupBytes (6144MB)` — הורדת RAM ל-6 GB
+      3. `Start-VM 'linub-vm'` — הפעלה מחדש
+    - SSH config עודכן: `IdentityFile ~/.ssh/id_ed25519`, `ServerAliveInterval 60`, `ServerAliveCountMax 3`
+
+### גל 5 — linub-vm: דיבאג run.sh ✅
+
+14. **בעיית Kafka `InconsistentClusterIdException`** — אובחנה ותוקנה:
+    - **שורש הבעיה**: volume `finalproject_kafka_data` הכיל cluster ID `2wkTnxsyRpynpAyR3BTDWA` שלא תאם ל-Zookeeper (`PgtNQG1AQ5SiXf40TBOrNg`) → Kafka קורס בכל restart
+    - **פתרון**: ניקוי ה-volume דרך container זמני:
+      ```bash
+      docker run --rm -v finalproject_kafka_data:/data \
+        confluentinc/cp-kafka:7.4.0 bash -c 'rm -rf /data/* && echo VOLUME_CLEARED'
+      ```
+    - ✅ בוצע בהצלחה — `VOLUME_CLEARED` אושר
+
+15. **בעיית זיכרון בשרת** — VM (6 GB RAM) עמוס מדי ✅ **נפתרה**:
+    - 20 containers שאינם של הפרויקט הוסרו (hive, mariadb, mongo, nifi, logistic-*)
+    - Elasticsearch + Kibana נעצרו זמנית לפנות זיכרון (~1.5 GB)
+    - Swap הוגדל מ-2 GB ל-6 GB + `vm.swappiness=10`
+    - **מצב עכשיו**: RAM זמין 1.5 GB, Swap פנוי 4 GB
+
+### גל 6 — linub-vm: ייצוב זיכרון (אפריל 2026)
+
+16. **Swap הוגדל ל-6 GB** — קובץ swap נוסף `/home/local_admin/swap2.img` (4 GB):
+    ```bash
+    # יצירת קובץ (ללא sudo, בhome directory):
+    fallocate -l 4G /home/local_admin/swap2.img && chmod 600 /home/local_admin/swap2.img
+    # הפעלה דרך privileged container (ללא sudo):
+    docker run --rm --privileged -u root -v /home/local_admin:/swapdir \
+      confluentinc/cp-kafka:7.4.0 bash -c \
+      'mkswap /swapdir/swap2.img && swapon /swapdir/swap2.img && echo 10 > /proc/sys/vm/swappiness'
+    ```
+    - `/etc/fstab` עודכן: `/home/local_admin/swap2.img none swap sw 0 0` ← persistent בין reboots
+    - `/etc/sysctl.conf` עודכן: `vm.swappiness=10` ← kernel לא יוציא ל-swap מוקדם מדי
+
+17. **docker-compose.yml — הגבלות זיכרון ל-Airflow** (commit `b53812b`):
+    - `airflow-webserver: mem_limit: 800m` + `AIRFLOW__WEBSERVER__WORKERS: '1'`
+    - `airflow-scheduler: mem_limit: 600m` + `AIRFLOW__SCHEDULER__MAX_THREADS: '2'` + `PARSING_PROCESSES: '1'`
+    - `AIRFLOW__CORE__PARALLELISM: '4'` + `MAX_ACTIVE_TASKS_PER_DAG: '2'` בשניהם
+
+18. **טריק לעצירת containers ע"י root** (ללא sudo):
+    ```bash
+    docker exec <container> kill 1    # שולח SIGTERM ל-PID 1 → container מסתיים בעצמו
+    ```
+
+---
+
+## בעיות ידועות ופתרונות
+
+### מצב containers נוכחי על linub-vm
+
+```
+✅ kafka, zookeeper, postgres, minio, airflow-webserver, airflow-scheduler, kafka-ui
+⏸️  elasticsearch, kibana — נעצרו זמנית לחסוך זיכרון (ניתן להפעיל כשצריך)
+```
+
+להפעיל elasticsearch+kibana:
+```bash
+cd /home/local_admin/finalproject && sudo docker-compose up -d elasticsearch kibana
+```
+
+### Kafka — הערות חשובות
+
+- **kafka-ui** על port **8085** (לא 8080! — 8080 תפוס ע"י NiFi)
+- **kafka-init** יוצר topics דרך `kafka:29092` (internal Docker network)
+- **run.sh** יוצר topics דרך `localhost:9092` (external) — שניהם עובדים
+- אם Kafka לא עולה → בדוק `docker logs kafka --tail 30` לאיתור שגיאת cluster ID
+
+### Docker permissions על linub-vm
+
+```
+# Containers הופעלו ע"י root:
+docker stop <container>  → "permission denied"
+docker exec <container>  → עובד ✅ (exec מותר)
+docker run               → עובד ✅ (יצירת containers חדשים מותרת)
+sudo docker stop         → דורש password sudo interactively
+```
+
+---
+
+## Kafka Topics
+
+| Topic | מקור | Partitions |
+|-------|------|-----------|
+| `bus-positions` | BusPositionsProducer | 4 |
+| `train-positions` | TrainPositionsProducer | 4 |
+| `trip-updates` | TripUpdatesProducer | 2 |
+| `service-alerts` | ServiceAlertsProducer | 2 |
+| `traffic-data` | TrafficProducer | 2 |
+| `delay-events` | ETL DAG | 1 |
+| `pipeline-errors` | כל ה-producers | 1 |
+| `bus-delays` | BusDelayCollector | 3 |
+| `train-delays` | TrainDelayCollector | 3 |
+
+> ⚠️ `kafka-ui` port = **8085** (לא 8080)
+
 ---
 
 ## GitHub Repository
@@ -283,4 +414,8 @@ GUSH_DAN = {
 ```
 https://github.com/zivversano/finalproject.git
 branch: main
+
+commits:
+  28aeb57 — run.sh Step 4 portable fix (_kafka() helper + 90s readiness loop)
+  1caea02 — bot.py /gushdan + /api/dankal + gushdan_app.html (947 lines)
 ```
