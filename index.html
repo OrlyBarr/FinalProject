@@ -679,8 +679,18 @@ async function refreshBuses() {
 }
 
 async function searchAddress() {
-  const addr = document.getElementById('addr-inp').value.trim();
-  if (!addr) return;
+  const inp = document.getElementById('addr-inp');
+  const addr = inp.value.trim();
+  if (!addr) {
+    inp.focus();
+    inp.style.borderColor = 'var(--red)';
+    inp.placeholder = 'הזיני כתובת ולחצי חיפוש...';
+    setTimeout(() => { inp.style.borderColor = ''; }, 1500);
+    return;
+  }
+  const btn = document.querySelector('.map-btn');
+  btn.textContent = '⏳';
+  btn.disabled = true;
   try {
     // Don't append ישראל — the backend adds it, avoids duplication
     const geo = await fetch(`/geocode?q=${encodeURIComponent(addr)}`).then(r => r.json());
@@ -690,24 +700,31 @@ async function searchAddress() {
       if (!geo2.lat) { alert('כתובת לא נמצאה — נסי לכתוב את הכתובת המלאה'); return; }
       const lat = parseFloat(geo2.lat), lon = parseFloat(geo2.lon);
       lmap.setView([lat, lon], 15);
-      fetchNearbyForCoords(lat, lon);
+      fetchNearbyForCoords(lat, lon, addr);
       return;
     }
     const lat = parseFloat(geo.lat), lon = parseFloat(geo.lon);
     lmap.setView([lat, lon], 15);
-    fetchNearbyForCoords(lat, lon);
-  } catch(e) { console.warn('geocode error:', e); }
+    fetchNearbyForCoords(lat, lon, addr);
+  } catch(e) {
+    console.warn('geocode error:', e);
+    alert('שגיאה בחיפוש — בדקי את החיבור לאינטרנט');
+  } finally {
+    btn.textContent = '🔍 חיפוש';
+    btn.disabled = false;
+  }
 }
 
-async function fetchNearbyForCoords(lat, lon) {
+async function fetchNearbyForCoords(lat, lon, label) {
   nearbyMarkers.forEach(m => lmap.removeLayer(m));
   nearbyMarkers = [];
   if (userMarker) lmap.removeLayer(userMarker);
 
+  const displayLabel = label || `${lat.toFixed(4)},${lon.toFixed(4)}`;
   userMarker = L.circleMarker([lat, lon], {
     radius: 11, fillColor: '#F59E0B', fillOpacity: .92,
     color: '#fff', weight: 2.5, zIndexOffset: 999,
-  }).addTo(lmap).bindPopup('<div style="direction:rtl;font-family:Heebo,sans-serif">📍 <b>מיקום נבחר</b></div>').openPopup();
+  }).addTo(lmap).bindPopup(`<div style="direction:rtl;font-family:Heebo,sans-serif">📍 <b>${displayLabel}</b></div>`).openPopup();
 
   // Try GTFS first
   let gtfsOk = false;
@@ -773,12 +790,18 @@ async function fetchNearbyForCoords(lat, lon) {
 
 function useMyLocation(toChat) {
   if (!navigator.geolocation) { alert('הדפדפן לא תומך ב-Geolocation'); return; }
-  navigator.geolocation.getCurrentPosition(pos => {
+  navigator.geolocation.getCurrentPosition(async pos => {
     const lat = pos.coords.latitude, lon = pos.coords.longitude;
     lmap.setView([lat, lon], 15);
-    fetchNearbyForCoords(lat, lon);
-    if (toChat) ask(`אוטובוסים ליד המיקום שלי (${lat.toFixed(4)},${lon.toFixed(4)})`);
-  }, () => alert('לא הצלחתי לקבל מיקום'));
+    // Reverse geocode — show actual street address in popup
+    let addrText = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    try {
+      const geo = await fetch(`/reverse_geocode?lat=${lat}&lon=${lon}`).then(r => r.json());
+      if (geo.address) addrText = geo.address;
+    } catch(e) {}
+    fetchNearbyForCoords(lat, lon, addrText);
+    if (toChat) ask(`אוטובוסים ליד המיקום שלי: ${addrText}`);
+  }, () => alert('לא הצלחתי לקבל מיקום — ודאי שהדפדפן מורשה לגשת למיקום'));
 }
 
 window.transitChat = q => ask(q);
@@ -916,7 +939,7 @@ function addRouteCards(routeData, textReply) {
       const allPts = [[o.lat,o.lon],[d.lat,d.lon],
                       ...routePlanMarkers.map(m=>[m.getLatLng().lat,m.getLatLng().lng])];
       if (allPts.length > 1)
-        lmap.fitBounds(allPts, {padding:[35,35]});
+        lmap.fitBounds(allPts, {padding:[35,35], maxZoom:15});
     }
   } else {
     html += `<div style="color:var(--text3);font-size:.83rem;margin-top:6px">לא נמצאו קווים פעילים</div>`;

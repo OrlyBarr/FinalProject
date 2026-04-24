@@ -775,25 +775,32 @@ class BotHandler(BaseHTTPRequestHandler):
                             }, timeout=10).json()
                         if sr:
                             # קבץ לפי line_ref וספור כמה רכבות בכל קו
+                            # וגם שלוף שם מסלול ארוך ישירות מנתוני הרכב
                             line_groups = {}
+                            route_names = {}  # lr → route_long_name
                             for v in sr:
                                 lr = str(v.get("siri_route__line_ref","?"))
                                 line_groups[lr] = line_groups.get(lr, 0) + 1
+                                # Stride מחזיר route_long_name ישירות בנתוני הרכב
+                                long_n = (v.get("siri_route__gtfs_route__route_long_name") or "").strip()
+                                if long_n and lr not in route_names:
+                                    route_names[lr] = long_n
 
-                            # נסה לקבל שמות מסלול מ-GTFS
-                            route_names = {}
-                            try:
-                                for lr in list(line_groups.keys())[:8]:
-                                    gr = _req.get(
-                                        f"http://localhost:{BOT_PORT}/gtfs/routes",
-                                        params={"q": lr, "operator_id": "2", "limit": 1},
-                                        timeout=3
-                                    ).json()
-                                    routes = gr.get("routes", [])
-                                    if routes and routes[0].get("route_long_name"):
-                                        route_names[lr] = routes[0]["route_long_name"]
-                            except Exception:
-                                pass
+                            # אם עדיין חסרים שמות — נסה GTFS endpoint (PostgreSQL)
+                            missing = [k for k in list(line_groups.keys())[:8] if k not in route_names]
+                            if missing:
+                                try:
+                                    for lr in missing:
+                                        gr = _req.get(
+                                            f"http://localhost:{BOT_PORT}/gtfs/routes",
+                                            params={"q": lr, "operator_id": "2", "limit": 1},
+                                            timeout=3
+                                        ).json()
+                                        routes = gr.get("routes", [])
+                                        if routes and routes[0].get("route_long_name"):
+                                            route_names[lr] = routes[0]["route_long_name"]
+                                except Exception:
+                                    pass
 
                             # בנה רשימה מסודרת
                             lines_text = []
@@ -1309,6 +1316,37 @@ class BotHandler(BaseHTTPRequestHandler):
                 self._proxy(target)
             except Exception as e:
                 self.send_json({"error": str(e)}, status=400)
+
+        # ── Reverse geocode — lat,lon → address ──────────────────────────────
+        # GET /reverse_geocode?lat=32.08&lon=34.78
+        elif path == "/reverse_geocode":
+            try:
+                import requests as _rq
+                rlat = float((qs.get("lat") or ["0"])[0])
+                rlon = float((qs.get("lon") or ["0"])[0])
+                res = _rq.get(
+                    "https://nominatim.openstreetmap.org/reverse",
+                    params={"lat": rlat, "lon": rlon, "format": "json",
+                            "accept-language": "he"},
+                    headers={"User-Agent": "IsraelTransitBot/1.0"},
+                    timeout=6
+                ).json()
+                parts = res.get("address", {})
+                road  = parts.get("road") or parts.get("pedestrian") or parts.get("path") or ""
+                house = parts.get("house_number", "")
+                city  = (parts.get("city") or parts.get("town")
+                         or parts.get("village") or parts.get("suburb") or "")
+                if road and city:
+                    short = f"{road} {house}, {city}".strip(", ")
+                elif city:
+                    short = city
+                else:
+                    short = res.get("display_name", "").split(",")[0]
+                self.send_json({"address": short, "lat": rlat, "lon": rlon})
+            except Exception as e:
+                rlat2 = float((qs.get("lat") or ["0"])[0])
+                rlon2 = float((qs.get("lon") or ["0"])[0])
+                self.send_json({"address": f"{rlat2:.4f},{rlon2:.4f}", "error": str(e)})
 
         # ── Route plan — מסלול מ-X ל-Y ──────────────────────────────────────
         # GET /route_plan?origin=ADDR&destination=ADDR
