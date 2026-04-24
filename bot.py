@@ -180,26 +180,32 @@ def _build_line_cache() -> None:
                 loaded = json.load(_f)
             with _LINECACHE_LOCK:
                 _LINECACHE.update(loaded)
-            log.info(f"[LINECACHE] pre-loaded {len(loaded)} routes from JSON cache")
+            print(f"[LINECACHE] pre-loaded {len(loaded)} routes from JSON cache")
     except Exception:
         pass
 
-    # ── שלב 1: Stride API — דגימת 200 רכבים בזמן אמת ───────────────────────
+    # ── שלב 1: Stride gtfs_routes — מיפוי מלא לתאריך היום ──────────────────
+    # /gtfs_routes/list?date=TODAY&limit=5000 = ~4700 קווים ייחודיים
     try:
         import urllib.request as _ur
-        stride_url = f"{HASADNA_URL}/siri_vehicle_locations/list?limit=200&order_by=id+desc"
-        with _ur.urlopen(stride_url, timeout=15) as _resp:
-            vehs = json.loads(_resp.read())
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        gtfs_url = (
+            f"{HASADNA_URL}/gtfs_routes/list"
+            f"?date={today}&limit=5000&order_by=id+desc"
+        )
+        with _ur.urlopen(gtfs_url, timeout=30) as _resp:
+            routes = json.loads(_resp.read())
         count_stride = 0
-        for v in vehs:
-            lr  = str(v.get("siri_route__line_ref") or "").strip()
-            rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
-            if lr and rsn and rsn != lr:
+        for _r in routes:
+            lr  = str(_r.get("line_ref") or "").strip()
+            rsn = str(_r.get("route_short_name") or "").strip()
+            if lr and rsn and rsn not in ("NaN", "nan", ""):
                 _learn_line(lr, rsn)
                 count_stride += 1
-        log.info(f"[LINECACHE] learned {count_stride} routes from Stride API")
-    except Exception as e:
-        log.warning(f"[LINECACHE] Stride sample failed: {e}")
+        print(f"[LINECACHE] {count_stride} routes loaded from Stride gtfs_routes ({today})")
+    except Exception as _e:
+        print(f"[LINECACHE] Stride gtfs_routes failed: {_e}")
 
     # ── שלב 2: GTFS PostgreSQL — מיפוי מקיף (optional) ──────────────────────
     try:
@@ -208,9 +214,9 @@ def _build_line_cache() -> None:
         if m:
             with _LINECACHE_LOCK:
                 _LINECACHE.update(m)
-            log.info(f"[LINECACHE] enriched with {len(m)} routes from GTFS DB")
+            print(f"[LINECACHE] enriched with {len(m)} routes from GTFS DB")
     except Exception as e:
-        log.info(f"[LINECACHE] GTFS DB not available ({e}) — using Stride cache only")
+        print(f"[LINECACHE] GTFS DB skip ({e})")
 
     # ── שמירת cache ל-JSON ────────────────────────────────────────────────────
     try:
@@ -218,9 +224,9 @@ def _build_line_cache() -> None:
             snapshot = dict(_LINECACHE)
         with open(cache_path, "w", encoding="utf-8") as _f:
             json.dump(snapshot, _f, ensure_ascii=False)
-        log.info(f"[LINECACHE] saved {len(snapshot)} entries to {cache_path}")
+        print(f"[LINECACHE] saved {len(snapshot)} entries to {cache_path}")
     except Exception as e:
-        log.warning(f"[LINECACHE] save failed: {e}")
+        print(f"[LINECACHE] save failed: {e}")
 
 
 def _resolve_line(line_ref: str) -> str:
