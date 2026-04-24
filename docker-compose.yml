@@ -136,6 +136,7 @@ services:
     restart: unless-stopped
     networks: [transit_net]
     env_file: .env
+    mem_limit: 800m
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,6 +146,11 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: transit_secret_2025
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      # ── Memory / concurrency limits (keeps VM free for VS Code) ──
+      AIRFLOW__CORE__PARALLELISM: '4'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '2'
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
+      AIRFLOW__WEBSERVER__WORKERS: '1'
       _PIP_ADDITIONAL_REQUIREMENTS: >-
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
@@ -196,6 +202,7 @@ services:
     restart: unless-stopped
     networks: [transit_net]
     env_file: .env
+    mem_limit: 600m
     depends_on:
       airflow-webserver:
         condition: service_healthy
@@ -204,6 +211,12 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PYTHONPATH: /opt/airflow
+      # ── Memory / concurrency limits ──
+      AIRFLOW__CORE__PARALLELISM: '4'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '2'
+      AIRFLOW__SCHEDULER__MAX_THREADS: '2'
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
       _PIP_ADDITIONAL_REQUIREMENTS: >-
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
