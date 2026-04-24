@@ -199,6 +199,20 @@ def get_routes_at_stop(stop_id: str) -> list[dict]:
     """, (stop_id,))
 
 
+def get_line_ref_map(limit: int = 8000) -> dict[str, str]:
+    """
+    מחזיר mapping מ-route_id (=siri line_ref) → route_short_name.
+    משמש לתרגום מספרים פנימיים של SIRI לשמות קווים קריאים (כגון 16542 → '63').
+    """
+    rows = _q(
+        "SELECT route_id, route_short_name FROM gtfs.routes "
+        "WHERE route_short_name IS NOT NULL AND route_short_name <> '' "
+        "LIMIT %s",
+        (limit,),
+    )
+    return {str(r["route_id"]): str(r["route_short_name"]) for r in rows}
+
+
 def get_stop_schedule(stop_id: str, from_time: str = "00:00:00",
                       day_type: str = "weekday", limit: int = 20) -> list[dict]:
     """

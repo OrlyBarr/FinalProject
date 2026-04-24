@@ -153,6 +153,69 @@ CITY_STREETS = {
     ]),
 }
 
+# ── GTFS LineRef → Route Short Name cache ────────────────────────────────────
+# SIRI מחזיר line_ref (מספר פנימי כמו 16542). מטפסים לשם קו קריא ("63") דרך
+# שני מסלולים: (1) PostgreSQL GTFS בעת האתחול, (2) לימוד מ-Stride בזמן ריצה.
+
+_LINECACHE: dict[str, str] = {}
+_LINECACHE_LOCK = threading.Lock()
+
+
+def _build_line_cache() -> None:
+    """טוען route_id → route_short_name מ-GTFS PostgreSQL (background)."""
+    global _LINECACHE
+    try:
+        from gtfs_query import get_line_ref_map
+        m = get_line_ref_map()
+        if m:
+            with _LINECACHE_LOCK:
+                _LINECACHE.update(m)
+            log.info(f"[LINECACHE] loaded {len(m)} routes from GTFS")
+        # שמור גיבוי ל-JSON כדי שיהיה זמין ללא DB
+        try:
+            cache_path = os.path.join(BASE_DIR, "line_ref_cache.json")
+            with open(cache_path, "w", encoding="utf-8") as _f:
+                json.dump(_LINECACHE, _f, ensure_ascii=False)
+        except Exception:
+            pass
+    except Exception as e:
+        log.warning(f"[LINECACHE] GTFS load failed: {e}")
+        # נסיון טעינה מ-JSON cache קיים
+        try:
+            cache_path = os.path.join(BASE_DIR, "line_ref_cache.json")
+            if os.path.exists(cache_path):
+                with open(cache_path, encoding="utf-8") as _f:
+                    loaded = json.load(_f)
+                with _LINECACHE_LOCK:
+                    _LINECACHE.update(loaded)
+                log.info(f"[LINECACHE] loaded {len(loaded)} routes from JSON cache")
+        except Exception:
+            pass
+
+
+def _resolve_line(line_ref: str) -> str:
+    """
+    מחזיר שם קו קריא לפי line_ref פנימי.
+    דוגמה: '16542' → '63'   |   '5' → '5' (אם אין מיפוי)
+    """
+    if not line_ref:
+        return ""
+    s = str(line_ref)
+    with _LINECACHE_LOCK:
+        name = _LINECACHE.get(s, "")
+    return name if name else s
+
+
+def _learn_line(line_ref: str, route_short_name: str) -> None:
+    """
+    שומר מיפוי שנלמד מ-Stride API בזמן ריצה.
+    מונע קריאות DB חוזרות לאותו קו.
+    """
+    if line_ref and route_short_name and str(route_short_name) != str(line_ref):
+        with _LINECACHE_LOCK:
+            _LINECACHE[str(line_ref)] = str(route_short_name)
+
+
 def _in_gush_dan(lat, lon) -> bool:
     """בדיקה אם נקודה נמצאת בגוש דן / תל אביב."""
     try:
@@ -989,10 +1052,17 @@ class BotHandler(BaseHTTPRequestHandler):
                             vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
                             vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
                             if vlat and vlon:
+                                lr  = str(v.get("siri_route__line_ref") or "")
+                                rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                                if rsn:
+                                    _learn_line(lr, rsn)
+                                line_name = rsn or _resolve_line(lr)
                                 vehicles.append({
-                                    "lat": vlat, "lon": vlon,
-                                    "line": v.get("siri_route__line_ref", ""),
-                                    "speed": int(v.get("velocity") or 0),
+                                    "lat":       vlat,
+                                    "lon":       vlon,
+                                    "line":      lr,
+                                    "line_name": line_name,
+                                    "speed":     int(v.get("velocity") or 0),
                                 })
                         except Exception:
                             pass
@@ -1073,26 +1143,40 @@ class BotHandler(BaseHTTPRequestHandler):
         # ── buses — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/buses":
             all_data = load_json("buses_with_nearest_stops.json") or load_json("bus_positions.json")
-            # סינון לגוש דן בלבד
-            filtered = [
-                b for b in all_data
-                if _in_gush_dan(
+            filtered = []
+            for b in all_data:
+                if not _in_gush_dan(
                     b.get("lat") or b.get("latitude"),
                     b.get("lon") or b.get("longitude")
-                )
-            ]
+                ):
+                    continue
+                # הוסף line_name קריא אם לא קיים או זהה ל-line_ref
+                lr = str(b.get("line_ref") or b.get("route_id") or "")
+                rsn = str(b.get("route_short_name") or "")
+                if not rsn or rsn == lr:
+                    rsn = _resolve_line(lr)
+                b = dict(b)   # shallow copy — לא לשנות את ה-cache
+                b["line_name"] = rsn or lr
+                filtered.append(b)
             self.send_json(filtered[:200])
 
         # ── stops — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/stops":
             all_data = load_json("buses_with_nearest_stops.json")
-            filtered = [
-                b for b in all_data
-                if _in_gush_dan(
+            filtered = []
+            for b in all_data:
+                if not _in_gush_dan(
                     b.get("lat") or b.get("latitude"),
                     b.get("lon") or b.get("longitude")
-                )
-            ]
+                ):
+                    continue
+                lr  = str(b.get("line_ref") or b.get("route_id") or "")
+                rsn = str(b.get("route_short_name") or "")
+                if not rsn or rsn == lr:
+                    rsn = _resolve_line(lr)
+                b = dict(b)
+                b["line_name"] = rsn or lr
+                filtered.append(b)
             self.send_json(filtered[:200])
 
         # ── GTFS — routes by operator ─────────────────────────────────────────
@@ -1231,15 +1315,22 @@ class BotHandler(BaseHTTPRequestHandler):
 
                 line_map = {}
                 for v in sv:
-                    lr = str(v.get("siri_route__line_ref",""))
-                    op = str(v.get("siri_route__operator_ref",""))
-                    if lr and lr.isdigit() and lr not in line_map:
-                        line_map[lr] = _OP.get(op, f"מפעיל {op}")
+                    lr  = str(v.get("siri_route__line_ref",""))
+                    rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                    op  = str(v.get("siri_route__operator_ref",""))
+                    if lr and lr not in line_map:
+                        if rsn:
+                            _learn_line(lr, rsn)
+                        line_map[lr] = (_OP.get(op, f"מפעיל {op}"), rsn or _resolve_line(lr))
 
                 routes_list = []
-                for lr, op_name in sorted(line_map.items(),
-                                          key=lambda x: int(x[0]) if x[0].isdigit() else 9999)[:15]:
-                    rinfo = {"line_ref": lr, "operator": op_name,
+                for lr, (op_name, line_name) in sorted(
+                    line_map.items(),
+                    key=lambda x: (int(x[1][1]) if x[1][1].isdigit() else 9999,
+                                   int(x[0])    if x[0].isdigit()    else 9999)
+                )[:15]:
+                    rinfo = {"line_ref": lr, "line_name": line_name,
+                             "operator": op_name,
                              "origin_stop": "", "final_stop": ""}
                     try:
                         sd = _rq.get(
@@ -1688,6 +1779,13 @@ def main():
         daemon=True, name="bus-refresh"
     ).start()
     print("🔄 Background bus refresh started (every 2 min)")
+
+    # טוען GTFS LineRef cache בsBackground (לא חוסם את ה-server)
+    threading.Thread(
+        target=_build_line_cache,
+        daemon=True, name="linecache-build"
+    ).start()
+    print("📚 GTFS LineRef cache loading in background...")
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")

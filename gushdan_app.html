@@ -551,10 +551,11 @@ async function loadVehicles(lat,lon){
       const vlo=parseFloat(v.lon||v.calculated_lon||0);
       if(!vla||!vlo||!inBbox(vla,vlo)) continue;
       const op=OPS[String(v.siri_route__operator_ref||'')]||{col:'#888'};
-      const ln=v.siri_route__line_ref||'?';
+      // מציג שם קו קריא (כגון "63") במקום מספר פנימי (כגון "16542")
+      const ln=v.siri_route__gtfs_route__route_short_name||v.siri_route__line_ref||'?';
       const icon=L.divIcon({html:`<div style="background:${op.col};color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.3)">${ln}</div>`,className:'',iconAnchor:[16,9]});
       const m=L.marker([vla,vlo],{icon,zIndexOffset:100}).addTo(homeMap);
-      m.bindPopup(`<b>קו ${ln}</b><br>${op.name||''}`);
+      m.bindPopup(`<b>קו ${ln}</b><br>${op.name||''}<br><small style="color:#999">#${v.siri_route__line_ref||''}</small>`);
       vMarkers.push(m);
     }
   } catch(e){}
@@ -642,7 +643,8 @@ async function planRoute(){
       const mins=20+Math.floor(Math.random()*30);
       const arr=new Date(now.getTime()+mins*60000);
       const arrS=hhmm(arr);
-      return `<div class="rc" onclick='startNav(${JSON.stringify({line:rt.line_ref,op:rt.operator,stop:rt.origin_stop||"",col:op.col})})'>
+      const displayLine=rt.line_name||rt.line_ref;
+      return `<div class="rc" onclick='startNav(${JSON.stringify({line:rt.line_ref,lineName:rt.line_name||rt.line_ref,op:rt.operator,stop:rt.origin_stop||"",col:op.col})})'>
         <div class="rc-stripe" style="background:${op.col}"></div>
         <div class="rc-body">
           <div class="rc-head">
@@ -650,7 +652,7 @@ async function planRoute(){
             <div class="rc-meta"><span>🕐 ${arrS}</span><span>0 החלפות</span></div>
           </div>
           <div class="rc-legs">
-            <span class="leg-b" style="background:${op.col}">קו ${esc(rt.line_ref)}</span>
+            <span class="leg-b" style="background:${op.col}">קו ${esc(displayLine)}</span>
             <span style="font-size:12px;color:${op.col};font-weight:600">${esc(op.name)}</span>
             ${rt.origin_stop?`<span class="leg-w">📍 ${esc(rt.origin_stop)}</span>`:''}
           </div>
@@ -678,7 +680,9 @@ function startNav(rt){
   showScreen('nav');
   if(!navMap) initNavMap();
   navMap.setView([uLat,uLon],15);
-  document.getElementById('np-title').textContent=`עלה לאוטובוס קו ${rt.line}`;
+  // השתמש ב-lineName (שם קריא) אם קיים, אחרת line
+  const displayLine=rt.lineName||rt.line;
+  document.getElementById('np-title').textContent=`עלה לאוטובוס קו ${displayLine}`;
   document.getElementById('np-sub').textContent=rt.stop?`בתחנת ${rt.stop}`:'בתחנה הקרובה';
   startCd(4+Math.floor(Math.random()*6));
 }
@@ -743,8 +747,10 @@ async function loadDkStatus(){
     if(d.vehicles&&dkMap){
       for(const v of d.vehicles){
         if(!v.lat||!v.lon) continue;
-        const icon=L.divIcon({html:'<div style="background:#E8212A;color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:7px">🚊</div>',className:'',iconAnchor:[12,9]});
-        L.marker([v.lat,v.lon],{icon}).addTo(dkMap);
+        const lbl=v.line_name||v.line||'🚊';
+        const icon=L.divIcon({html:`<div style="background:#E8212A;color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:7px">🚊 ${lbl}</div>`,className:'',iconAnchor:[16,9]});
+        const m=L.marker([v.lat,v.lon],{icon}).addTo(dkMap);
+        m.bindPopup(`<b>קו ${lbl}</b>${v.speed?`<br>מהירות: ${v.speed} קמ"ש`:''}`)
       }
     }
   } catch(e){}

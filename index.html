@@ -747,7 +747,8 @@ async function fetchNearbyForCoords(lat, lon) {
       buses.forEach(v => {
         const vlat = parseFloat(v.lat || v.calculated_lat);
         const vlon = parseFloat(v.lon || v.calculated_lon);
-        const lr   = String(v.siri_route__line_ref || '?');
+        // מציג שם קו קריא ("63") ולא מספר פנימי ("16542")
+        const lr   = String(v.siri_route__gtfs_route__route_short_name || v.siri_route__line_ref || '?');
         const op   = v.siri_route__operator_ref || '';
         if (!vlat || !vlon) return;
         const m = L.circleMarker([vlat, vlon], {
@@ -835,7 +836,8 @@ function addRouteCards(routeData, textReply) {
 
     for (let i = 0; i < routeData.routes.length; i++) {
       const r   = routeData.routes[i];
-      const lr  = r.line_ref || '?';
+      // line_name = שם קריא ("63"), line_ref = מספר פנימי ("16542")
+      const lr  = r.line_name || r.line_ref || '?';
       const op  = r.operator || '?';
       const cnt = (r.vehicles || []).length;
       const col = LINE_COLORS[i % LINE_COLORS.length];
