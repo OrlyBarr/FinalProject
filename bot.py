@@ -160,6 +160,62 @@ CITY_STREETS = {
 _LINECACHE: dict[str, str] = {}
 _LINECACHE_LOCK = threading.Lock()
 
+_LONGCACHE: dict[str, str] = {}      # line_ref → route_long_name (cleaned, Hebrew)
+_STOPCACHE: dict[str, str] = {}      # stop_code (str) → "name, city"
+_STOPCACHE_LOCK = threading.Lock()
+
+
+def _clean_train_name(raw: str) -> str:
+    """'נהריה-נהריה<->תל אביב מרכז-תל אביב יפו' → 'נהריה ↔ תל אביב מרכז'"""
+    if not raw:
+        return raw
+    raw = raw.strip()
+    if "<->" in raw:
+        parts = raw.split("<->")
+        def _st(p):
+            idx = p.rfind("-")
+            return p[:idx].strip() if idx > 0 else p.strip()
+        a, b = _st(parts[0]), _st(parts[1])
+        return f"{a} ↔ {b}"
+    # single station: "תל אביב מרכז-תל אביב יפו" → "תל אביב מרכז"
+    idx = raw.rfind("-")
+    return raw[:idx].strip() if idx > 0 else raw
+
+
+def _resolve_long(line_ref: str) -> str:
+    """מחזיר שם מסלול ארוך לפי line_ref (לרכבות בעיקר)."""
+    return _LONGCACHE.get(str(line_ref), "")
+
+
+def _resolve_stop_name(code: str, city_hint: str = "") -> str:
+    """מחפש שם תחנה לפי קוד מ-cache או Stride gtfs_stops."""
+    if not code:
+        return city_hint
+    key = str(code)
+    with _STOPCACHE_LOCK:
+        cached = _STOPCACHE.get(key)
+    if cached is not None:
+        return cached or city_hint
+    try:
+        import urllib.request as _ur2
+        url2 = f"{HASADNA_URL}/gtfs_stops/list?code={key}&limit=1&order_by=id+desc"
+        with _ur2.urlopen(url2, timeout=5) as _r2:
+            _d2 = json.loads(_r2.read())
+        if _d2:
+            nm = (_d2[0].get("name") or "").strip()
+            ct = (_d2[0].get("city") or city_hint or "").strip()
+            result = (f"{nm}, {ct}" if nm and ct and nm.lower() != ct.lower()
+                      else nm or ct or "")
+        else:
+            result = city_hint or ""
+        with _STOPCACHE_LOCK:
+            _STOPCACHE[key] = result
+        return result or city_hint
+    except Exception:
+        with _STOPCACHE_LOCK:
+            _STOPCACHE[key] = city_hint or ""
+        return city_hint or ""
+
 
 def _build_line_cache() -> None:
     """
@@ -204,6 +260,51 @@ def _build_line_cache() -> None:
                 _learn_line(lr, rsn)
                 count_stride += 1
         print(f"[LINECACHE] {count_stride} routes loaded from Stride gtfs_routes ({today})")
+
+        # Store long names for all routes (trains have NaN short_name but valid long_name)
+        for _r in routes:
+            lr2  = str(_r.get("line_ref") or "").strip()
+            rln2 = str(_r.get("route_long_name") or "").strip()
+            if lr2 and rln2 and rln2 not in ("NaN","nan","None",""):
+                _LONGCACHE[lr2] = _clean_train_name(rln2)
+
+        # Fetch train routes specifically (operator=2) for long names
+        try:
+            train_url = (f"{HASADNA_URL}/gtfs_routes/list"
+                         f"?operator_refs=2&limit=300&order_by=id+desc")
+            with _ur.urlopen(train_url, timeout=20) as _rt:
+                train_routes = json.loads(_rt.read())
+            for _r in train_routes:
+                lr2  = str(_r.get("line_ref") or "").strip()
+                rln2 = str(_r.get("route_long_name") or "").strip()
+                rsn2 = str(_r.get("route_short_name") or "").strip()
+                if lr2 and rln2 and rln2 not in ("NaN","nan","None",""):
+                    _LONGCACHE[lr2] = _clean_train_name(rln2)
+                if lr2 and rsn2 and rsn2 not in ("NaN","nan","None",""):
+                    _learn_line(lr2, rsn2)
+            print(f"[LONGCACHE] loaded {len(_LONGCACHE)} long route names")
+        except Exception as _et:
+            print(f"[LONGCACHE] failed: {_et}")
+
+        # Pre-populate stop name cache
+        try:
+            stops_url = f"{HASADNA_URL}/gtfs_stops/list?limit=2000&order_by=id+desc"
+            with _ur.urlopen(stops_url, timeout=30) as _rs:
+                stops_bulk = json.loads(_rs.read())
+            with _STOPCACHE_LOCK:
+                for _s in stops_bulk:
+                    _scode = str(_s.get("code") or "").strip()
+                    _snm   = (_s.get("name") or "").strip()
+                    _sct   = (_s.get("city") or "").strip()
+                    if _scode and _snm:
+                        _STOPCACHE[_scode] = (
+                            f"{_snm}, {_sct}" if _sct and _snm.lower() != _sct.lower()
+                            else _snm
+                        )
+            print(f"[STOPCACHE] pre-loaded {len(stops_bulk)} stop names")
+        except Exception as _es:
+            print(f"[STOPCACHE] failed: {_es}")
+
     except Exception as _e:
         print(f"[LINECACHE] Stride gtfs_routes failed: {_e}")
 
@@ -445,8 +546,13 @@ class BotHandler(BaseHTTPRequestHandler):
                                     params={"siri_ride__id": ride_id,
                                             "limit": 50, "order_by": "order asc"}, timeout=8).json()
                                 if rs:
-                                    names = [s.get("gtfs_stop__name","")
-                                             or f"תחנה {i+1}" for i,s in enumerate(rs)]
+                                    names = []
+                                    for _i, _s in enumerate(rs):
+                                        _nm = _s.get("gtfs_stop__name","") or _resolve_stop_name(
+                                            str(_s.get("siri_stop__code") or ""),
+                                            _s.get("gtfs_stop__city","")
+                                        )
+                                        names.append(_nm or f"תח.{_s.get('siri_stop__code','?')}")
                                     reply = (
                                         f"**תחנות רכבת קו {line}**\n"
                                         f"סה\"כ {len(names)} תחנות:\n\n"
@@ -805,7 +911,7 @@ class BotHandler(BaseHTTPRequestHandler):
                             # בנה רשימה מסודרת
                             lines_text = []
                             for lr, cnt in sorted(line_groups.items(), key=lambda x: -x[1])[:8]:
-                                rname = route_names.get(lr, "") or _resolve_line(lr)
+                                rname = route_names.get(lr, "") or _resolve_long(lr) or _resolve_line(lr)
                                 cnt_s = f"{cnt} רכבת" if cnt == 1 else f"{cnt} רכבות"
                                 if rname and rname != lr:
                                     lines_text.append(f"🚆 {rname} ({cnt_s})")
@@ -1072,6 +1178,9 @@ class BotHandler(BaseHTTPRequestHandler):
         # ── Gush Dan Transit App ─────────────────────────────────────────────
         if path == "/gushdan":
             self.send_html(os.path.join(BASE_DIR, "gushdan_app.html"))
+
+        elif path == "/moovit":
+            self.send_html(os.path.join(BASE_DIR, "moovit.html"))
 
         # ── Dankal Red Line — live vehicles + alert status ────────────────────
         elif path == "/api/dankal":
@@ -1465,7 +1574,10 @@ class BotHandler(BaseHTTPRequestHandler):
                     rs = _rq.get(f"{STRIDE}/siri_ride_stops/list",
                         params={"siri_ride__id": ride_id, "limit": 60,
                                 "order_by": "order asc"}, timeout=10).json()
-                    stops = [{"name": s.get("gtfs_stop__name") or f"תחנה {i+1}",
+                    stops = [{"name": (s.get("gtfs_stop__name")
+                                       or _resolve_stop_name(str(s.get("siri_stop__code") or ""),
+                                                             s.get("gtfs_stop__city",""))
+                                       or f"תח.{s.get('siri_stop__code','?')}"),
                               "order": s.get("order",i),
                               "lat": s.get("gtfs_stop__lat"),
                               "lon": s.get("gtfs_stop__lon")}
@@ -1774,20 +1886,39 @@ class BotHandler(BaseHTTPRequestHandler):
                     ).json()
                     if not isinstance(rs, list):
                         return []
+
+                    # Collect codes that need lazy-fetch (not in cache and no direct name)
+                    missing = set()
+                    for s in rs:
+                        if not s.get("gtfs_stop__name"):
+                            code = str(s.get("siri_stop__code") or s.get("gtfs_stop__code") or "")
+                            if code:
+                                with _STOPCACHE_LOCK:
+                                    if code not in _STOPCACHE:
+                                        missing.add(code)
+
+                    # Parallel-fetch missing stop names (max 10 concurrent)
+                    if missing:
+                        def _fc(c): _resolve_stop_name(c)
+                        with _TPX(max_workers=10) as _tp2:
+                            list(_tp2.map(_fc, list(missing)[:40]))
+
+                    # Build output
                     out = []
                     for i, s in enumerate(rs):
-                        # עדיפות: שם עברי → עיר + קוד → קוד תחנה → דלג
                         gtfs_name = s.get("gtfs_stop__name") or ""
                         city      = s.get("gtfs_stop__city") or ""
-                        code      = s.get("siri_stop__code") or s.get("gtfs_stop__code") or ""
+                        code      = str(s.get("siri_stop__code") or s.get("gtfs_stop__code") or "")
                         if gtfs_name:
                             name = gtfs_name
-                        elif city and code:
-                            name = f"{city} ({code})"
                         elif code:
-                            name = f"תח. {code}"
+                            name = _resolve_stop_name(code, city)
+                            if not name:
+                                name = f"{city} ({code})" if city else f"תח. {code}"
+                        elif city:
+                            name = city
                         else:
-                            continue  # דלג תחנה ללא שם ולא קוד
+                            continue
                         out.append({
                             "name":    name,
                             "stop_id": str(s.get("gtfs_stop__id") or ""),
