@@ -1248,8 +1248,28 @@ class BotHandler(BaseHTTPRequestHandler):
                     "count": 0, "status": "error", "error": str(e),
                 })
 
-        # ── index.html ────────────────────────────────────────────────────────
-        elif path == "/" or path == "/transit" or path == "/agent":
+        # ── moovit.html (ממשק ראשי) ──────────────────────────────────────────
+        elif path == "/":
+            html_path = os.path.join(BASE_DIR, "moovit.html")
+            if not os.path.exists(html_path):
+                html_path = os.path.join(BASE_DIR, "index.html")
+            try:
+                with open(html_path, "r", encoding="utf-8") as f:
+                    html_content = f.read()
+                body = html_content.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── index.html (צ'אט ישן) ────────────────────────────────────────────
+        elif path == "/chat" or path == "/transit" or path == "/agent":
             html_path = os.path.join(BASE_DIR, "index.html")
             if not os.path.exists(html_path):
                 html_path = os.path.join(BASE_DIR, "agent_transit.html")
