@@ -1443,7 +1443,7 @@ function _lvDrawMap() {
     .map(v => [v.lat, v.lon]);
   const allPts  = [...stopPts, ...vehPts];
   if (allPts.length > 1) {
-    lmap.fitBounds(allPts, {padding:[30,40]});
+    lmap.fitBounds(allPts, {padding:[30,40], maxZoom:15});
   } else if (allPts.length === 1) {
     lmap.setView(allPts[0], 14);
   }

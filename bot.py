@@ -656,7 +656,9 @@ class BotHandler(BaseHTTPRequestHandler):
                                 lines_txt = []
                                 for r in routes_list:
                                     cnt = len(r.get("vehicles",[]))
-                                    s = f"🚌 **קו {r['line_ref']}** — {r['operator']}"
+                                    lname = r.get('line_name') or _resolve_line(str(r.get('line_ref','')))
+                                    ldisp = lname if lname and lname != str(r.get('line_ref','')) else r['line_ref']
+                                    s = f"🚌 **קו {ldisp}** — {r['operator']}"
                                     if cnt:
                                         s += f" ({cnt} כלי רכב)"
                                     if r["origin_stop"] and r["final_stop"]:
@@ -728,15 +730,16 @@ class BotHandler(BaseHTTPRequestHandler):
                                 ).json()
                                 agency = OP_DISPLAY.get(op_id, op_name)
                                 if sr:
-                                    lines = sorted(
-                                        {str(v.get("siri_route__line_ref","")) for v in sr
-                                         if v.get("siri_route__line_ref")},
-                                        key=lambda x: int(x) if x.isdigit() else 9999
+                                    # בנה set של שמות קווים קריאים (לא line_ref פנימי)
+                                    line_names = sorted(
+                                        {_resolve_line(str(v.get("siri_route__line_ref","")))
+                                         for v in sr if v.get("siri_route__line_ref")},
+                                        key=lambda x: int(x) if x.isdigit() else x
                                     )
                                     reply = (
-                                        f"**קווי {agency}** — {len(lines)} קווים פעילים כרגע\n"
-                                        + ", ".join(lines[:80])
-                                        + ("  ועוד..." if len(lines)>80 else "")
+                                        f"**קווי {agency}** — {len(line_names)} קווים פעילים כרגע\n"
+                                        + ", ".join(line_names[:80])
+                                        + ("  ועוד..." if len(line_names)>80 else "")
                                     )
                                 else:
                                     reply = f"**{agency}** — אין כלי רכב פעילים כרגע"
@@ -795,9 +798,9 @@ class BotHandler(BaseHTTPRequestHandler):
                             # בנה רשימה מסודרת
                             lines_text = []
                             for lr, cnt in sorted(line_groups.items(), key=lambda x: -x[1])[:8]:
-                                rname = route_names.get(lr, "")
+                                rname = route_names.get(lr, "") or _resolve_line(lr)
                                 cnt_s = f"{cnt} רכבת" if cnt == 1 else f"{cnt} רכבות"
-                                if rname:
+                                if rname and rname != lr:
                                     lines_text.append(f"🚆 {rname} ({cnt_s})")
                                 else:
                                     lines_text.append(f"🚆 קו {lr} ({cnt_s})")
@@ -1735,7 +1738,18 @@ class BotHandler(BaseHTTPRequestHandler):
                         return []
                     out = []
                     for i, s in enumerate(rs):
-                        name = s.get("gtfs_stop__name","") or f"תחנה {i+1}"
+                        # עדיפות: שם עברי → עיר + קוד → קוד תחנה → דלג
+                        gtfs_name = s.get("gtfs_stop__name") or ""
+                        city      = s.get("gtfs_stop__city") or ""
+                        code      = s.get("siri_stop__code") or s.get("gtfs_stop__code") or ""
+                        if gtfs_name:
+                            name = gtfs_name
+                        elif city and code:
+                            name = f"{city} ({code})"
+                        elif code:
+                            name = f"תח. {code}"
+                        else:
+                            continue  # דלג תחנה ללא שם ולא קוד
                         out.append({
                             "name":    name,
                             "stop_id": str(s.get("gtfs_stop__id") or ""),
