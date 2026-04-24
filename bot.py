@@ -162,39 +162,65 @@ _LINECACHE_LOCK = threading.Lock()
 
 
 def _build_line_cache() -> None:
-    """טוען route_id → route_short_name מ-GTFS PostgreSQL (background)."""
+    """
+    טוען route_id → route_short_name cache בשני שלבים:
+    1. Stride API — מיידי, ללא DB (עובד תמיד)
+    2. GTFS PostgreSQL — מקיף יותר (אם psycopg2 מותקן)
+    """
     import sys as _sys
-    # ודא שנתיב הפרויקט קיים ב-sys.path (חשוב לthreads)
     if BASE_DIR not in _sys.path:
         _sys.path.insert(0, BASE_DIR)
-    global _LINECACHE
+
+    cache_path = os.path.join(BASE_DIR, "line_ref_cache.json")
+
+    # ── שלב 0: טעינה מ-JSON cache קיים (מהיר, offline) ──────────────────────
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, encoding="utf-8") as _f:
+                loaded = json.load(_f)
+            with _LINECACHE_LOCK:
+                _LINECACHE.update(loaded)
+            log.info(f"[LINECACHE] pre-loaded {len(loaded)} routes from JSON cache")
+    except Exception:
+        pass
+
+    # ── שלב 1: Stride API — דגימת 200 רכבים בזמן אמת ───────────────────────
+    try:
+        import urllib.request as _ur
+        stride_url = f"{HASADNA_URL}/siri_vehicle_locations/list?limit=200&order_by=id+desc"
+        with _ur.urlopen(stride_url, timeout=15) as _resp:
+            vehs = json.loads(_resp.read())
+        count_stride = 0
+        for v in vehs:
+            lr  = str(v.get("siri_route__line_ref") or "").strip()
+            rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
+            if lr and rsn and rsn != lr:
+                _learn_line(lr, rsn)
+                count_stride += 1
+        log.info(f"[LINECACHE] learned {count_stride} routes from Stride API")
+    except Exception as e:
+        log.warning(f"[LINECACHE] Stride sample failed: {e}")
+
+    # ── שלב 2: GTFS PostgreSQL — מיפוי מקיף (optional) ──────────────────────
     try:
         from gtfs_query import get_line_ref_map
         m = get_line_ref_map()
         if m:
             with _LINECACHE_LOCK:
                 _LINECACHE.update(m)
-            log.info(f"[LINECACHE] loaded {len(m)} routes from GTFS")
-        # שמור גיבוי ל-JSON כדי שיהיה זמין ללא DB
-        try:
-            cache_path = os.path.join(BASE_DIR, "line_ref_cache.json")
-            with open(cache_path, "w", encoding="utf-8") as _f:
-                json.dump(_LINECACHE, _f, ensure_ascii=False)
-        except Exception:
-            pass
+            log.info(f"[LINECACHE] enriched with {len(m)} routes from GTFS DB")
     except Exception as e:
-        log.warning(f"[LINECACHE] GTFS load failed: {e}")
-        # נסיון טעינה מ-JSON cache קיים
-        try:
-            cache_path = os.path.join(BASE_DIR, "line_ref_cache.json")
-            if os.path.exists(cache_path):
-                with open(cache_path, encoding="utf-8") as _f:
-                    loaded = json.load(_f)
-                with _LINECACHE_LOCK:
-                    _LINECACHE.update(loaded)
-                log.info(f"[LINECACHE] loaded {len(loaded)} routes from JSON cache")
-        except Exception:
-            pass
+        log.info(f"[LINECACHE] GTFS DB not available ({e}) — using Stride cache only")
+
+    # ── שמירת cache ל-JSON ────────────────────────────────────────────────────
+    try:
+        with _LINECACHE_LOCK:
+            snapshot = dict(_LINECACHE)
+        with open(cache_path, "w", encoding="utf-8") as _f:
+            json.dump(snapshot, _f, ensure_ascii=False)
+        log.info(f"[LINECACHE] saved {len(snapshot)} entries to {cache_path}")
+    except Exception as e:
+        log.warning(f"[LINECACHE] save failed: {e}")
 
 
 def _resolve_line(line_ref: str) -> str:
