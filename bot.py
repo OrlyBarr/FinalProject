@@ -163,6 +163,10 @@ _LINECACHE_LOCK = threading.Lock()
 
 def _build_line_cache() -> None:
     """טוען route_id → route_short_name מ-GTFS PostgreSQL (background)."""
+    import sys as _sys
+    # ודא שנתיב הפרויקט קיים ב-sys.path (חשוב לthreads)
+    if BASE_DIR not in _sys.path:
+        _sys.path.insert(0, BASE_DIR)
     global _LINECACHE
     try:
         from gtfs_query import get_line_ref_map
