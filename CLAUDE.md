@@ -356,6 +356,36 @@ GUSH_DAN = {
     docker exec <container> kill 1    # שולח SIGTERM ל-PID 1 → container מסתיים בעצמו
     ```
 
+### גל 7 — תיקוני תצוגת שמות קווים ומפה (אפריל 2026)
+
+19. **`_LINECACHE` + `_resolve_line()`** — מיפוי line_ref → route_short_name:
+    - בנוי ב-thread רקע בעת הפעלת bot.py
+    - נטען מ-`line_ref_cache.json` (4,759 רשומות) + מתרענן מ-Stride API
+    - `_learn_line(lr, rsn)` — מוסיף מיפויים חדשים שנצפים בתנועת API
+    - `_resolve_line(lr)` — מחזיר שם קצר או את lr אם לא נמצא
+
+20. **תצוגת קווי רכבת בצ'אט** (`bot.py` ~שורה 799):
+    - לפני: `f"🚆 קו {lr} ({cnt_s})"` — הציג מספרים פנימיים כגון "27902"
+    - אחרי: `rname = route_names.get(lr, "") or _resolve_line(lr)` — מציג שם קצר אם קיים
+
+21. **תצוגת קווים בתכנון מסלול בצ'אט** (`bot.py` ~שורה 659):
+    - לפני: `f"🚌 **קו {r['line_ref']}**"` — הציג line_ref פנימי
+    - אחרי: שימוש ב-`r.get('line_name') or _resolve_line(r['line_ref'])` לתצוגה
+
+22. **zoom מפה ב-`index.html`** (~שורה 1446):
+    - לפני: `fitBounds(allPts, {padding:[30,40]})` — הזדמן ל-zoom out לכל ישראל/מזרח תיכון
+    - אחרי: `fitBounds(allPts, {padding:[30,40], maxZoom:15})` — נשאר בתצוגה מקומית
+
+23. **שמות תחנות** (`_fetch_stops` ב-`bot.py`):
+    - לפני: `name = gtfs_stop__name or f"תחנה {i+1}"` — הציג "תחנה 4", "תחנה 5"
+    - אחרי: fallback ל-`city + code`, ואם אין — מדלג על התחנה
+
+24. **רשימת קווי מפעיל** (Stride fallback ב-`bot.py`):
+    - לפני: set של line_ref גולמיים → "489, 1208, 23991"
+    - אחרי: `_resolve_line()` על כל line_ref → "8, 25, 89"
+
+    commit `aacbc67` — pushed to GitHub
+
 ---
 
 ## בעיות ידועות ופתרונות
