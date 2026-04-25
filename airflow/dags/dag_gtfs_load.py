@@ -61,10 +61,9 @@ def check_data_freshness(**context):
 
 def download_and_load(**context):
     """הורד את GTFS וטען ל-PostgreSQL."""
-    import io, zipfile, os
+    import zipfile, os
     sys.path.insert(0, "/opt/airflow")
 
-    # Import from load_gtfs
     from load_gtfs import (
         get_conn, ensure_schema, download_gtfs,
         load_agency, load_routes, load_stops,
@@ -82,11 +81,11 @@ def download_and_load(**context):
             cur.execute(f"TRUNCATE {t} CASCADE")
     conn.commit()
 
-    # הורד — download_gtfs() כותב לדיסק (לא לזיכרון) ומחזיר נתיב
+    # הורד לקובץ זמני — לא לזיכרון!
     gtfs_path = download_gtfs()
-    import os as _os
-    zip_size_mb = round(_os.path.getsize(gtfs_path) / 1024 / 1024, 1)
+    zip_size_mb = round(os.path.getsize(gtfs_path) / 1024 / 1024, 1)
     context["ti"].xcom_push(key="zip_size_mb", value=zip_size_mb)
+    print(f"GTFS ZIP: {zip_size_mb} MB → {gtfs_path}")
 
     try:
         with zipfile.ZipFile(gtfs_path) as zf:
@@ -109,6 +108,7 @@ def download_and_load(**context):
                 cur.execute("SELECT trip_id FROM gtfs.trips")
                 trip_ids = {r[0] for r in cur.fetchall()}
 
+            # load_stop_times now streams row-by-row — no 5M rows in RAM
             st_n = load_stop_times(zf, conn, trip_ids, stop_ids)
             load_calendar(zf, conn)
 
@@ -119,8 +119,11 @@ def download_and_load(**context):
                 )
             conn.commit()
     finally:
-        try: _os.unlink(gtfs_path)
-        except Exception: pass
+        # מחק את הקובץ הזמני בכל מקרה
+        try:
+            os.unlink(gtfs_path)
+        except Exception:
+            pass
 
     context["ti"].xcom_push(key="routes_n", value=routes_n)
     context["ti"].xcom_push(key="stops_n",  value=stops_n)

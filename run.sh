@@ -361,6 +361,37 @@ except Exception as e:
 EOF
 
 # ─────────────────────────────────────────────────────────────
+#  Step 6.5: Load GTFS Static → PostgreSQL
+#  Skipped if data already loaded (freshness: < 23 hours)
+# ─────────────────────────────────────────────────────────────
+step "6.5 — GTFS Static → PostgreSQL"
+
+GTFS_ROUTES=$(POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 - 2>/dev/null <<'PYEOF'
+import sys; sys.path.insert(0, '.')
+try:
+    import psycopg2
+    conn = psycopg2.connect(host='localhost', port=5432, dbname='airflow',
+                            user='airflow', password='airflow', connect_timeout=5)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM gtfs.routes")
+    print(cur.fetchone()[0])
+    conn.close()
+except Exception:
+    print("0")
+PYEOF
+)
+
+if [ "${GTFS_ROUTES:-0}" -gt 100 ] 2>/dev/null; then
+  success "GTFS already loaded (${GTFS_ROUTES} routes) — skipping download"
+else
+  log "Downloading GTFS Static from MOT (~150 MB) and loading to PostgreSQL..."
+  log "This takes 1–3 minutes. Streaming in 64 KB chunks — no large RAM spike."
+  POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 Load_gtfs.py && \
+    success "GTFS data loaded successfully!" || \
+    warn "GTFS load failed — run manually later: python3 Load_gtfs.py"
+fi
+
+# ─────────────────────────────────────────────────────────────
 #  Step 7: Initialize Redshift Schema (or local PostgreSQL)
 # ─────────────────────────────────────────────────────────────
 step "7 — Initializing Data Warehouse Schema"
@@ -389,7 +420,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "8 — Enabling Airflow DAGs"
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic" "dag_hourly_coverage"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic" "dag_hourly_coverage" "dag_gtfs_load"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
@@ -406,6 +437,9 @@ python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import requests
 
+# NOTE: MOT GTFS-RT feeds (.pb) are WAF-protected — they often return HTTP 403 on HEAD requests.
+# The system uses Open Bus Stride API instead for real-time vehicle data.
+# A 403 here does NOT mean the system is broken — Stride is the primary source.
 feeds = {
     'VehiclePositions (bus locations)': 'https://gtfs.mot.gov.il/gtfsfiles/VehiclePositions.pb',
     'TripUpdates (delays)':             'https://gtfs.mot.gov.il/gtfsfiles/TripUpdates.pb',
@@ -416,6 +450,8 @@ for name, url in feeds.items():
         r = requests.head(url, timeout=5)
         if r.status_code == 200:
             print(f'✅ {name}: available')
+        elif r.status_code == 403:
+            print(f'⚠️  {name}: WAF-blocked (HTTP 403) — system uses Stride API instead')
         else:
             print(f'⚠️  {name}: HTTP {r.status_code}')
     except Exception as e:

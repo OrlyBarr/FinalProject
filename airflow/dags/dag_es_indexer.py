@@ -1,12 +1,14 @@
 """
 airflow/dags/dag_es_indexer.py
 DAG 4: Kafka → Elasticsearch real-time indexer
-Schedule: every 1 minute
+Schedule: every 3 minutes
 
 FIXES:
   - execution_timeout raised from 25s to 60s
     (was impossible: 6 parallel tasks each with 5s consumer timeout + ES write time)
-  - schedule_interval changed from 30s to 1 minute to give runs room to breathe
+  - schedule_interval changed from 30s → 1 min → 3 min:
+    7 subprocesses/min × 60min = 420 subprocesses/hr; 3 min halves load on VM
+  - retries reduced to 1: ES indexing is non-critical; aggressive retries pile up
   - Each index task now wraps in try/except and pushes -1 on error so
     log_indexing_summary can report failures instead of silently showing 0
   - index_minio_backfill documents the duplicate-indexing risk and adds a guard
@@ -44,6 +46,8 @@ default_args = {
     "start_date":        datetime(2026, 4, 13),
     "email_on_failure":  False,
     "execution_timeout": timedelta(seconds=60),
+    "retries":           1,   # ES indexing is non-critical; 5 retries × 7 tasks × 3min = pile-up risk
+    "retry_delay":       timedelta(seconds=30),
 }
 
 
@@ -147,8 +151,8 @@ def log_indexing_summary(**context):
 with DAG(
     dag_id="dag_es_indexer",
     default_args=default_args,
-    description="Kafka → Elasticsearch indexer (every 1 min) for Kibana dashboards",
-    schedule_interval=timedelta(minutes=1),    # FIX: was timedelta(seconds=30)
+    description="Kafka → Elasticsearch indexer (every 3 min) for Kibana dashboards",
+    schedule_interval=timedelta(minutes=3),    # FIX: 1min was spawning too many subprocesses on VM
     catchup=False,
     max_active_runs=1,
     tags=["elasticsearch", "kibana", "transit"],

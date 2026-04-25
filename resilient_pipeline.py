@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 BUFFER_DIR    = Path(os.getenv("BUFFER_DIR", "/tmp/transit_buffer"))
 BUFFER_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_BUFFER_MB  = int(os.getenv("MAX_BUFFER_MB",  "500"))
+MAX_BUFFER_MB  = int(os.getenv("MAX_BUFFER_MB",  "100"))   # 100 MB max — prevents disk fill on VM
 FLUSH_INTERVAL = int(os.getenv("FLUSH_INTERVAL",  "30"))
 
 
@@ -102,7 +102,7 @@ class ResilientProducer:
                 pass
 
     def _buffer(self, topic: str, value: Any, key: str = None):
-        # Guard: stop buffering if disk usage exceeds MAX_BUFFER_MB
+        # Guard: stop buffering if disk usage exceeds MAX_BUFFER_MB — prevents VM disk fill
         if self.buffer_size_mb() >= MAX_BUFFER_MB:
             log.error(f"Buffer limit ({MAX_BUFFER_MB} MB) reached — dropping message for topic {topic}")
             return
@@ -182,7 +182,7 @@ RESILIENT_DEFAULT_ARGS = {
     "retries":                   5,
     "retry_delay":               timedelta(minutes=2),
     "retry_exponential_backoff": True,
-    "max_retry_delay":           timedelta(minutes=30),
+    "max_retry_delay":           timedelta(minutes=5),   # 30min caused retry storms → tasks blocked for hours
     "execution_timeout":         timedelta(minutes=10),
     "on_failure_callback":       None,   # plug in Slack/email alert here
 }

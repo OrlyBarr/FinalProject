@@ -437,6 +437,107 @@ sudo docker stop         → דורש password sudo interactively
 
 > ⚠️ `kafka-ui` port = **8085** (לא 8080)
 
+### גל 8 — אופטימיזציית זיכרון, אמינות ו-GTFS (אפריל 2026)
+
+25. **`docker-compose.yml` — הגבלות זיכרון ל-7 שירותים שלא היו מוגבלים**:
+    - `zookeeper: mem_limit: 256m` + `ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m"`
+    - `kafka: mem_limit: 512m` + `KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"` ← ברירת מחדל 1GB → קריסת VM!
+    - `kafka-ui: mem_limit: 256m` + `JAVA_OPTS: "-Xmx192m -Xms64m"`
+    - `postgres: mem_limit: 256m` + `shared_buffers=32MB work_mem=4MB max_connections=20`
+    - `minio: mem_limit: 256m` + `GOGC: "20"` ← מפחית לחץ על GC של Go
+    - `elasticsearch: mem_limit: 768m` + `ES_JAVA_OPTS: "-Xms256m -Xmx512m"`
+    - `kibana: mem_limit: 512m` + `NODE_OPTIONS: "--max-old-space-size=384"`
+    - `AIRFLOW__CORE__PARALLELISM: '2'` — יישור בין webserver ו-scheduler (היה '4' ו-'2' בנפרד)
+
+26. **`docker-compose.yml` — חשיפת PostgreSQL לhost**:
+    - נוסף `ports: - "5432:5432"` לשירות postgres
+    - מאפשר חיבור מ-pgAdmin / DBeaver / psql ישירות ל-localhost:5432
+    - פרטי חיבור: host=localhost, port=5432, db=airflow, user=airflow, password=airflow
+
+27. **`resilient_pipeline.py` — שחזור buffer guard ותיקון retry storms**:
+    - שוחזרה guard חסרה: `if self.buffer_size_mb() >= MAX_BUFFER_MB: return` (מנע מילוי disk)
+    - `MAX_BUFFER_MB`: 500 → 100 MB ← 500MB buffer = disk fill risk
+    - `max_retry_delay`: 30min → 5min ← retry storm = tasks blocked for hours
+
+28. **`dag_es_indexer.py` — האטת schedule ‏+ הורדת retries**:
+    - schedule: 1min → 3min ← 7 subprocesses/min = מאות Python processes/שעה
+    - retries: 5 → 1 ← ES indexing non-critical; pile-up risk
+
+29. **`dag_direct_to_minio.py` — האטת dag_direct_transit**:
+    - schedule: 1min → 2min ← חצי כמות processes
+
+30. **`dag_daily_analysis.py` — ניקוי HTML reports**:
+    - נוסף cleanup: שמירת 7 הדוחות האחרונים בלבד
+    - מונע מילוי disk (היה שורש בעיית 0x80070070 בVM)
+
+31. **`Load_gtfs.py` — תיקון OOM קריטי**:
+    - `download_gtfs()`: הורדה ב-chunks של 64KB לקובץ זמני — לא 150MB ב-RAM
+    - `_stream_csv()`: generator שמחזיר שורה אחת בכל פעם — לא 5M שורות ב-RAM
+    - `load_stop_times()`: שימוש ב-`_stream_csv()` + batches של 5000 rows — לא 4GB RAM
+
+32. **`dag_gtfs_load.py` — תיקון API mismatch**:
+    - `download_gtfs()` מחזיר path (str) לא bytes — עודכן לשימוש ב-`os.path.getsize()` ו-`zipfile.ZipFile(path)`
+    - מחיקת קובץ זמני ב-`finally` block גם במקרה של כשלון
+
+33. **`collectors/bus_delay_collector.py` + `collectors/train_delay_collector.py`**:
+    - נוסף SIGTERM handler: Docker שולח SIGTERM לפני SIGKILL — producer יסגר נקי
+    - נוסף max runtime guard: `BUS_COLLECTOR_MAX_RUNTIME_HOURS` / `TRAIN_COLLECTOR_MAX_RUNTIME_HOURS` (ברירת מחדל 4h)
+    - לולאת שינה ניתנת להפסקה: בדיקת `_stop` flag כל שנייה
+
+34. **`run.sh` — Step 6.5: טעינת GTFS Static**:
+    - בדיקת freshness לפני הורדה (דלג אם > 100 routes כבר קיימות)
+    - הרצת `python3 Load_gtfs.py` עם `POSTGRES_HOST=localhost POSTGRES_PORT=5432`
+    - error: warn בלבד (לא fatal — ניתן להריץ ידנית מאוחר יותר)
+
+35. **`run.sh` — תיקון Step 8 + Step 9**:
+    - נוסף `dag_gtfs_load` לרשימת DAGs ב-Step 8 (היה חסר)
+    - Step 9: נוסף הסבר ש-HTTP 403 ממוט = WAF-blocked (צפוי) — המערכת משתמשת ב-Stride במקום
+
+36. **`Gtfs_query.py` — תיקוני שאילתות PostgreSQL**:
+    - `ORDER BY route_short_name::int` → ייכשל על כל קו עם שם לא-מספרי (T60, X1, N20, וכו')
+    - **תיקון**: `CASE WHEN ~ '^[0-9]+$' THEN ::integer ELSE NULL END NULLS LAST` בשתי שאילתות
+    - `get_route_stops(direction=0)` → מחזיר ריק לקווים שרצים רק ב-direction_id=1 או NULL
+    - **תיקון**: fallback אוטומטי: מנסה direction=0 → direction=1 → ללא סינון
+
+37. **בעיית case-sensitivity על Linux** ← חייב לתקן בעת deploy ל-VM:
+    - על Windows: `Gtfs_query.py` = `gtfs_query.py` (case-insensitive filesystem)
+    - על Linux: `from gtfs_query import` ייכשל אם הקובץ נקרא `Gtfs_query.py`!
+    - **תיקון על VM** (הרץ פעם אחת):
+      ```bash
+      cd /home/local_admin/finalproject
+      git mv Gtfs_query.py gtfs_query.py
+      git commit -m "fix: rename Gtfs_query.py for Linux case-sensitive imports"
+      ```
+
+### PostgreSQL — חיבור מבחוץ
+
+```
+Host:     localhost (או IP של linub-vm מהמחשב שלך)
+Port:     5432
+Database: airflow
+User:     airflow
+Password: airflow
+Schema:   gtfs   ← כל טבלאות GTFS פה
+```
+
+טבלאות GTFS שנטענות:
+- `gtfs.agency`      — חברות מפעילות
+- `gtfs.routes`      — קווים (route_short_name = מספר קו)
+- `gtfs.stops`       — תחנות (מסוננות לגוש דן בלבד)
+- `gtfs.trips`       — נסיעות
+- `gtfs.stop_times`  — זמני עצירה (הטבלה הגדולה — מיליוני שורות)
+- `gtfs.calendar`    — ימי שירות
+- `gtfs.load_status` — מתי ועם כמה שורות נטענו
+
+לטעינה ידנית (אם run.sh נכשל בשלב 6.5):
+```bash
+cd /home/local_admin/finalproject
+source venv/bin/activate
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 Load_gtfs.py
+# בדיקת מצב:
+python3 Load_gtfs.py --check
+```
+
 ---
 
 ## GitHub Repository

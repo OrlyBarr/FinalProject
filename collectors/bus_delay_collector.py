@@ -14,6 +14,8 @@ Usage:
 """
 
 import json
+import os
+import signal
 import time
 import logging
 import argparse
@@ -202,6 +204,23 @@ def publish_records(producer: KafkaProducer, records: list[dict], topic: str):
     return published
 
 
+# ─── Graceful shutdown ────────────────────────────────────────────────────────
+
+_stop = False
+
+def _handle_signal(signum, frame):
+    global _stop
+    log.info(f"Received signal {signum} — stopping after current cycle")
+    _stop = True
+
+signal.signal(signal.SIGTERM, _handle_signal)
+signal.signal(signal.SIGINT,  _handle_signal)
+
+# Max runtime: default 4 hours. Airflow execution_timeout will SIGTERM before this,
+# but this guard ensures the process never runs past a VM reboot or orphaned Airflow task.
+MAX_RUNTIME_SECONDS = int(os.getenv("BUS_COLLECTOR_MAX_RUNTIME_HOURS", "4")) * 3600
+
+
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
 def collect_once(producer: KafkaProducer) -> int:
@@ -230,10 +249,16 @@ def collect_once(producer: KafkaProducer) -> int:
 
 
 def run(once: bool = False):
+    global _stop
     log.info(f"Starting Bus Delay Collector → topic: {KAFKA_TOPIC_BUS_DELAYS}")
     producer = create_producer()
+    run_start = time.time()
     try:
-        while True:
+        while not _stop:
+            if time.time() - run_start >= MAX_RUNTIME_SECONDS:
+                log.warning(f"Max runtime ({MAX_RUNTIME_SECONDS}s) reached — exiting cleanly")
+                break
+
             start = time.time()
             count = collect_once(producer)
             elapsed = time.time() - start
@@ -243,10 +268,13 @@ def run(once: bool = False):
                 break
             sleep_time = max(0, BUS_POLL_INTERVAL_SECONDS - elapsed)
             log.info(f"Sleeping {sleep_time:.0f}s until next cycle...")
-            time.sleep(sleep_time)
-    except KeyboardInterrupt:
-        log.info("Stopped by user")
+            # Interruptible sleep: check _stop every second
+            for _ in range(int(sleep_time)):
+                if _stop:
+                    break
+                time.sleep(1)
     finally:
+        log.info("Bus Delay Collector shutting down")
         producer.close()
 
 
