@@ -1496,16 +1496,23 @@ class BotHandler(BaseHTTPRequestHandler):
                 def _geo(addr):
                     res = _rq.get(
                         NOMINATIM_URL,
-                        params={"q": addr+", ישראל","format":"json","limit":1},
-                        headers={"User-Agent":"IsraelTransitBot/1.0"}, timeout=6
+                        params={"q": addr+", ישראל","format":"json","limit":1,
+                                "countrycodes":"il","accept-language":"he"},
+                        headers={"User-Agent":"IsraelTransitBot/1.0"}, timeout=5
                     ).json()
                     if res:
-                        return (float(res[0]["lat"]), float(res[0]["lon"]),
-                                res[0].get("display_name","").split(",")[0])
+                        parts = res[0].get("display_name","").split(",")
+                        label = parts[0].strip() if parts else addr
+                        return (float(res[0]["lat"]), float(res[0]["lon"]), label)
                     return None, None, addr
 
-                lat1, lon1, olabel = _geo(origin)
-                lat2, lon2, dlabel = _geo(destination)
+                # Geocode both addresses in parallel
+                from concurrent.futures import ThreadPoolExecutor as _GeoTPX
+                with _GeoTPX(max_workers=2) as _gtp:
+                    _f1 = _gtp.submit(_geo, origin)
+                    _f2 = _gtp.submit(_geo, destination)
+                    lat1, lon1, olabel = _f1.result()
+                    lat2, lon2, dlabel = _f2.result()
                 if not lat1 or not lat2:
                     self.send_json({"error": "לא ניתן לאתר כתובות", "routes": []})
                     return

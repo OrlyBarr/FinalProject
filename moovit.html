@@ -589,30 +589,49 @@ function setStatus(ok, text) {
 }
 
 // ── Load live vehicles ────────────────────────────────────────────
+function renderVehicles(data) {
+  vehicleMarkers.forEach(m => map.removeLayer(m));
+  vehicleMarkers = [];
+  data.forEach(b => {
+    const lat = parseFloat(b.lat || b.calculated_lat || b.latitude || 0);
+    const lon = parseFloat(b.lon || b.calculated_lon || b.longitude || 0);
+    if (!lat || !lon) return;
+    const op   = String(b.operator_ref || b.siri_route__operator_ref || '3');
+    const col  = OP_COLORS[op] || '#00B1D2';
+    const lname = b.line_name || b.route_short_name
+                  || b.siri_route__gtfs_route__route_short_name
+                  || b.line_ref || b.siri_route__line_ref || '';
+    const mk = L.circleMarker([lat, lon], {
+      radius: 5, fillColor: col, color: 'white',
+      weight: 1.5, fillOpacity: 0.9, opacity: 1,
+    });
+    mk.bindTooltip(`קו ${lname} — ${OP_NAMES[op] || ''}`, {direction:'top'});
+    mk.addTo(map);
+    vehicleMarkers.push(mk);
+  });
+  setStatus(true, `${vehicleMarkers.length} כלי רכב פעילים`);
+}
+
 function loadVehicles() {
+  // קודם נסה /buses (cache מקומי)
   fetch(`${API}/buses`)
     .then(r => r.json())
     .then(data => {
-      if (!Array.isArray(data)) return;
-      vehicleMarkers.forEach(m => map.removeLayer(m));
-      vehicleMarkers = [];
-
-      data.forEach(b => {
-        const lat = parseFloat(b.lat || b.latitude || 0);
-        const lon = parseFloat(b.lon || b.longitude || 0);
-        if (!lat || !lon) return;
-        const op  = String(b.operator_ref || b.siri_route__operator_ref || '3');
-        const col = OP_COLORS[op] || '#00B1D2';
-        const lname = b.line_name || b.route_short_name || b.line_ref || '';
-        const mk = L.circleMarker([lat, lon], {
-          radius: 5, fillColor: col, color: 'white',
-          weight: 1.5, fillOpacity: 0.9, opacity: 1,
+      const buses = Array.isArray(data) ? data : (data.buses || []);
+      if (buses.length > 0) {
+        renderVehicles(buses);
+      } else {
+        // fallback: Stride ישיר עם bbox של גוש דן
+        const p = new URLSearchParams({
+          lat__greater_or_equal: 31.97, lat__lower_or_equal: 32.19,
+          lon__greater_or_equal: 34.73, lon__lower_or_equal: 34.93,
+          limit: 200, order_by: 'id desc'
         });
-        mk.bindTooltip(`קו ${lname} — ${OP_NAMES[op] || ''}`, { direction: 'top' });
-        mk.addTo(map);
-        vehicleMarkers.push(mk);
-      });
-      setStatus(true, `${data.length} כלי רכב פעילים`);
+        fetch(`${API}/proxy/stride/siri_vehicle_locations/list?${p}`)
+          .then(r => r.json())
+          .then(sv => renderVehicles(Array.isArray(sv) ? sv : []))
+          .catch(() => setStatus(false, 'שגיאה בטעינת כלי רכב'));
+      }
     })
     .catch(() => setStatus(false, 'שגיאת חיבור'));
 }
@@ -620,6 +639,10 @@ function loadVehicles() {
 // Auto-refresh every 30s
 loadVehicles();
 setInterval(loadVehicles, 30000);
+
+// פתח פאנל תחתון בטעינה כדי שיהיה גלוי
+document.getElementById('bottom-panel').classList.add('open');
+panelOpen = true;
 
 // ── Use my location ───────────────────────────────────────────────
 function useMyLocation() {
@@ -730,21 +753,34 @@ function planTrip() {
     openPanel('תכנון מסלול', '<div class="empty-state"><div class="icon">&#x1F4CD;</div><div>הזן כתובת מוצא וכתובת יעד</div></div>');
     return;
   }
-  openPanel(`${from} &#8592; ${to}`, '<div class="loader"><div class="spinner"></div>מחפש קווים פעילים...</div>');
+  openPanel(`${from} ← ${to}`, '<div class="loader"><div class="spinner"></div>מחפש קווים פעילים... (עד 15 שניות)</div>');
   currentView = 'results';
 
-  fetch(`${API}/route_plan?origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`)
+  const ctrl = new AbortController();
+  const tid   = setTimeout(() => ctrl.abort(), 20000);  // 20s timeout
+
+  fetch(`${API}/route_plan?origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`,
+        { signal: ctrl.signal })
     .then(r => r.json())
     .then(data => {
+      clearTimeout(tid);
       const routes = data.routes || [];
+      if (data.error && !routes.length) {
+        openPanel('שגיאה', `<div class="empty-state"><div class="icon">⚠️</div><div>${data.error}</div></div>`);
+        return;
+      }
       if (!routes.length) {
-        openPanel('לא נמצאו קווים', '<div class="empty-state"><div class="icon">&#x1F645;</div><div>לא נמצאו קווים פעילים כרגע בין הנקודות. נסה כתובות קרובות יותר.</div></div>');
+        openPanel('לא נמצאו קווים', '<div class="empty-state"><div class="icon">🤷</div><div>לא נמצאו קווים פעילים כרגע.<br>נסה כתובות ספציפיות יותר, למשל: "דיזנגוף 50 תל אביב"</div></div>');
         return;
       }
       lastRoutes = routes;
       renderRouteResults(routes, data.origin, data.destination);
     })
-    .catch(e => openPanel('שגיאה', `<div class="empty-state"><div class="icon">&#x26A0;</div><div>שגיאה בתכנון מסלול: ${e.message}</div></div>`));
+    .catch(e => {
+      clearTimeout(tid);
+      const msg = e.name === 'AbortError' ? 'הבקשה לקחה יותר מדי זמן — נסי שוב' : e.message;
+      openPanel('שגיאה', `<div class="empty-state"><div class="icon">⚠️</div><div>${msg}</div></div>`);
+    });
 }
 
 function renderRouteResults(routes, origin, destination) {
