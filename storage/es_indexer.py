@@ -40,6 +40,7 @@ TOPIC_INDEX_MAP = {
     "train_positions":  "transit-train-positions",
     "service_alerts":   "transit-service-alerts",
     "delay_events":     "transit-delay-events",
+    "traffic_data":     "transit-traffic",
 }
 
 # Index settings applied at creation time (if index doesn't exist)
@@ -87,6 +88,20 @@ INDEX_SETTINGS = {
             "is_delayed":        {"type": "boolean"},
             # כיוון
             "bearing":           {"type": "float"},
+            # traffic fields
+            "jam_factor":        {"type": "float"},
+            "congestion":        {"type": "keyword"},
+            "congestion_score":  {"type": "integer"},
+            "severity":          {"type": "keyword"},
+            "speed_ratio":       {"type": "float"},
+            "free_flow_kmh":     {"type": "float"},
+            "region":            {"type": "keyword"},
+            "road_type":         {"type": "keyword"},
+            "time_period":       {"type": "keyword"},
+            "is_congested":      {"type": "boolean"},
+            "is_blocked":        {"type": "boolean"},
+            "delay_min_per_km":  {"type": "float"},
+            "recorded_at":       {"type": "date", "ignore_malformed": True},
         }
     }
 }

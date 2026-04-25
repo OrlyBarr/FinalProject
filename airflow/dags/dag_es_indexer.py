@@ -1,12 +1,14 @@
 """
 airflow/dags/dag_es_indexer.py
 DAG 4: Kafka → Elasticsearch real-time indexer
-Schedule: every 1 minute
+Schedule: every 3 minutes
 
 FIXES:
   - execution_timeout raised from 25s to 60s
     (was impossible: 6 parallel tasks each with 5s consumer timeout + ES write time)
-  - schedule_interval changed from 30s to 1 minute to give runs room to breathe
+  - schedule_interval changed from 30s → 1 min → 3 min:
+    7 subprocesses/min × 60min = 420 subprocesses/hr; 3 min halves load on VM
+  - retries reduced to 1: ES indexing is non-critical; aggressive retries pile up
   - Each index task now wraps in try/except and pushes -1 on error so
     log_indexing_summary can report failures instead of silently showing 0
   - index_minio_backfill documents the duplicate-indexing risk and adds a guard
@@ -44,6 +46,8 @@ default_args = {
     "start_date":        datetime(2026, 4, 13),
     "email_on_failure":  False,
     "execution_timeout": timedelta(seconds=60),
+    "retries":           1,   # ES indexing is non-critical; 5 retries × 7 tasks × 3min = pile-up risk
+    "retry_delay":       timedelta(seconds=30),
 }
 
 
@@ -83,6 +87,10 @@ def index_service_alerts(**context):
 
 def index_delay_events(**context):
     _safe_index(context, "delays_n", "delay_events", max_msgs=200, consumer_timeout_ms=3000)
+
+
+def index_traffic_data(**context):
+    _safe_index(context, "traffic_n", "traffic_data", max_msgs=500, consumer_timeout_ms=5000)
 
 
 def index_minio_backfill(**context):
@@ -127,6 +135,7 @@ def log_indexing_summary(**context):
         "train_positions": ti.xcom_pull(task_ids="index_train_positions", key="trains_n") or 0,
         "service_alerts":  ti.xcom_pull(task_ids="index_service_alerts",  key="alerts_n") or 0,
         "delay_events":    ti.xcom_pull(task_ids="index_delay_events",    key="delays_n") or 0,
+        "traffic_data":    ti.xcom_pull(task_ids="index_traffic_data",    key="traffic_n") or 0,
         "minio_backfill":  ti.xcom_pull(task_ids="index_minio_backfill",  key="minio_n")  or 0,
     }
 
@@ -142,8 +151,8 @@ def log_indexing_summary(**context):
 with DAG(
     dag_id="dag_es_indexer",
     default_args=default_args,
-    description="Kafka → Elasticsearch indexer (every 1 min) for Kibana dashboards",
-    schedule_interval=timedelta(minutes=1),    # FIX: was timedelta(seconds=30)
+    description="Kafka → Elasticsearch indexer (every 3 min) for Kibana dashboards",
+    schedule_interval=timedelta(minutes=3),    # FIX: 1min was spawning too many subprocesses on VM
     catchup=False,
     max_active_runs=1,
     tags=["elasticsearch", "kibana", "transit"],
@@ -153,8 +162,9 @@ with DAG(
     t_trips  = PythonOperator(task_id="index_trip_updates",    python_callable=index_trip_updates)
     t_trains = PythonOperator(task_id="index_train_positions", python_callable=index_train_positions)
     t_alerts = PythonOperator(task_id="index_service_alerts",  python_callable=index_service_alerts)
-    t_delays = PythonOperator(task_id="index_delay_events",    python_callable=index_delay_events)
-    t_minio  = PythonOperator(task_id="index_minio_backfill",  python_callable=index_minio_backfill)
+    t_delays  = PythonOperator(task_id="index_delay_events",    python_callable=index_delay_events)
+    t_traffic = PythonOperator(task_id="index_traffic_data",    python_callable=index_traffic_data)
+    t_minio   = PythonOperator(task_id="index_minio_backfill",  python_callable=index_minio_backfill)
 
     t_summary = PythonOperator(
         task_id="log_indexing_summary",
@@ -162,4 +172,4 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    [t_bus, t_trips, t_trains, t_alerts, t_delays, t_minio] >> t_summary
+    [t_bus, t_trips, t_trains, t_alerts, t_delays, t_traffic, t_minio] >> t_summary

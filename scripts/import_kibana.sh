@@ -1,13 +1,22 @@
 #!/bin/bash
 # ================================================================
-#  Import Kibana dashboard (Israel Transit Delays Dashboard)
+#  Import Kibana dashboards — Israel Transit Monitoring Platform
+#
+#  Dashboard 1: transit_dashboard.ndjson
+#    → "🚌 Israel Transit — גוש דן ותל אביב"
+#    → Real-time monitoring: buses, trains, alerts, traffic
+#
+#  Dashboard 2: transit_delays_dashboard.ndjson
+#    → "Israel Transit Delays Dashboard"
+#    → Delay analysis: bus/train delays, heatmap, operator breakdown
+#
 #  Run from project root: bash scripts/import_kibana.sh
 # ================================================================
 
 set -e
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'
-BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 log()     { echo -e "${BOLD}${BLUE}[$(date '+%H:%M:%S')]${NC} $1"; }
 success() { echo -e "${GREEN}✅ $1${NC}"; }
@@ -26,11 +35,12 @@ for i in $(seq 1 40); do
     break
   fi
   if [[ $i -eq 40 ]]; then
-    error "Kibana did not respond after 120 s. Is it running?"
+    error "Kibana did not respond after 120 s. Is it running? (docker compose up -d)"
   fi
   echo -n "."
   sleep 3
 done
+echo ""
 
 # ── Helper: import one ndjson file ───────────────────────────────
 import_file() {

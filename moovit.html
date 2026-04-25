@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NAYA Transit — תחבורה ציבורית ישראל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #00B1D2;
+  --primary-dark: #0090B0;
+  --primary-light: #E0F7FC;
+  --text: #1A1A2E;
+  --text-muted: #6B7280;
+  --bg: #FFFFFF;
+  --surface: #F8FAFC;
+  --border: #E5E7EB;
+  --shadow: 0 2px 16px rgba(0,0,0,0.12);
+  --radius: 16px;
+}
+body {
+  font-family: 'Heebo', sans-serif;
+  background: #E8EDF2;
+  color: var(--text);
+  height: 100dvh;
+  overflow: hidden;
+  direction: rtl;
+}
+
+/* ── Map ─────────────────────────────────────────────── */
+#map { position: fixed; inset: 0; z-index: 0; }
+
+/* ── Top bar ─────────────────────────────────────────── */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  background: var(--primary); color: white;
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 10px; height: 52px;
+  box-shadow: 0 2px 8px rgba(0,177,210,0.3);
+}
+#topbar .logo {
+  width: 30px; height: 30px; background: white; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+#topbar .logo svg { width: 18px; height: 18px; }
+#topbar .title { font-size: 1.1rem; font-weight: 800; flex: 1; }
+#status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4ADE80; box-shadow: 0 0 6px #4ADE80; flex-shrink: 0;
+}
+#status-dot.offline { background: #F87171; box-shadow: 0 0 6px #F87171; }
+#status-label { font-size: 0.72rem; opacity: 0.9; font-weight: 500; }
+
+/* ── Search bar ──────────────────────────────────────── */
+#searchbar {
+  position: fixed; top: 52px; left: 0; right: 0; z-index: 190;
+  background: white; padding: 10px 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  display: flex; gap: 8px; align-items: center;
+}
+#search-input {
+  flex: 1; border: 1.5px solid var(--border); border-radius: 24px;
+  padding: 8px 14px 8px 10px; font-family: 'Heebo', sans-serif;
+  font-size: 0.9rem; color: var(--text); outline: none;
+  background: var(--surface); transition: border-color 0.15s;
+}
+#search-input:focus { border-color: var(--primary); background: white; }
+#search-input::placeholder { color: var(--text-muted); }
+#btn-search {
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: var(--primary); color: white; border: none;
+  border-radius: 50%; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 1rem; transition: background 0.15s;
+}
+#btn-search:hover { background: var(--primary-dark); }
+
+/* ── Bottom panel ─────────────────────────────────────── */
+#bottom-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: white; border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+  max-height: 80dvh;
+  display: flex; flex-direction: column;
+  transform: translateY(calc(100% - 72px));
+  transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+#bottom-panel.open { transform: translateY(0); }
+#bottom-panel.peek { transform: translateY(calc(100% - 72px)); }
+
+#panel-handle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px; cursor: pointer; flex-shrink: 0;
+  min-height: 52px;
+}
+.handle-bar {
+  width: 36px; height: 4px; background: var(--border);
+  border-radius: 2px; margin: 0 auto;
+}
+#panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px 8px; flex-shrink: 0;
+}
+#btn-back {
+  display: none; background: none; border: none;
+  color: var(--primary); cursor: pointer;
+  font-size: 1.1rem; padding: 4px; flex-shrink: 0;
+  font-family: 'Heebo', sans-serif; font-weight: 700;
+  align-items: center; gap: 4px;
+}
+#btn-back.visible { display: flex; }
+#panel-title {
+  font-weight: 700; font-size: 1rem; flex: 1;
+}
+#panel-close {
+  width: 28px; height: 28px; background: var(--surface);
+  border: none; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; color: var(--text-muted); flex-shrink: 0;
+}
+
+/* Tab bar */
+#tab-bar {
+  display: flex; border-bottom: 1px solid var(--border);
+  padding: 0 12px; flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; padding: 8px 4px; border: none; background: none;
+  font-family: 'Heebo', sans-serif; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-muted); cursor: pointer; border-bottom: 2.5px solid transparent;
+  transition: all 0.15s; white-space: nowrap;
+}
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+#panel-content {
+  overflow-y: auto; padding: 0 12px 24px; flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+#panel-content::-webkit-scrollbar { width: 3px; }
+#panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Home tab ─────────────────────────────────────────── */
+.section-title {
+  font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin: 14px 0 8px;
+}
+
+/* Operator tiles grid */
+#op-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-bottom: 8px;
+}
+.op-tile {
+  background: white; border-radius: 12px;
+  border: 1.5px solid var(--border);
+  padding: 10px 8px; cursor: pointer; text-align: center;
+  transition: all 0.15s; display: flex; flex-direction: column;
+  align-items: center; gap: 5px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.op-tile:hover, .op-tile:active {
+  border-color: var(--op-color, var(--primary));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+.op-tile .op-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--op-color, var(--primary));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; color: white; font-weight: 800;
+}
+.op-tile .op-name {
+  font-size: 0.72rem; font-weight: 600; color: var(--text);
+  line-height: 1.2; text-align: center;
+}
+
+/* Quick action buttons */
+.quick-actions {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.quick-btn {
+  flex: 1; padding: 10px 8px; border-radius: 12px;
+  background: var(--primary-light); color: var(--primary-dark);
+  border: none; cursor: pointer; font-family: 'Heebo', sans-serif;
+  font-size: 0.82rem; font-weight: 700; display: flex;
+  align-items: center; justify-content: center; gap: 5px;
+  transition: all 0.15s;
+}
+.quick-btn:hover { background: #B2EBF2; }
+.quick-btn .btn-icon { font-size: 1.1rem; }
+
+/* Live counter bar */
+.live-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: #F0FFF4; border-radius: 10px;
+  margin: 8px 0; font-size: 0.82rem; color: #16A34A; font-weight: 600;
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #16A34A; animation: pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(1.3); }
+}
+
+/* ── Route cards ──────────────────────────────────────── */
+.route-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px; background: var(--surface);
+  margin-bottom: 7px; cursor: pointer;
+  border: 1.5px solid transparent; border-right: 4px solid var(--cc, var(--primary));
+  transition: all 0.15s;
+}
+.route-card:hover, .route-card.active {
+  background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  border-color: var(--cc, var(--primary));
+}
+.line-badge {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--cc, var(--primary)); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 800; flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+.route-info { flex: 1; min-width: 0; }
+.route-name {
+  font-weight: 700; font-size: 0.9rem; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.route-sub {
+  font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.route-badge {
+  background: #F0FFF4; color: #16A34A; border-radius: 6px;
+  padding: 2px 7px; font-size: 0.72rem; font-weight: 600; flex-shrink: 0;
+}
+
+/* ── Stop list ────────────────────────────────────────── */
+.stop-timeline {
+  position: relative; padding-right: 28px;
+}
+.stop-timeline::before {
+  content: ''; position: absolute; right: 10px; top: 12px; bottom: 12px;
+  width: 2px; background: var(--tl-color, var(--border));
+}
+.stop-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 6px 0; position: relative;
+}
+.stop-dot {
+  position: absolute; right: -28px; top: 8px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--tl-color, var(--primary));
+  border: 2px solid white; box-shadow: 0 0 0 1px var(--tl-color, var(--primary));
+  flex-shrink: 0;
+}
+.stop-dot.first, .stop-dot.last {
+  width: 14px; height: 14px; right: -29px; top: 7px;
+}
+.stop-info { flex: 1; }
+.stop-name { font-size: 0.88rem; font-weight: 500; color: var(--text); }
+.stop-meta { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+
+/* ── Nearby stops ─────────────────────────────────────── */
+.nearby-card {
+  padding: 10px 12px; border-radius: 10px; background: var(--surface);
+  margin-bottom: 8px; border-right: 3px solid var(--primary);
+  cursor: pointer; transition: all 0.15s;
+}
+.nearby-card:hover { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+.nearby-name { font-weight: 600; font-size: 0.88rem; }
+.nearby-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+.nearby-routes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.route-pill {
+  background: var(--primary-light); color: var(--primary-dark);
+  border-radius: 5px; padding: 2px 7px; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer; transition: background 0.12s;
+}
+.route-pill:hover { background: var(--primary); color: white; }
+
+/* ── Trip planner ─────────────────────────────────────── */
+.plan-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.plan-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.plan-dot.from { background: var(--primary); }
+.plan-dot.to   { background: #7C3AED; }
+.plan-input {
+  flex: 1; border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; font-family: 'Heebo', sans-serif; font-size: 0.88rem;
+  color: var(--text); outline: none; background: var(--surface);
+  transition: border-color 0.15s;
+}
+.plan-input:focus { border-color: var(--primary); background: white; }
+.plan-input::placeholder { color: var(--text-muted); }
+.plan-divider { height: 1px; background: var(--border); margin: 2px 18px; }
+.plan-actions { display: flex; gap: 8px; margin-top: 10px; }
+#btn-plan {
+  flex: 1; background: var(--primary); color: white; border: none;
+  border-radius: 10px; padding: 11px 16px; font-family: 'Heebo', sans-serif;
+  font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: background 0.15s;
+}
+#btn-plan:hover { background: var(--primary-dark); }
+#btn-my-loc {
+  width: 42px; height: 42px; background: var(--primary-light); color: var(--primary);
+  border: none; border-radius: 10px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; font-size: 1.1rem; flex-shrink: 0;
+  transition: background 0.15s;
+}
+#btn-my-loc:hover { background: #B2EBF2; }
+
+/* ── Direction tabs ───────────────────────────────────── */
+.dir-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.dir-tab {
+  padding: 5px 12px; border-radius: 8px; border: 1.5px solid var(--border);
+  background: white; font-family: 'Heebo', sans-serif; font-size: 0.78rem;
+  font-weight: 600; cursor: pointer; transition: all 0.15s; color: var(--text-muted);
+}
+.dir-tab.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+/* ── Loader / empty ───────────────────────────────────── */
+.loader {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 32px; gap: 10px;
+  color: var(--text-muted); font-size: 0.85rem;
+}
+.spinner {
+  width: 28px; height: 28px; border: 3px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state {
+  text-align: center; padding: 28px; color: var(--text-muted); font-size: 0.85rem;
+}
+.empty-state .icon { font-size: 2.5rem; margin-bottom: 8px; }
+
+/* ── FAB ──────────────────────────────────────────────── */
+.fab {
+  position: fixed; z-index: 101; width: 48px; height: 48px;
+  border-radius: 50%; background: white; border: none;
+  box-shadow: var(--shadow); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; transition: transform 0.15s, box-shadow 0.15s;
+}
+.fab:hover { transform: scale(1.08); box-shadow: 0 4px 18px rgba(0,0,0,0.18); }
+#fab-nearby { bottom: 84px; left: 14px; }
+#fab-zoom-in { bottom: 144px; right: 14px; }
+#fab-zoom-out { bottom: 96px; right: 14px; }
+
+/* ── Responsive ───────────────────────────────────────── */
+@media (min-width: 640px) {
+  #searchbar { max-width: 480px; left: 50%; right: auto; transform: translateX(-50%); }
+  #bottom-panel {
+    max-width: 460px; left: 50%; right: auto;
+    bottom: 20px; border-radius: 20px;
+    transform: translateX(-50%) translateY(calc(100% - 72px));
+  }
+  #bottom-panel.open { transform: translateX(-50%) translateY(0); }
+  #fab-nearby { left: calc(50% - 230px + 14px); }
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.03 2 3 6.03 3 11c0 6.25 9 11 9 11s9-4.75 9-11c0-4.97-4.03-9-9-9zm0 11.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 8.5 12 8.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#00B1D2"/>
+    </svg>
+  </div>
+  <span class="title">NAYA Transit</span>
+  <span id="status-label">מתחבר...</span>
+  <div id="status-dot" class="offline"></div>
+</div>
+
+<!-- Search bar -->
+<div id="searchbar">
+  <input id="search-input" type="text" autocomplete="off" autocorrect="off" spellcheck="false"
+         placeholder="חפש קו (63, 89...) או מפעיל (דן, אגד...)" />
+  <button id="btn-search" onclick="runSearch()" title="חיפוש">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+      <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+    </svg>
+  </button>
+</div>
+
+<!-- FABs -->
+<button class="fab" id="fab-nearby" onclick="showNearby()" title="תחנות קרובות">🚏</button>
+
+<!-- Bottom panel -->
+<div id="bottom-panel">
+  <div id="panel-handle" onclick="togglePanel()">
+    <div class="handle-bar" style="width:100%"></div>
+  </div>
+  <div id="panel-header">
+    <button id="btn-back" onclick="goBack()">&#8592; חזרה</button>
+    <span id="panel-title">תחבורה ציבורית — גוש דן</span>
+    <button id="panel-close" onclick="closePanel()">&#x2715;</button>
+  </div>
+
+  <!-- Tab bar -->
+  <div id="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('home', this)">🏠 ראשי</button>
+    <button class="tab-btn" onclick="switchTab('plan', this)">🗺️ מסלול</button>
+    <button class="tab-btn" onclick="switchTab('nearby-tab', this)">🚏 קרוב אלי</button>
+  </div>
+
+  <div id="panel-content">
+    <!-- Home tab -->
+    <div id="tab-home">
+      <div id="live-bar" class="live-bar" style="display:none">
+        <div class="live-dot"></div>
+        <span id="live-count">טוען נתוני זמן אמת...</span>
+      </div>
+
+      <div class="section-title">פעולות מהירות</div>
+      <div class="quick-actions">
+        <button class="quick-btn" onclick="showNearby()">
+          <span class="btn-icon">🚏</span> תחנות קרובות
+        </button>
+        <button class="quick-btn" onclick="switchTab('plan', document.querySelectorAll('.tab-btn')[1])">
+          <span class="btn-icon">🗺️</span> תכנן מסלול
+        </button>
+      </div>
+
+      <div class="section-title">בחר מפעיל</div>
+      <div id="op-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Trip planner tab -->
+    <div id="tab-plan" style="display:none">
+      <div style="padding-top:12px">
+        <div class="plan-row">
+          <div class="plan-dot from"></div>
+          <input id="input-from" class="plan-input" placeholder="מאיפה? (כתובת, עיר...)" type="text" autocomplete="off">
+          <button id="btn-my-loc" onclick="useMyLocation()" title="מיקום נוכחי">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="plan-divider"></div>
+        <div class="plan-row">
+          <div class="plan-dot to"></div>
+          <input id="input-to" class="plan-input" placeholder="לאן? (כתובת, עיר...)" type="text" autocomplete="off">
+        </div>
+        <div class="plan-actions">
+          <button id="btn-plan" onclick="planTrip()">תכנן מסלול</button>
+        </div>
+      </div>
+      <div id="plan-results"></div>
+    </div>
+
+    <!-- Nearby tab -->
+    <div id="tab-nearby-tab" style="display:none">
+      <div style="padding-top:12px; text-align:center">
+        <button class="quick-btn" style="width:100%; justify-content:center; padding:14px"
+                onclick="showNearby()">
+          <span class="btn-icon">📍</span> מצא תחנות קרובות למיקומי
+        </button>
+      </div>
+      <div id="nearby-results"></div>
+    </div>
+
+    <!-- Dynamic results tab (search / operator / line detail) -->
+    <div id="tab-results" style="display:none">
+      <div id="results-inner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────
+const API = '';
+
+const OP_COLORS = {
+  "2":"#6B21A8","3":"#FF6B00","5":"#1E3A8A","6":"#DC2626",
+  "14":"#0891B2","15":"#1D4ED8","16":"#D97706","18":"#991B1B",
+  "21":"#15803D","25":"#0369A1","32":"#374151","42":"#065F46"
+};
+const OP_NAMES = {
+  "2":"רכבת ישראל","3":"דן","5":"אגד","6":"NTA מטרופולין",
+  "14":"מטרופולין","15":"אגד תעבורה","16":"תנופה",
+  "18":"סופרבוס","21":"קווים","25":"נתיב אקספרס",
+  "32":"V-Line","42":"אפיקים"
+};
+const OP_ICONS = {
+  "2":"🚆","3":"🟠","5":"🔵","6":"🔴",
+  "14":"🚌","15":"🚌","16":"🚌","18":"🚌",
+  "21":"🟢","25":"🔷","32":"⚫","42":"🟣"
+};
+const OP_SEARCH = {
+  "דן":"3","אגד תעבורה":"15","אגד":"5",
+  "nta":"6","מטרופולין":"6","רכבת":"2","רכבת ישראל":"2",
+  "סופרבוס":"18","קווים":"21","נתיב":"25","נתיב אקספרס":"25",
+  "תנופה":"16","v-line":"32","vline":"32","אפיקים":"42"
+};
+
+// ── Map init ──────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [32.08, 34.79], zoom: 13,
+  zoomControl: false, attributionControl: false,
+});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; CartoDB', subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+
+// ── State ─────────────────────────────────────────────────────────
+let vehicleMarkers = [], stopMarkers = [], routeLine = null;
+let userMarker = null, panelOpen = false;
+let currentTab = 'home', viewStack = [];
+
+// ── Map helpers ───────────────────────────────────────────────────
+function clearMap() {
+  vehicleMarkers.forEach(m => map.removeLayer(m)); vehicleMarkers = [];
+  stopMarkers.forEach(m => map.removeLayer(m)); stopMarkers = [];
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+}
+function clearStops() {
+  stopMarkers.forEach(m => map.removeLayer(m)); stopMarkers = [];
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+}
+
+// ── Panel helpers ─────────────────────────────────────────────────
+function openPanel() {
+  document.getElementById('bottom-panel').classList.add('open');
+  panelOpen = true;
+}
+function closePanel() {
+  document.getElementById('bottom-panel').classList.remove('open');
+  panelOpen = false;
+}
+function togglePanel() {
+  if (panelOpen) closePanel(); else openPanel();
+}
+function setTitle(t) { document.getElementById('panel-title').textContent = t; }
+function setBackBtn(show) {
+  document.getElementById('btn-back').classList.toggle('visible', show);
+}
+function setStatus(ok, text) {
+  document.getElementById('status-dot').className = ok ? '' : 'offline';
+  document.getElementById('status-label').textContent = text;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  // Hide all tab content
+  ['home','plan','nearby-tab','results'].forEach(id => {
+    const el = document.getElementById('tab-' + id);
+    if (el) el.style.display = 'none';
+  });
+  const el = document.getElementById('tab-' + name);
+  if (el) el.style.display = 'block';
+  currentTab = name;
+
+  // Update tab bar active
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  setTitle(name === 'plan' ? 'תכנן מסלול' :
+           name === 'nearby-tab' ? 'תחנות קרובות' : 'תחבורה ציבורית — גוש דן');
+  setBackBtn(false);
+  viewStack = [];
+  openPanel();
+
+  // If nearby tab, trigger location
+  if (name === 'nearby-tab' && !document.getElementById('nearby-results').innerHTML.trim()) {
+    showNearby();
+  }
+}
+
+function showResultsTab(title, html, pushBack = true) {
+  if (pushBack) viewStack.push({ title: document.getElementById('panel-title').textContent });
+  setTitle(title);
+  setBackBtn(viewStack.length > 0);
+
+  ['home','plan','nearby-tab'].forEach(id => {
+    const el = document.getElementById('tab-' + id);
+    if (el) el.style.display = 'none';
+  });
+  // Deactivate all tab buttons (results is not a named tab)
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+  const res = document.getElementById('tab-results');
+  res.style.display = 'block';
+  document.getElementById('results-inner').innerHTML = html;
+  openPanel();
+}
+
+function goBack() {
+  if (!viewStack.length) {
+    switchTab('home', document.querySelectorAll('.tab-btn')[0]);
+    return;
+  }
+  const prev = viewStack.pop();
+  clearStops();
+  switchTab('home', document.querySelectorAll('.tab-btn')[0]);
+}
+
+// ── Build operator grid ───────────────────────────────────────────
+function buildOpGrid() {
+  const grid = document.getElementById('op-grid');
+  const ops = [
+    ['3','דן'],['5','אגד'],['6','NTA'],
+    ['21','קווים'],['2','רכבת'],['18','סופרבוס'],
+    ['14','מטרופולין'],['25','נתיב אקספרס'],['15','אגד תעבורה'],
+  ];
+  grid.innerHTML = ops.map(([id, label]) => {
+    const col = OP_COLORS[id] || '#00B1D2';
+    const icon = OP_ICONS[id] || '🚌';
+    return `<div class="op-tile" style="--op-color:${col}"
+              onclick="loadOperatorLines('${id}','${label}')">
+      <div class="op-icon">${icon}</div>
+      <div class="op-name">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Load operator lines ───────────────────────────────────────────
+function loadOperatorLines(opId, opName) {
+  showResultsTab(`קווי ${opName}`,
+    `<div class="loader"><div class="spinner"></div>טוען קווים...</div>`);
+
+  fetch(`${API}/gtfs/routes?operator_id=${opId}&limit=100`)
+    .then(r => r.json())
+    .then(data => {
+      const routes = data.routes || [];
+      if (!routes.length) {
+        renderResults(`<div class="empty-state"><div class="icon">🚫</div>
+          <div>לא נמצאו קווים פעילים ל-${opName}</div></div>`);
+        return;
+      }
+      const col = OP_COLORS[opId] || '#00B1D2';
+      let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+        ${routes.length} קווים ל-${opName}</div>`;
+      html += routes.map(r => routeCard(r, col)).join('');
+      renderResults(html);
+      setTitle(`קווי ${opName} (${routes.length})`);
+    })
+    .catch(() => renderResults(`<div class="empty-state"><div class="icon">⚠️</div>
+      <div>שגיאה בטעינת קווים</div></div>`));
+}
+
+function renderResults(html) {
+  document.getElementById('results-inner').innerHTML = html;
+}
+
+function routeCard(r, col) {
+  col = col || '#00B1D2';
+  const routeId = r.route_id || '';
+  const shortName = r.route_short_name || routeId;
+  const longName  = r.route_long_name  || '';
+  const agency    = r.agency_name || '';
+  const badge = shortName.length > 5 ? shortName.substring(0,5) : shortName;
+  const sub = [agency, longName].filter(Boolean).join(' · ');
+  return `<div class="route-card" style="--cc:${col}"
+    onclick="showLineDetail('${escHtml(routeId)}','${escHtml(shortName)}','${col}')">
+    <div class="line-badge" style="background:${col}">${escHtml(badge)}</div>
+    <div class="route-info">
+      <div class="route-name">${escHtml(shortName)}${longName ? ' — ' + escHtml(longName) : ''}</div>
+      <div class="route-sub">${escHtml(sub)}</div>
+    </div>
+  </div>`;
+}
+
+// ── Search ────────────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch();
+});
+
+function runSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+
+  // Check if it matches an operator name — exact first, then partial
+  const qLow = q.toLowerCase().replace(/\s+/g,'');
+  // Pass 1: exact match
+  for (const [kw, opId] of Object.entries(OP_SEARCH)) {
+    if (kw.replace(/\s+/g,'') === qLow) {
+      loadOperatorLines(opId, OP_NAMES[opId] || q);
+      return;
+    }
+  }
+  // Pass 2: partial match (query contains keyword or keyword contains query, min 2 chars)
+  if (qLow.length >= 2) {
+    for (const [kw, opId] of Object.entries(OP_SEARCH)) {
+      const kLow = kw.replace(/\s+/g,'');
+      if (kLow.startsWith(qLow) || qLow.startsWith(kLow)) {
+        loadOperatorLines(opId, OP_NAMES[opId] || q);
+        return;
+      }
+    }
+  }
+
+  // Search by line number/name
+  showResultsTab(`תוצאות: "${q}"`,
+    `<div class="loader"><div class="spinner"></div>מחפש קווים...</div>`);
+
+  fetch(`${API}/gtfs/routes?q=${encodeURIComponent(q)}&limit=30`)
+    .then(r => r.json())
+    .then(data => {
+      const routes = data.routes || [];
+      if (!routes.length) {
+        // Try live Stride search
+        searchLiveLines(q);
+        return;
+      }
+      let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+        ${routes.length} תוצאות לחיפוש "${escHtml(q)}"</div>`;
+      html += routes.map(r => {
+        const opId = r.agency_id || '';
+        const col = OP_COLORS[opId] || '#00B1D2';
+        return routeCard(r, col);
+      }).join('');
+      renderResults(html);
+      setTitle(`תוצאות "${q}" (${routes.length})`);
+    })
+    .catch(() => searchLiveLines(q));
+}
+
+function searchLiveLines(q) {
+  // Fallback: search via Stride for live lines with this line_ref
+  fetch(`${API}/proxy/stride/siri_vehicle_locations/list?siri_route__line_ref=${encodeURIComponent(q)}&limit=20&order_by=id+desc`)
+    .then(r => r.json())
+    .then(data => {
+      const vehs = Array.isArray(data) ? data : [];
+      if (!vehs.length) {
+        renderResults(`<div class="empty-state"><div class="icon">🔍</div>
+          <div>לא נמצאו קווים עבור "${escHtml(q)}"<br>
+          <small>נסה מספר קו אחר או שם מפעיל</small></div></div>`);
+        return;
+      }
+      const lr  = vehs[0].siri_route__line_ref || q;
+      const rsn = vehs[0].siri_route__gtfs_route__route_short_name || lr;
+      const opId = String(vehs[0].siri_route__operator_ref || '3');
+      const col = OP_COLORS[opId] || '#00B1D2';
+      const r = { route_id: lr, route_short_name: rsn, route_long_name: '',
+                  agency_id: opId, agency_name: OP_NAMES[opId] || '' };
+      renderResults(`<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+        קו פעיל</div>${routeCard(r, col)}`);
+      setTitle(`קו ${rsn}`);
+    })
+    .catch(() => renderResults(`<div class="empty-state"><div class="icon">⚠️</div>
+      <div>לא ניתן לחפש כרגע</div></div>`));
+}
+
+// ── Line detail ───────────────────────────────────────────────────
+function showLineDetail(lineRef, lineName, col) {
+  col = col || '#00B1D2';
+  showResultsTab(`קו ${lineName}`,
+    `<div class="loader"><div class="spinner"></div>טוען תחנות קו ${escHtml(lineName)}...</div>`);
+
+  fetch(`${API}/line_info?line_ref=${encodeURIComponent(lineRef)}`)
+    .then(r => r.json())
+    .then(data => {
+      const dirs   = data.directions || [];
+      const vehs   = data.vehicles   || [];
+      const op     = data.operator   || '';
+
+      if (!dirs.length) {
+        // Fallback: try GTFS route_stops
+        loadGtfsStops(lineRef, lineName, col);
+        return;
+      }
+
+      renderLineDetail(lineName, col, dirs, vehs, op);
+    })
+    .catch(() => loadGtfsStops(lineRef, lineName, col));
+}
+
+function loadGtfsStops(lineRef, lineName, col) {
+  // Try by short_name first
+  fetch(`${API}/gtfs/route_stops?short_name=${encodeURIComponent(lineName)}`)
+    .then(r => r.json())
+    .then(data => {
+      const stops = data.stops || [];
+      if (!stops.length) throw new Error('no stops');
+      const dirs = [{
+        first_stop: stops[0].stop_name,
+        last_stop:  stops[stops.length-1].stop_name,
+        stops: stops.map(s => ({
+          name: s.stop_name, stop_id: s.stop_id,
+          lat: s.stop_lat, lon: s.stop_lon,
+        })),
+      }];
+      renderLineDetail(lineName, col, dirs, [], '');
+    })
+    .catch(() => {
+      renderResults(`<div class="empty-state"><div class="icon">🚌</div>
+        <div>לא נמצאו תחנות לקו ${escHtml(lineName)}<br>
+        <small>הקו אינו פעיל כרגע</small></div></div>`);
+    });
+}
+
+function renderLineDetail(lineName, col, dirs, vehs, op) {
+  clearStops();
+  let html = '';
+
+  // Vehicles bar
+  if (vehs.length) {
+    html += `<div class="live-bar">
+      <div class="live-dot"></div>
+      ${vehs.length} כלי רכב בשטח${op ? ' — ' + escHtml(op) : ''}
+    </div>`;
+    vehs.forEach(v => {
+      const mk = L.circleMarker([v.lat, v.lon], {
+        radius: 8, fillColor: col, color: 'white', weight: 2, fillOpacity: 0.92,
+      }).addTo(map);
+      mk.bindTooltip(`קו ${escHtml(lineName)}`, { direction: 'top' });
+      stopMarkers.push(mk);
+    });
+  }
+
+  // Direction tabs
+  if (dirs.length > 1) {
+    html += `<div class="dir-tabs">`;
+    dirs.forEach((d, i) => {
+      html += `<button class="dir-tab${i===0?' active':''}"
+        onclick="switchDir(this,${i},'${col}')">${escHtml(d.first_stop)} → ${escHtml(d.last_stop)}</button>`;
+    });
+    html += `</div>`;
+  }
+
+  // Stop timelines
+  dirs.forEach((d, di) => {
+    const total = d.stops.length;
+    html += `<div class="stop-timeline dir-pane" id="dir-pane-${di}"
+      style="${di>0?'display:none':''}; --tl-color:${col}">`;
+    d.stops.forEach((s, si) => {
+      const dotClass = si === 0 ? 'first' : si === total - 1 ? 'last' : '';
+      html += `<div class="stop-item">
+        <div class="stop-dot ${dotClass}"></div>
+        <div class="stop-info">
+          <div class="stop-name">${escHtml(s.name)}</div>
+          ${s.stop_id ? `<div class="stop-meta">תחנה ${escHtml(s.stop_id)}</div>` : ''}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  renderResults(html);
+  setTitle(`קו ${lineName}${dirs.length ? ' — ' + dirs[0].first_stop + ' → ' + dirs[0].last_stop : ''}`);
+
+  // Draw stops on map
+  const allCoords = dirs[0].stops.filter(s => s.lat && s.lon).map(s => [s.lat, s.lon]);
+  if (allCoords.length > 1) {
+    routeLine = L.polyline(allCoords, {
+      color: col, weight: 3, opacity: 0.7, dashArray: '4 4',
+    }).addTo(map);
+    map.fitBounds(allCoords, { padding: [50, 50], maxZoom: 14 });
+
+    dirs[0].stops.filter(s => s.lat && s.lon).forEach((s, si) => {
+      const mk = L.circleMarker([s.lat, s.lon], {
+        radius: si === 0 || si === dirs[0].stops.length-1 ? 6 : 4,
+        fillColor: col, color: 'white', weight: 1.5, fillOpacity: 0.85,
+      }).addTo(map);
+      mk.bindTooltip(`${si+1}. ${s.name}`, { direction: 'top' });
+      stopMarkers.push(mk);
+    });
+  }
+}
+
+function switchDir(btn, idx, col) {
+  document.querySelectorAll('.dir-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.dir-pane').forEach((el, i) => {
+    el.style.display = i === idx ? '' : 'none';
+  });
+}
+
+// ── Nearby stops ──────────────────────────────────────────────────
+function showNearby() {
+  const nearbyEl = document.getElementById('nearby-results');
+  nearbyEl.innerHTML = `<div class="loader"><div class="spinner"></div>מאתר מיקום...</div>`;
+  // Make tab visible
+  switchTab('nearby-tab', document.querySelectorAll('.tab-btn')[2]);
+
+  if (!navigator.geolocation) {
+    nearbyEl.innerHTML = `<div class="empty-state"><div class="icon">📵</div>
+      <div>הדפדפן אינו תומך ב-GPS</div></div>`;
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    loadNearbyAt(lat, lon, 'מיקומך הנוכחי');
+    map.setView([lat, lon], 16);
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker([lat, lon], {
+      radius: 9, fillColor: '#00B1D2', color: 'white', weight: 2.5, fillOpacity: 1,
+    }).addTo(map).bindTooltip('מיקומך', {direction:'top'});
+  }, () => {
+    nearbyEl.innerHTML = `<div class="empty-state"><div class="icon">📍</div>
+      <div>לא ניתן לגשת ל-GPS<br><small>הרשי גישה למיקום בדפדפן</small></div></div>`;
+  });
+}
+
+function loadNearbyAt(lat, lon, label) {
+  const nearbyEl = document.getElementById('nearby-results');
+  nearbyEl.innerHTML = `<div class="loader"><div class="spinner"></div>מחפש תחנות...</div>`;
+
+  fetch(`${API}/gtfs/nearby?lat=${lat}&lon=${lon}&radius=700`)
+    .then(r => r.json())
+    .then(data => {
+      const stops = data.stops || [];
+      if (!stops.length) {
+        nearbyEl.innerHTML = `<div class="empty-state"><div class="icon">🚫</div>
+          <div>לא נמצאו תחנות ב-700 מ' מ-${escHtml(label)}</div></div>`;
+        return;
+      }
+      clearStops();
+      let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+        ${stops.length} תחנות ב-700 מ' מ-${escHtml(label)}</div>`;
+      stops.forEach(s => {
+        const routes = (s.routes || []).slice(0, 6);
+        const pills = routes.map(r => {
+          const sn = r.route_short_name || '';
+          const opId = r.agency_id || '';
+          const col = OP_COLORS[opId] || '#00B1D2';
+          return `<span class="route-pill"
+            style="background:${col}22;color:${col}"
+            onclick="showLineDetail('${escHtml(r.route_id || sn)}','${escHtml(sn)}','${col}')"
+          >${escHtml(sn)}</span>`;
+        }).join('');
+        html += `<div class="nearby-card">
+          <div class="nearby-name">${escHtml(s.stop_name || 'תחנה')}</div>
+          <div class="nearby-meta">${s.distance_m ? Math.round(s.distance_m) + ' מ\'' : ''}
+            ${s.city ? ' · ' + escHtml(s.city) : ''}</div>
+          ${pills ? `<div class="nearby-routes">${pills}</div>` : ''}
+        </div>`;
+
+        if (s.stop_lat && s.stop_lon) {
+          const mk = L.marker([s.stop_lat, s.stop_lon], {
+            icon: L.divIcon({
+              className: '',
+              html: `<div style="width:10px;height:10px;background:#00B1D2;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+              iconAnchor: [5,5],
+            })
+          }).addTo(map);
+          mk.bindTooltip(s.stop_name || 'תחנה', { direction: 'top' });
+          stopMarkers.push(mk);
+        }
+      });
+      nearbyEl.innerHTML = html;
+    })
+    .catch(() => {
+      nearbyEl.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div>
+        <div>שגיאה בטעינת תחנות</div></div>`;
+    });
+}
+
+// ── Use my location (for trip planner) ───────────────────────────
+function useMyLocation() {
+  if (!navigator.geolocation) { alert('הדפדפן אינו תומך ב-GPS'); return; }
+  setStatus(null, 'מאתר...');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    map.setView([lat, lon], 15);
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker([lat, lon], {
+      radius: 8, fillColor: '#00B1D2', color: 'white', weight: 2, fillOpacity: 1,
+    }).addTo(map);
+    fetch(`${API}/reverse_geocode?lat=${lat}&lon=${lon}`)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('input-from').value = d.address || '';
+        setStatus(true, 'מיקום נוכחי');
+      })
+      .catch(() => {
+        document.getElementById('input-from').value = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        setStatus(false, 'שגיאה');
+      });
+  }, () => setStatus(false, 'אין גישה ל-GPS'));
+}
+
+// ── Plan trip ─────────────────────────────────────────────────────
+function planTrip() {
+  const from = document.getElementById('input-from').value.trim();
+  const to   = document.getElementById('input-to').value.trim();
+  if (!from || !to) {
+    document.getElementById('plan-results').innerHTML =
+      `<div class="empty-state"><div class="icon">📍</div><div>הזן כתובת מוצא ויעד</div></div>`;
+    return;
+  }
+  document.getElementById('plan-results').innerHTML =
+    `<div class="loader"><div class="spinner"></div>מחפש קווים... (עד 20 שניות)</div>`;
+
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 22000);
+
+  fetch(`${API}/route_plan?origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`,
+        { signal: ctrl.signal })
+    .then(r => r.json())
+    .then(data => {
+      clearTimeout(tid);
+      const routes = data.routes || [];
+      if (data.error && !routes.length) {
+        document.getElementById('plan-results').innerHTML =
+          `<div class="empty-state"><div class="icon">⚠️</div><div>${escHtml(data.error)}</div></div>`;
+        return;
+      }
+      if (!routes.length) {
+        document.getElementById('plan-results').innerHTML =
+          `<div class="empty-state"><div class="icon">🤷</div>
+          <div>לא נמצאו קווים פעילים כרגע<br><small>נסה כתובות ספציפיות יותר</small></div></div>`;
+        return;
+      }
+      const olabel = data.origin ? data.origin.label : from;
+      const dlabel = data.destination ? data.destination.label : to;
+      let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+        ${routes.length} קווים פעילים: ${escHtml(olabel)} → ${escHtml(dlabel)}</div>`;
+      routes.forEach(r => {
+        const lr  = r.line_ref || '';
+        const ln  = r.line_name || lr;
+        const op  = r.operator || '';
+        const opId = getOpId(op);
+        const col = OP_COLORS[opId] || '#00B1D2';
+        const cnt = (r.vehicles || []).length;
+        const os  = r.origin_stop || '', fs = r.final_stop || '';
+        const sub = [op, cnt ? `${cnt} כלי רכב` : '', os && fs ? `${os} → ${fs}` : os || ''].filter(Boolean).join(' · ');
+        const badge = ln.length > 5 ? ln.substring(0,5) : ln;
+        html += `<div class="route-card" style="--cc:${col}"
+          onclick="showLineDetail('${escHtml(lr)}','${escHtml(ln)}','${col}')">
+          <div class="line-badge" style="background:${col}">${escHtml(badge)}</div>
+          <div class="route-info">
+            <div class="route-name">${escHtml(ln)}</div>
+            <div class="route-sub">${escHtml(sub)}</div>
+          </div>
+          ${cnt ? `<div class="route-badge">${cnt} רכב</div>` : ''}
+        </div>`;
+      });
+      document.getElementById('plan-results').innerHTML = html;
+    })
+    .catch(e => {
+      clearTimeout(tid);
+      const msg = e.name === 'AbortError' ? 'הבקשה ארכה יותר מדי — נסי שוב' : e.message;
+      document.getElementById('plan-results').innerHTML =
+        `<div class="empty-state"><div class="icon">⚠️</div><div>${escHtml(msg)}</div></div>`;
+    });
+}
+
+function getOpId(opName) {
+  for (const [id, name] of Object.entries(OP_NAMES)) {
+    if (name === opName) return id;
+  }
+  return '';
+}
+
+// ── Live vehicles ─────────────────────────────────────────────────
+function renderVehicles(data) {
+  vehicleMarkers.forEach(m => map.removeLayer(m)); vehicleMarkers = [];
+  data.forEach(b => {
+    const lat = parseFloat(b.lat || b.calculated_lat || b.latitude || 0);
+    const lon = parseFloat(b.lon || b.calculated_lon || b.longitude || 0);
+    if (!lat || !lon) return;
+    const op  = String(b.operator_ref || b.siri_route__operator_ref || '3');
+    const col = OP_COLORS[op] || '#00B1D2';
+    const ln  = b.line_name || b.route_short_name
+                || b.siri_route__gtfs_route__route_short_name
+                || b.line_ref || b.siri_route__line_ref || '';
+    const mk = L.circleMarker([lat, lon], {
+      radius: 5, fillColor: col, color: 'white',
+      weight: 1.5, fillOpacity: 0.88, opacity: 1,
+    }).addTo(map);
+    const opName = OP_NAMES[op] || '';
+    mk.bindTooltip(`קו ${ln}${opName ? ' — ' + opName : ''}`, { direction: 'top' });
+    vehicleMarkers.push(mk);
+  });
+
+  const liveBar = document.getElementById('live-bar');
+  const liveCount = document.getElementById('live-count');
+  if (vehicleMarkers.length > 0) {
+    liveBar.style.display = 'flex';
+    liveCount.textContent = `${vehicleMarkers.length} כלי רכב פעילים בזמן אמת`;
+    setStatus(true, `${vehicleMarkers.length} רכבים`);
+  } else {
+    setStatus(false, 'אין נתונים');
+  }
+}
+
+function loadVehicles() {
+  fetch(`${API}/buses`)
+    .then(r => r.json())
+    .then(data => {
+      const buses = Array.isArray(data) ? data : (data.buses || []);
+      if (buses.length > 0) {
+        renderVehicles(buses);
+      } else {
+        const p = new URLSearchParams({
+          lat__greater_or_equal: 31.97, lat__lower_or_equal: 32.19,
+          lon__greater_or_equal: 34.73, lon__lower_or_equal: 34.93,
+          limit: 200, order_by: 'id desc'
+        });
+        fetch(`${API}/proxy/stride/siri_vehicle_locations/list?${p}`)
+          .then(r => r.json())
+          .then(sv => renderVehicles(Array.isArray(sv) ? sv : []))
+          .catch(() => setStatus(false, 'שגיאה'));
+      }
+    })
+    .catch(() => setStatus(false, 'שגיאת חיבור'));
+}
+
+// ── Map click → nearby ────────────────────────────────────────────
+map.on('click', e => {
+  const { lat, lng } = e.latlng;
+  // Pre-fill nearby-results to avoid GPS trigger in switchTab
+  const nearbyEl = document.getElementById('nearby-results');
+  nearbyEl.innerHTML = `<div class="loader"><div class="spinner"></div>מחפש תחנות...</div>`;
+  // Show nearby tab
+  switchTab('nearby-tab', document.querySelectorAll('.tab-btn')[2]);
+  // Load for clicked location
+  loadNearbyAt(lat, lng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+});
+
+// ── Utility ───────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+buildOpGrid();
+loadVehicles();
+setInterval(loadVehicles, 30000);
+
+// Open panel on load
+setTimeout(() => {
+  document.getElementById('bottom-panel').classList.add('open');
+  panelOpen = true;
+}, 300);
+</script>
+</body>
+</html>

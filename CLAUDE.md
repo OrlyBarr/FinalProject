@@ -201,12 +201,28 @@ docker-compose up -d
 python bot.py
 
 # גישה:
-# http://localhost:5000       → צ'אט AI (index.html)
-# http://localhost:5000/agent → לוח שאילתות (agent_transit.html)
-# http://localhost:8080       → Kafka UI
-# http://localhost:9001       → MinIO Console
-# http://localhost:5601       → Kibana
-# http://localhost:8081       → Airflow UI
+# http://localhost:5000         → צ'אט AI (index.html)
+# http://localhost:5000/agent   → לוח שאילתות (agent_transit.html)
+# http://localhost:5000/gushdan → אפליקציית גוש דן (Moovit-style)
+# http://localhost:8085         → Kafka UI  ← שונה מ-8080!
+# http://localhost:9001         → MinIO Console
+# http://localhost:5601         → Kibana
+# http://localhost:8081         → Airflow UI
+```
+
+### הפעלה על linub-vm (שרת Linux)
+
+```bash
+# SSH אל השרת
+ssh linub-vm   # ~/.ssh/config מוגדר: Host linub-vm → 192.168.1.110, User local_admin
+
+# הרצת run.sh (מאתחל את כל השירותים)
+cd /home/local_admin/finalproject
+bash run.sh
+
+# אם Docker containers לא נטענים — הרץ עם sudo (containers הופעלו ע"י root)
+sudo docker-compose up -d
+sudo docker stop <container>
 ```
 
 ---
@@ -217,6 +233,7 @@ python bot.py
 |--------|------|-------|
 | GET | `/` | index.html (צ'אט AI) |
 | GET | `/agent` | agent_transit.html (לוח שאילתות) |
+| GET | `/gushdan` | gushdan_app.html (אפליקציית Moovit-style) ← **חדש** |
 | GET | `/health` | בדיקת תקינות |
 | GET | `/status` | סטטוס מערכת + URLs |
 | GET | `/buses` | מיקומי אוטובוסים מ-cache |
@@ -231,23 +248,8 @@ python bot.py
 | GET | `/proxy/stride/*` | proxy לHasadna Stride API |
 | GET | `/proxy/hasadna/*` | alias ל-/proxy/stride |
 | GET | `/proxy/rail?stationId=X` | רכבות פעילות ליד תחנה (Stride operator=2) |
+| GET | `/api/dankal` | רכבת קלה NTA (operator=6) — bbox מסלול האדום ← **חדש** |
 | POST | `/ask` | צ'אט AI דרך Gemini |
-
----
-
-## Kafka Topics
-
-| Topic | מקור | Partitions |
-|-------|------|-----------|
-| `bus-positions` | BusPositionsProducer | 4 |
-| `train-positions` | TrainPositionsProducer | 4 |
-| `trip-updates` | TripUpdatesProducer | 2 |
-| `service-alerts` | ServiceAlertsProducer | 2 |
-| `traffic-data` | TrafficProducer | 2 |
-| `delay-events` | ETL DAG | 1 |
-| `pipeline-errors` | כל ה-producers | 1 |
-| `bus-delays` | BusDelayCollector | 3 |
-| `train-delays` | TrainDelayCollector | 3 |
 
 ---
 
@@ -266,6 +268,8 @@ GUSH_DAN = {
 
 ## תיקונים שבוצעו (אפריל 2026)
 
+### גל 1 — תיקוני API ו-UI
+
 1. **`bot.py`** — `log` לא היה מוגדר → `NameError` ב-`/streets`
 2. **`bot.py`** — bbox params שגויים: `lat__gte` → `lat__greater_or_equal`
 3. **`bot.py`** — `/proxy/rail` התעלם מ-`stationId` → עכשיו מסנן לפי קואורדינטות התחנה
@@ -276,6 +280,264 @@ GUSH_DAN = {
 8. **`transit_query.py`** — `siri_routes__` (רבים) → `siri_route__` (יחיד)
 9. **`.env.example`** — נוסף `GEMINI_API_KEY` ו-`GOOGLE_MAPS_API_KEY`
 
+### גל 2 — run.sh (תיקון Step 4)
+
+10. **`run.sh`** — Step 4 נתקע לנצח: פקודת `timeout` לא קיימת ב-macOS/Git Bash
+    - **פתרון**: פונקציית `_kafka()` נוספת — מריצה את הפקודה ב-background וממתינה לה עם `kill -0`
+    - לולאת readiness של 90 שניות (30 × sleep 3) לפני יצירת topics
+    - `--if-not-exists` בכל יצירת topic (idempotent)
+    - commit `28aeb57` — pushed to GitHub
+
+### גל 3 — אפליקציית גוש דן (`gushdan_app.html`)
+
+11. **`gushdan_app.html`** — **קובץ חדש** (947 שורות) — אפליקציית Moovit-style לגוש דן:
+    - 5 מסכים + ניווט תחתון: בית (מפה + תחנות קרובות), תכנון מסלול, ניווט פעיל, דנקל קו אדום, לוח עזיבות, מועדפים
+    - 22 תחנות דנקל עם קואורדינטות מקורבות (בת ים → פתח תקווה)
+    - `BBOX = {latMin:31.87, latMax:32.21, lonMin:34.72, lonMax:34.95}`
+    - guard "מחוץ לתחום" — overlay אם המשתמש מחוץ לגוש דן
+    - צבעי מפעילים: דן כתום, אגד כחול כהה, דנקל/NTA אדום, מטרופולין תכלת
+    - Hebrew RTL PWA — `direction:rtl`, mobile-first
+    - Leaflet.js עם CartoDB Positron tiles (ללא API key)
+
+12. **`bot.py`** — נוספו endpoints:
+    - `/gushdan` — מגיש את `gushdan_app.html`
+    - `/api/dankal` — שאילתת Stride ל-NTA vehicles (operator_ref=6) בבbox של קו האדום
+    - עדכון `/status` לכלול Gush Dan Transit App URL
+    - commit `1caea02` — pushed to GitHub
+
+### גל 4 — linub-vm: הרמת ה-VM
+
+13. **linub-vm** — VM לא עלה עקב Hyper-V Saved State + מחסור בזיכרון:
+    - שגיאה: `0x800705AA` — ה-VM ניסה לשחזר 12,265 MB RAM; המארח לא היה עם מספיק זיכרון פנוי
+    - **פתרון (PowerShell מורם)**:
+      1. `Remove-VMSavedState 'linub-vm'` — מחיקת Saved State
+      2. `Set-VMMemory -StartupBytes (6144MB)` — הורדת RAM ל-6 GB
+      3. `Start-VM 'linub-vm'` — הפעלה מחדש
+    - SSH config עודכן: `IdentityFile ~/.ssh/id_ed25519`, `ServerAliveInterval 60`, `ServerAliveCountMax 3`
+
+### גל 5 — linub-vm: דיבאג run.sh ✅
+
+14. **בעיית Kafka `InconsistentClusterIdException`** — אובחנה ותוקנה:
+    - **שורש הבעיה**: volume `finalproject_kafka_data` הכיל cluster ID `2wkTnxsyRpynpAyR3BTDWA` שלא תאם ל-Zookeeper (`PgtNQG1AQ5SiXf40TBOrNg`) → Kafka קורס בכל restart
+    - **פתרון**: ניקוי ה-volume דרך container זמני:
+      ```bash
+      docker run --rm -v finalproject_kafka_data:/data \
+        confluentinc/cp-kafka:7.4.0 bash -c 'rm -rf /data/* && echo VOLUME_CLEARED'
+      ```
+    - ✅ בוצע בהצלחה — `VOLUME_CLEARED` אושר
+
+15. **בעיית זיכרון בשרת** — VM (6 GB RAM) עמוס מדי ✅ **נפתרה**:
+    - 20 containers שאינם של הפרויקט הוסרו (hive, mariadb, mongo, nifi, logistic-*)
+    - Elasticsearch + Kibana נעצרו זמנית לפנות זיכרון (~1.5 GB)
+    - Swap הוגדל מ-2 GB ל-6 GB + `vm.swappiness=10`
+    - **מצב עכשיו**: RAM זמין 1.5 GB, Swap פנוי 4 GB
+
+### גל 6 — linub-vm: ייצוב זיכרון (אפריל 2026)
+
+16. **Swap הוגדל ל-6 GB** — קובץ swap נוסף `/home/local_admin/swap2.img` (4 GB):
+    ```bash
+    # יצירת קובץ (ללא sudo, בhome directory):
+    fallocate -l 4G /home/local_admin/swap2.img && chmod 600 /home/local_admin/swap2.img
+    # הפעלה דרך privileged container (ללא sudo):
+    docker run --rm --privileged -u root -v /home/local_admin:/swapdir \
+      confluentinc/cp-kafka:7.4.0 bash -c \
+      'mkswap /swapdir/swap2.img && swapon /swapdir/swap2.img && echo 10 > /proc/sys/vm/swappiness'
+    ```
+    - `/etc/fstab` עודכן: `/home/local_admin/swap2.img none swap sw 0 0` ← persistent בין reboots
+    - `/etc/sysctl.conf` עודכן: `vm.swappiness=10` ← kernel לא יוציא ל-swap מוקדם מדי
+
+17. **docker-compose.yml — הגבלות זיכרון ל-Airflow** (commit `b53812b`):
+    - `airflow-webserver: mem_limit: 800m` + `AIRFLOW__WEBSERVER__WORKERS: '1'`
+    - `airflow-scheduler: mem_limit: 600m` + `AIRFLOW__SCHEDULER__MAX_THREADS: '2'` + `PARSING_PROCESSES: '1'`
+    - `AIRFLOW__CORE__PARALLELISM: '4'` + `MAX_ACTIVE_TASKS_PER_DAG: '2'` בשניהם
+
+18. **טריק לעצירת containers ע"י root** (ללא sudo):
+    ```bash
+    docker exec <container> kill 1    # שולח SIGTERM ל-PID 1 → container מסתיים בעצמו
+    ```
+
+### גל 7 — תיקוני תצוגת שמות קווים ומפה (אפריל 2026)
+
+19. **`_LINECACHE` + `_resolve_line()`** — מיפוי line_ref → route_short_name:
+    - בנוי ב-thread רקע בעת הפעלת bot.py
+    - נטען מ-`line_ref_cache.json` (4,759 רשומות) + מתרענן מ-Stride API
+    - `_learn_line(lr, rsn)` — מוסיף מיפויים חדשים שנצפים בתנועת API
+    - `_resolve_line(lr)` — מחזיר שם קצר או את lr אם לא נמצא
+
+20. **תצוגת קווי רכבת בצ'אט** (`bot.py` ~שורה 799):
+    - לפני: `f"🚆 קו {lr} ({cnt_s})"` — הציג מספרים פנימיים כגון "27902"
+    - אחרי: `rname = route_names.get(lr, "") or _resolve_line(lr)` — מציג שם קצר אם קיים
+
+21. **תצוגת קווים בתכנון מסלול בצ'אט** (`bot.py` ~שורה 659):
+    - לפני: `f"🚌 **קו {r['line_ref']}**"` — הציג line_ref פנימי
+    - אחרי: שימוש ב-`r.get('line_name') or _resolve_line(r['line_ref'])` לתצוגה
+
+22. **zoom מפה ב-`index.html`** (~שורה 1446):
+    - לפני: `fitBounds(allPts, {padding:[30,40]})` — הזדמן ל-zoom out לכל ישראל/מזרח תיכון
+    - אחרי: `fitBounds(allPts, {padding:[30,40], maxZoom:15})` — נשאר בתצוגה מקומית
+
+23. **שמות תחנות** (`_fetch_stops` ב-`bot.py`):
+    - לפני: `name = gtfs_stop__name or f"תחנה {i+1}"` — הציג "תחנה 4", "תחנה 5"
+    - אחרי: fallback ל-`city + code`, ואם אין — מדלג על התחנה
+
+24. **רשימת קווי מפעיל** (Stride fallback ב-`bot.py`):
+    - לפני: set של line_ref גולמיים → "489, 1208, 23991"
+    - אחרי: `_resolve_line()` על כל line_ref → "8, 25, 89"
+
+    commit `aacbc67` — pushed to GitHub
+
+---
+
+## בעיות ידועות ופתרונות
+
+### מצב containers נוכחי על linub-vm
+
+```
+✅ kafka, zookeeper, postgres, minio, airflow-webserver, airflow-scheduler, kafka-ui
+⏸️  elasticsearch, kibana — נעצרו זמנית לחסוך זיכרון (ניתן להפעיל כשצריך)
+```
+
+להפעיל elasticsearch+kibana:
+```bash
+cd /home/local_admin/finalproject && sudo docker-compose up -d elasticsearch kibana
+```
+
+### Kafka — הערות חשובות
+
+- **kafka-ui** על port **8085** (לא 8080! — 8080 תפוס ע"י NiFi)
+- **kafka-init** יוצר topics דרך `kafka:29092` (internal Docker network)
+- **run.sh** יוצר topics דרך `localhost:9092` (external) — שניהם עובדים
+- אם Kafka לא עולה → בדוק `docker logs kafka --tail 30` לאיתור שגיאת cluster ID
+
+### Docker permissions על linub-vm
+
+```
+# Containers הופעלו ע"י root:
+docker stop <container>  → "permission denied"
+docker exec <container>  → עובד ✅ (exec מותר)
+docker run               → עובד ✅ (יצירת containers חדשים מותרת)
+sudo docker stop         → דורש password sudo interactively
+```
+
+---
+
+## Kafka Topics
+
+| Topic | מקור | Partitions |
+|-------|------|-----------|
+| `bus-positions` | BusPositionsProducer | 4 |
+| `train-positions` | TrainPositionsProducer | 4 |
+| `trip-updates` | TripUpdatesProducer | 2 |
+| `service-alerts` | ServiceAlertsProducer | 2 |
+| `traffic-data` | TrafficProducer | 2 |
+| `delay-events` | ETL DAG | 1 |
+| `pipeline-errors` | כל ה-producers | 1 |
+| `bus-delays` | BusDelayCollector | 3 |
+| `train-delays` | TrainDelayCollector | 3 |
+
+> ⚠️ `kafka-ui` port = **8085** (לא 8080)
+
+### גל 8 — אופטימיזציית זיכרון, אמינות ו-GTFS (אפריל 2026)
+
+25. **`docker-compose.yml` — הגבלות זיכרון ל-7 שירותים שלא היו מוגבלים**:
+    - `zookeeper: mem_limit: 256m` + `ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m"`
+    - `kafka: mem_limit: 512m` + `KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"` ← ברירת מחדל 1GB → קריסת VM!
+    - `kafka-ui: mem_limit: 256m` + `JAVA_OPTS: "-Xmx192m -Xms64m"`
+    - `postgres: mem_limit: 256m` + `shared_buffers=32MB work_mem=4MB max_connections=20`
+    - `minio: mem_limit: 256m` + `GOGC: "20"` ← מפחית לחץ על GC של Go
+    - `elasticsearch: mem_limit: 768m` + `ES_JAVA_OPTS: "-Xms256m -Xmx512m"`
+    - `kibana: mem_limit: 512m` + `NODE_OPTIONS: "--max-old-space-size=384"`
+    - `AIRFLOW__CORE__PARALLELISM: '2'` — יישור בין webserver ו-scheduler (היה '4' ו-'2' בנפרד)
+
+26. **`docker-compose.yml` — חשיפת PostgreSQL לhost**:
+    - נוסף `ports: - "5432:5432"` לשירות postgres
+    - מאפשר חיבור מ-pgAdmin / DBeaver / psql ישירות ל-localhost:5432
+    - פרטי חיבור: host=localhost, port=5432, db=airflow, user=airflow, password=airflow
+
+27. **`resilient_pipeline.py` — שחזור buffer guard ותיקון retry storms**:
+    - שוחזרה guard חסרה: `if self.buffer_size_mb() >= MAX_BUFFER_MB: return` (מנע מילוי disk)
+    - `MAX_BUFFER_MB`: 500 → 100 MB ← 500MB buffer = disk fill risk
+    - `max_retry_delay`: 30min → 5min ← retry storm = tasks blocked for hours
+
+28. **`dag_es_indexer.py` — האטת schedule ‏+ הורדת retries**:
+    - schedule: 1min → 3min ← 7 subprocesses/min = מאות Python processes/שעה
+    - retries: 5 → 1 ← ES indexing non-critical; pile-up risk
+
+29. **`dag_direct_to_minio.py` — האטת dag_direct_transit**:
+    - schedule: 1min → 2min ← חצי כמות processes
+
+30. **`dag_daily_analysis.py` — ניקוי HTML reports**:
+    - נוסף cleanup: שמירת 7 הדוחות האחרונים בלבד
+    - מונע מילוי disk (היה שורש בעיית 0x80070070 בVM)
+
+31. **`Load_gtfs.py` — תיקון OOM קריטי**:
+    - `download_gtfs()`: הורדה ב-chunks של 64KB לקובץ זמני — לא 150MB ב-RAM
+    - `_stream_csv()`: generator שמחזיר שורה אחת בכל פעם — לא 5M שורות ב-RAM
+    - `load_stop_times()`: שימוש ב-`_stream_csv()` + batches של 5000 rows — לא 4GB RAM
+
+32. **`dag_gtfs_load.py` — תיקון API mismatch**:
+    - `download_gtfs()` מחזיר path (str) לא bytes — עודכן לשימוש ב-`os.path.getsize()` ו-`zipfile.ZipFile(path)`
+    - מחיקת קובץ זמני ב-`finally` block גם במקרה של כשלון
+
+33. **`collectors/bus_delay_collector.py` + `collectors/train_delay_collector.py`**:
+    - נוסף SIGTERM handler: Docker שולח SIGTERM לפני SIGKILL — producer יסגר נקי
+    - נוסף max runtime guard: `BUS_COLLECTOR_MAX_RUNTIME_HOURS` / `TRAIN_COLLECTOR_MAX_RUNTIME_HOURS` (ברירת מחדל 4h)
+    - לולאת שינה ניתנת להפסקה: בדיקת `_stop` flag כל שנייה
+
+34. **`run.sh` — Step 6.5: טעינת GTFS Static**:
+    - בדיקת freshness לפני הורדה (דלג אם > 100 routes כבר קיימות)
+    - הרצת `python3 Load_gtfs.py` עם `POSTGRES_HOST=localhost POSTGRES_PORT=5432`
+    - error: warn בלבד (לא fatal — ניתן להריץ ידנית מאוחר יותר)
+
+35. **`run.sh` — תיקון Step 8 + Step 9**:
+    - נוסף `dag_gtfs_load` לרשימת DAGs ב-Step 8 (היה חסר)
+    - Step 9: נוסף הסבר ש-HTTP 403 ממוט = WAF-blocked (צפוי) — המערכת משתמשת ב-Stride במקום
+
+36. **`Gtfs_query.py` — תיקוני שאילתות PostgreSQL**:
+    - `ORDER BY route_short_name::int` → ייכשל על כל קו עם שם לא-מספרי (T60, X1, N20, וכו')
+    - **תיקון**: `CASE WHEN ~ '^[0-9]+$' THEN ::integer ELSE NULL END NULLS LAST` בשתי שאילתות
+    - `get_route_stops(direction=0)` → מחזיר ריק לקווים שרצים רק ב-direction_id=1 או NULL
+    - **תיקון**: fallback אוטומטי: מנסה direction=0 → direction=1 → ללא סינון
+
+37. **בעיית case-sensitivity על Linux** ← חייב לתקן בעת deploy ל-VM:
+    - על Windows: `Gtfs_query.py` = `gtfs_query.py` (case-insensitive filesystem)
+    - על Linux: `from gtfs_query import` ייכשל אם הקובץ נקרא `Gtfs_query.py`!
+    - **תיקון על VM** (הרץ פעם אחת):
+      ```bash
+      cd /home/local_admin/finalproject
+      git mv Gtfs_query.py gtfs_query.py
+      git commit -m "fix: rename Gtfs_query.py for Linux case-sensitive imports"
+      ```
+
+### PostgreSQL — חיבור מבחוץ
+
+```
+Host:     localhost (או IP של linub-vm מהמחשב שלך)
+Port:     5432
+Database: airflow
+User:     airflow
+Password: airflow
+Schema:   gtfs   ← כל טבלאות GTFS פה
+```
+
+טבלאות GTFS שנטענות:
+- `gtfs.agency`      — חברות מפעילות
+- `gtfs.routes`      — קווים (route_short_name = מספר קו)
+- `gtfs.stops`       — תחנות (מסוננות לגוש דן בלבד)
+- `gtfs.trips`       — נסיעות
+- `gtfs.stop_times`  — זמני עצירה (הטבלה הגדולה — מיליוני שורות)
+- `gtfs.calendar`    — ימי שירות
+- `gtfs.load_status` — מתי ועם כמה שורות נטענו
+
+לטעינה ידנית (אם run.sh נכשל בשלב 6.5):
+```bash
+cd /home/local_admin/finalproject
+source venv/bin/activate
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 Load_gtfs.py
+# בדיקת מצב:
+python3 Load_gtfs.py --check
+```
+
 ---
 
 ## GitHub Repository
@@ -283,4 +545,8 @@ GUSH_DAN = {
 ```
 https://github.com/zivversano/finalproject.git
 branch: main
+
+commits:
+  28aeb57 — run.sh Step 4 portable fix (_kafka() helper + 90s readiness loop)
+  1caea02 — bot.py /gushdan + /api/dankal + gushdan_app.html (947 lines)
 ```

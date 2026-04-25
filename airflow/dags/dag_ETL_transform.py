@@ -68,6 +68,8 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     from storage.s3_writer import S3Writer
     import json, os
 
+    CHUNK_SIZE = 500   # flush to S3 every N records to avoid OOM on large topics
+
     consumer = KafkaConsumer(
         topic_key,   # topic_key IS the Kafka topic name (e.g. "bus-positions", "traffic-data")
         bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
@@ -89,6 +91,26 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     raw_records       = []
     processed_records = []
     count             = 0
+    total_processed   = 0
+
+    def _flush_chunk():
+        """Write current buffers to S3 and clear them."""
+        nonlocal total_processed
+        if raw_records:
+            s3_raw.write_batch(raw_records)
+            raw_records.clear()
+        if processed_records:
+            s3_processed.write_batch(processed_records)
+            total_processed += len(processed_records)
+            if os.getenv("REDSHIFT_HOST"):
+                from warehouse.redshift_writer import RedshiftWriter
+                rw = RedshiftWriter()
+                if upsert_key:
+                    rw.batch_upsert(redshift_table, processed_records, upsert_key)
+                else:
+                    rw.bulk_insert(redshift_table, processed_records)
+                rw.close()
+            processed_records.clear()
 
     for msg in consumer:
         if count >= max_msgs:
@@ -116,28 +138,19 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
 
         count += 1
 
+        # Flush every CHUNK_SIZE records to prevent OOM
+        if count % CHUNK_SIZE == 0:
+            _flush_chunk()
+
     consumer.commit()
     consumer.close()
 
-    if raw_records:
-        s3_raw.write_batch(raw_records)
-        print(f"Raw: {len(raw_records)} records → s3://{raw_prefix}")
+    # Final flush for remaining records
+    _flush_chunk()
+    print(f"Raw: flushed via chunks → s3://{raw_prefix}")
+    print(f"Processed: {total_processed} records → s3://{processed_prefix}")
 
-    if processed_records:
-        s3_processed.write_batch(processed_records)
-        print(f"Processed: {len(processed_records)} records → s3://{processed_prefix}")
-
-        if os.getenv("REDSHIFT_HOST"):
-            from warehouse.redshift_writer import RedshiftWriter
-            rw = RedshiftWriter()
-            if upsert_key:
-                # FIX: batch upsert instead of per-record loop
-                rw.batch_upsert(redshift_table, processed_records, upsert_key)
-            else:
-                rw.bulk_insert(redshift_table, processed_records)
-            rw.close()
-
-    return len(processed_records)
+    return total_processed
 
 
 def consume_bus_positions(**context):
@@ -235,11 +248,39 @@ def detect_and_publish_delay_events(**context):
     s3_raw       = S3Writer(prefix="raw/delay-events")
     s3_processed = S3Writer(prefix="processed/delay-events")
 
-    raw_events       = []
-    processed_events = []
+    # Create KafkaProducer up-front so _flush_delay_chunk can use it
+    kp = KafkaProducer(
+        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
+        value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
+    )
+
+    CHUNK_SIZE       = 500   # flush every N events to avoid OOM
+    raw_chunk        = []
+    proc_chunk       = []
+    total_raw        = 0
+    total_proc       = 0
+
+    def _flush_delay_chunk():
+        nonlocal total_raw, total_proc
+        if raw_chunk:
+            s3_raw.write_batch(raw_chunk)
+            total_raw += len(raw_chunk)
+            raw_chunk.clear()
+        if proc_chunk:
+            s3_processed.write_batch(proc_chunk)
+            # Publish this batch to Kafka delay-events topic
+            for event in proc_chunk:
+                kp.send("delay-events", value={
+                    "source":     "delay-detector",
+                    "fetched_at": event["detected_at"],
+                    "data":       event,
+                })
+            kp.flush()
+            total_proc += len(proc_chunk)
+            proc_chunk.clear()
 
     for msg in consumer:
-        if len(raw_events) >= 5000:
+        if total_raw + len(raw_chunk) >= 5000:
             break
         raw = msg.value.get("data", {})
         if not raw:
@@ -251,42 +292,25 @@ def detect_and_publish_delay_events(**context):
                 raw_rec["_fetched_at"]   = msg.value.get("fetched_at")
                 raw_rec["_source"]       = msg.value.get("source")
                 raw_rec["_kafka_offset"] = msg.offset
-                raw_events.append(raw_rec)
+                raw_chunk.append(raw_rec)
 
                 transformed["detected_at"] = datetime.now(ZoneInfo("Asia/Jerusalem")).isoformat()
-                processed_events.append(transformed)
+                proc_chunk.append(transformed)
+
+                if len(raw_chunk) >= CHUNK_SIZE:
+                    _flush_delay_chunk()
         except Exception as e:
             print(f"Delay transform error: {e}")
 
     consumer.commit()
     consumer.close()
 
-    print(f"Detected {len(processed_events)} delay events (threshold: {DELAY_THRESHOLD_MIN} min)")
+    # Final flush
+    _flush_delay_chunk()
+    kp.close()
 
-    if raw_events:
-        s3_raw.write_batch(raw_events)
-        print(f"Raw: {len(raw_events)} records → MinIO raw/delay-events/")
-
-    if processed_events:
-        s3_processed.write_batch(processed_events)
-        print(f"Processed: {len(processed_events)} records → MinIO processed/delay-events/")
-
-        # Publish to delay-events Kafka topic so ES indexer + Kibana pick them up
-        kp = KafkaProducer(
-            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
-            value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
-        )
-        for event in processed_events:
-            kp.send("delay-events", value={
-                "source":     "delay-detector",
-                "fetched_at": event["detected_at"],
-                "data":       event,
-            })
-        kp.flush()
-        kp.close()
-        print(f"Published {len(processed_events)} delay events to Kafka delay-events topic")
-
-    context["ti"].xcom_push(key="delay_events_n", value=len(processed_events))
+    print(f"Detected {total_proc} delay events (threshold: {DELAY_THRESHOLD_MIN} min) — flushed in chunks")
+    context["ti"].xcom_push(key="delay_events_n", value=total_proc)
 
 
 def consume_traffic(**context):

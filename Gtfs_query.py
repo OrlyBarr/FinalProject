@@ -107,33 +107,41 @@ def search_routes(query: str = "", operator_id: str = "", limit: int = 50) -> li
         FROM gtfs.routes r
         LEFT JOIN gtfs.agency a ON a.agency_id = r.agency_id
         {where_str}
-        ORDER BY r.route_short_name::int NULLS LAST, r.route_short_name
+        ORDER BY
+            CASE WHEN r.route_short_name ~ '^[0-9]+$'
+                 THEN r.route_short_name::integer ELSE NULL END NULLS LAST,
+            r.route_short_name
         LIMIT %s
     """, params + [limit])
 
 
 def get_route_stops(route_id: str, direction: int = 0) -> list[dict]:
     """
-    מחזיר תחנות של קו לפי route_id (ו-direction).
+    מחזיר תחנות של קו לפי route_id.
+    מנסה direction=0 תחילה; אם ריק, מנסה direction=1 ואחר-כך כל direction.
     """
-    return _q("""
-        SELECT DISTINCT ON (st.stop_sequence)
-            s.stop_id,
-            s.stop_name,
-            s.stop_code,
-            s.stop_lat,
-            s.stop_lon,
-            st.stop_sequence,
-            st.arrival_time,
-            st.departure_time
-        FROM gtfs.trips t
-        JOIN gtfs.stop_times st ON st.trip_id = t.trip_id
-        JOIN gtfs.stops s       ON s.stop_id  = st.stop_id
-        WHERE t.route_id    = %s
-          AND t.direction_id = %s
-        ORDER BY st.stop_sequence
-        LIMIT 80
-    """, (route_id, direction))
+    for dir_filter in [f"AND t.direction_id = {direction}", "AND t.direction_id = 1", ""]:
+        rows = _q(f"""
+            SELECT DISTINCT ON (st.stop_sequence)
+                s.stop_id,
+                s.stop_name,
+                s.stop_code,
+                s.stop_lat,
+                s.stop_lon,
+                st.stop_sequence,
+                st.arrival_time,
+                st.departure_time
+            FROM gtfs.trips t
+            JOIN gtfs.stop_times st ON st.trip_id = t.trip_id
+            JOIN gtfs.stops s       ON s.stop_id  = st.stop_id
+            WHERE t.route_id = %s
+              {dir_filter}
+            ORDER BY st.stop_sequence
+            LIMIT 80
+        """, (route_id,))
+        if rows:
+            return rows
+    return []
 
 
 def get_route_stops_by_short_name(short_name: str) -> list[dict]:
@@ -194,9 +202,26 @@ def get_routes_at_stop(stop_id: str) -> list[dict]:
         JOIN gtfs.routes r ON r.route_id = t.route_id
         LEFT JOIN gtfs.agency a ON a.agency_id = r.agency_id
         WHERE st.stop_id = %s
-        ORDER BY r.route_short_name::int NULLS LAST
+        ORDER BY
+            CASE WHEN r.route_short_name ~ '^[0-9]+$'
+                 THEN r.route_short_name::integer ELSE NULL END NULLS LAST,
+            r.route_short_name
         LIMIT 50
     """, (stop_id,))
+
+
+def get_line_ref_map(limit: int = 8000) -> dict[str, str]:
+    """
+    מחזיר mapping מ-route_id (=siri line_ref) → route_short_name.
+    משמש לתרגום מספרים פנימיים של SIRI לשמות קווים קריאים (כגון 16542 → '63').
+    """
+    rows = _q(
+        "SELECT route_id, route_short_name FROM gtfs.routes "
+        "WHERE route_short_name IS NOT NULL AND route_short_name <> '' "
+        "LIMIT %s",
+        (limit,),
+    )
+    return {str(r["route_id"]): str(r["route_short_name"]) for r in rows}
 
 
 def get_stop_schedule(stop_id: str, from_time: str = "00:00:00",

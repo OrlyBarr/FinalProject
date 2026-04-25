@@ -190,37 +190,88 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "3 — Waiting for services to be ready"
 
-wait_for_service "Kafka UI"  "http://localhost:8080"        20
+wait_for_service "Kafka UI"  "http://localhost:8085"        20
 wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 15
 wait_for_service "Airflow"   "http://localhost:8081/health"  60
+
+# Wait for Kafka broker to be healthy (health check uses localhost:9092 inside container)
+log "Waiting for Kafka broker to become healthy..."
+KAFKA_WAIT=0
+until [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] || [ $KAFKA_WAIT -ge 60 ]; do
+  echo -n "."
+  sleep 3
+  KAFKA_WAIT=$((KAFKA_WAIT + 3))
+done
+echo ""
+if [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ]; then
+  success "Kafka broker is healthy!"
+else
+  warn "Kafka broker did not become healthy within 60 seconds — continuing anyway"
+fi
 
 # ─────────────────────────────────────────────────────────────
 #  Step 4: Create Kafka Topics
 # ─────────────────────────────────────────────────────────────
 step "4 — Creating Kafka Topics"
 
-# Check if topics already exist
-EXISTING=$(docker exec kafka kafka-topics --list --bootstrap-server localhost:9092 2>/dev/null || echo "")
+# ── Portable timeout helper ────────────────────────────────────────────────────
+# The system 'timeout' command is unavailable on macOS and unreliable on Git Bash.
+# This helper runs a 'docker exec kafka' command in the background and kills it
+# if it hasn't finished within <secs> seconds.
+# Usage: _kafka <secs> <kafka-subcommand> [args...]
+_kafka() {
+  local secs=$1; shift
+  docker exec kafka "$@" &
+  local _pid=$! _elapsed=0
+  while [ $_elapsed -lt $secs ] && kill -0 "$_pid" 2>/dev/null; do
+    sleep 1; _elapsed=$((_elapsed + 1))
+  done
+  if kill -0 "$_pid" 2>/dev/null; then
+    kill "$_pid" 2>/dev/null
+    wait "$_pid" 2>/dev/null
+    return 1   # timed out
+  fi
+  wait "$_pid"
+  return $?
+}
 
-TOPICS_TO_CREATE=""
-for topic in "bus-positions" "train-positions" "trip-updates" "service-alerts" "delay-events" "traffic-data" "pipeline-errors" "bus-delays" "train-delays" "bus-delays-historical" "train-delays-historical"; do
-  if echo "$EXISTING" | grep -q "^${topic}$"; then
-    warn "Topic '${topic}' already exists — skipping"
+# ── Wait for Kafka broker to accept client connections ────────────────────────
+# Docker marks the container "healthy" as soon as ZooKeeper registration is done,
+# but the PLAINTEXT_HOST listener on port 9092 may still be binding.
+# We loop here (up to 90 s) until a real kafka-topics command succeeds.
+log "Waiting for Kafka broker to accept client connections..."
+KAFKA_READY=false
+for i in $(seq 1 30); do
+  if _kafka 5 kafka-topics --list --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+    KAFKA_READY=true
+    success "Kafka broker is accepting connections!"
+    break
+  fi
+  echo -n "."
+  sleep 3
+done
+echo ""
+if [ "$KAFKA_READY" = "false" ]; then
+  warn "Kafka not responding after 90s — attempting topic creation anyway"
+fi
+
+# ── Create topics (idempotent — --if-not-exists makes re-runs safe) ───────────
+ALL_TOPICS="bus-positions train-positions trip-updates service-alerts \
+            delay-events traffic-data pipeline-errors \
+            bus-delays train-delays bus-delays-historical train-delays-historical"
+
+for topic in $ALL_TOPICS; do
+  if _kafka 20 kafka-topics \
+       --create --if-not-exists \
+       --bootstrap-server localhost:9092 \
+       --partitions 4 \
+       --replication-factor 1 \
+       --topic "$topic" 2>/dev/null; then
+    success "Topic ready: $topic"
   else
-    TOPICS_TO_CREATE="$TOPICS_TO_CREATE $topic"
+    warn "Could not create '$topic' (Kafka may be busy) — will retry on next run"
   fi
 done
-
-# Create all missing topics in minimal docker exec calls
-for topic in $TOPICS_TO_CREATE; do
-  docker exec kafka kafka-topics \
-    --create --if-not-exists \
-    --bootstrap-server localhost:9092 \
-    --partitions 4 \
-    --replication-factor 1 \
-    --topic "$topic" 2>/dev/null && success "Topic created: $topic"
-done
-[ -z "$TOPICS_TO_CREATE" ] && success "All Kafka topics already exist"
 
 # ─────────────────────────────────────────────────────────────
 #  Step 5: Initialize Airflow
@@ -298,6 +349,37 @@ except Exception as e:
 EOF
 
 # ─────────────────────────────────────────────────────────────
+#  Step 6.5: Load GTFS Static → PostgreSQL
+#  Skipped if data already loaded (freshness: < 23 hours)
+# ─────────────────────────────────────────────────────────────
+step "6.5 — GTFS Static → PostgreSQL"
+
+GTFS_ROUTES=$(POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 - 2>/dev/null <<'PYEOF'
+import sys; sys.path.insert(0, '.')
+try:
+    import psycopg2
+    conn = psycopg2.connect(host='localhost', port=5432, dbname='airflow',
+                            user='airflow', password='airflow', connect_timeout=5)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM gtfs.routes")
+    print(cur.fetchone()[0])
+    conn.close()
+except Exception:
+    print("0")
+PYEOF
+)
+
+if [ "${GTFS_ROUTES:-0}" -gt 100 ] 2>/dev/null; then
+  success "GTFS already loaded (${GTFS_ROUTES} routes) — skipping download"
+else
+  log "Downloading GTFS Static from MOT (~150 MB) and loading to PostgreSQL..."
+  log "This takes 1–3 minutes. Streaming in 64 KB chunks — no large RAM spike."
+  POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 Load_gtfs.py && \
+    success "GTFS data loaded successfully!" || \
+    warn "GTFS load failed — run manually later: python3 Load_gtfs.py"
+fi
+
+# ─────────────────────────────────────────────────────────────
 #  Step 7: Initialize Redshift Schema (or local PostgreSQL)
 # ─────────────────────────────────────────────────────────────
 step "7 — Initializing Data Warehouse Schema"
@@ -326,7 +408,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "8 — Enabling Airflow DAGs"
 
-for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic" "dag_hourly_coverage"; do
+for dag in "dag_realtime_ingestion" "dag_etl_transform" "dag_daily_analytics" "dag_traffic_ingestion" "dag_es_indexer" "dag_direct_transit" "dag_direct_alerts" "dag_direct_traffic" "dag_hourly_coverage" "dag_gtfs_load"; do
   docker compose exec -T airflow-webserver \
     airflow dags unpause "$dag" 2>/dev/null && \
     success "DAG enabled: $dag" || \
@@ -343,6 +425,9 @@ venv/bin/python3 - <<'EOF'
 import sys; sys.path.insert(0, '.')
 import requests
 
+# NOTE: MOT GTFS-RT feeds (.pb) are WAF-protected — they often return HTTP 403 on HEAD requests.
+# The system uses Open Bus Stride API instead for real-time vehicle data.
+# A 403 here does NOT mean the system is broken — Stride is the primary source.
 feeds = {
     'VehiclePositions (bus locations)': 'https://gtfs.mot.gov.il/gtfsfiles/VehiclePositions.pb',
     'TripUpdates (delays)':             'https://gtfs.mot.gov.il/gtfsfiles/TripUpdates.pb',
@@ -353,6 +438,8 @@ for name, url in feeds.items():
         r = requests.head(url, timeout=5)
         if r.status_code == 200:
             print(f'✅ {name}: available')
+        elif r.status_code == 403:
+            print(f'⚠️  {name}: WAF-blocked (HTTP 403) — system uses Stride API instead')
         else:
             print(f'⚠️  {name}: HTTP {r.status_code}')
     except Exception as e:
@@ -476,7 +563,7 @@ echo -e "${NC}"
 
 echo -e "${BOLD}  🔗  Access URLs:${NC}"
 echo -e "  ${CYAN}Airflow UI${NC}     →  http://localhost:8081  (admin / admin)"
-echo -e "  ${CYAN}Kafka UI${NC}       →  http://localhost:8080"
+echo -e "  ${CYAN}Kafka UI${NC}       →  http://localhost:8085"
 echo -e "  ${CYAN}MinIO Console${NC}  →  http://localhost:9001  (minioadmin / minioadmin123)"
 echo -e "  ${CYAN}Kibana${NC}         →  http://localhost:5601"
 echo -e "  ${CYAN}Bot API${NC}        →  http://localhost:5000  (GET /buses /stops /status)"

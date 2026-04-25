@@ -567,6 +567,15 @@ def generate_daily_report(**context):
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
+    # Keep only last 7 daily reports — prevent disk fill in the airflow_logs volume
+    import glob, os as _os
+    old_reports = sorted(glob.glob("/opt/airflow/logs/transit_report_*.html"))
+    for old in old_reports[:-7]:
+        try:
+            _os.unlink(old)
+        except Exception:
+            pass
+
     print(f"Daily report saved → {output_path}")
     print(f"Network on-time rate: {on_time_rate}% | Avg delay: {kpis.get('avg_delay_min')} min")
 

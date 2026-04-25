@@ -3,7 +3,7 @@ airflow/dags/dag_direct_to_minio.py
 
 Three DAGs — no Kafka dependency, write directly to israel-transit-lake:
 
-  dag_direct_transit  — buses + trains every 1 minute
+  dag_direct_transit  — buses + trains every 2 minutes (was 1 min — too aggressive for VM)
   dag_direct_traffic  — HERE traffic every 5 minutes (rate-limit friendly)
   dag_direct_alerts   — stop delays + service alerts every 5 minutes
 
@@ -46,12 +46,12 @@ def _run(only, **context):
         context["ti"].xcom_push(key=only, value=r.get(only, 0))
 
 
-# ── DAG 1: Buses + Trains — every 1 minute ────────────────────────────────────
+# ── DAG 1: Buses + Trains — every 2 minutes ───────────────────────────────────
 with DAG(
     dag_id="dag_direct_transit",
     default_args=_default,
-    description="Buses + Trains → MinIO israel-transit-lake (every 1 min, no Kafka)",
-    schedule_interval=timedelta(minutes=1),
+    description="Buses + Trains → MinIO israel-transit-lake (every 2 min, no Kafka)",
+    schedule_interval=timedelta(minutes=2),   # FIX: 1 min was too aggressive for 6 GB VM
     catchup=False,
     max_active_runs=1,
     tags=["minio", "transit", "direct"],

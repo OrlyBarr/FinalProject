@@ -15,6 +15,8 @@ Usage:
 """
 
 import json
+import os
+import signal
 import time
 import logging
 import argparse
@@ -192,6 +194,21 @@ def publish_records(producer: KafkaProducer, records: list[dict], topic: str):
     return published
 
 
+# ─── Graceful shutdown ────────────────────────────────────────────────────────
+
+_stop = False
+
+def _handle_signal(signum, frame):
+    global _stop
+    log.info(f"Received signal {signum} — stopping after current cycle")
+    _stop = True
+
+signal.signal(signal.SIGTERM, _handle_signal)
+signal.signal(signal.SIGINT,  _handle_signal)
+
+MAX_RUNTIME_SECONDS = int(os.getenv("TRAIN_COLLECTOR_MAX_RUNTIME_HOURS", "4")) * 3600
+
+
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
 def collect_once(producer: KafkaProducer) -> int:
@@ -235,11 +252,17 @@ def collect_once(producer: KafkaProducer) -> int:
 
 
 def run(once: bool = False):
+    global _stop
     log.info(f"Starting Train Delay Collector → topic: {KAFKA_TOPIC_TRAIN_DELAYS}")
     log.info(f"Monitoring {len(MONITORED_TRAIN_ROUTES)} routes")
     producer = create_producer()
+    run_start = time.time()
     try:
-        while True:
+        while not _stop:
+            if time.time() - run_start >= MAX_RUNTIME_SECONDS:
+                log.warning(f"Max runtime ({MAX_RUNTIME_SECONDS}s) reached — exiting cleanly")
+                break
+
             start = time.time()
             count = collect_once(producer)
             elapsed = time.time() - start
@@ -249,10 +272,12 @@ def run(once: bool = False):
                 break
             sleep_time = max(0, TRAIN_POLL_INTERVAL_SECONDS - elapsed)
             log.info(f"Sleeping {sleep_time:.0f}s until next cycle...")
-            time.sleep(sleep_time)
-    except KeyboardInterrupt:
-        log.info("Stopped by user")
+            for _ in range(int(sleep_time)):
+                if _stop:
+                    break
+                time.sleep(1)
     finally:
+        log.info("Train Delay Collector shutting down")
         producer.close()
 
 

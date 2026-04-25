@@ -14,6 +14,7 @@ volumes:
   kafka_data:
   zookeeper_data:
   elasticsearch_data:
+  pgadmin_data:
 
 services:
 
@@ -25,9 +26,11 @@ services:
     container_name: zookeeper
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 256m
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
     healthcheck:
@@ -43,6 +46,7 @@ services:
     container_name: kafka
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 512m
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -55,8 +59,13 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_LOG_RETENTION_HOURS: 48
+      KAFKA_LOG_RETENTION_HOURS: 24
       KAFKA_MESSAGE_MAX_BYTES: 5242880
+      # JVM heap limit — default is 1GB which crashes the VM; 256m is enough for this load
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
+      # Reduce network buffer to save RAM (default 100MB)
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 10485760
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 10485760
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
@@ -72,15 +81,17 @@ services:
     container_name: kafka-ui
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 256m
     depends_on:
       kafka:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "8085:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: transit-cluster
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      JAVA_OPTS: "-Xmx192m -Xms64m"
 
 # ─────────────────────────────────────────
   # KAFKA TOPIC INITIALIZER
@@ -116,12 +127,23 @@ services:
     container_name: postgres
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 256m
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+      # Tune shared_buffers for small VM (default 128MB is too high here)
+      POSTGRES_INITDB_ARGS: "--no-sync"
+    command: >
+      postgres
+      -c shared_buffers=32MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=20
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"   # Expose to host for pgAdmin / DBeaver / psql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -133,9 +155,10 @@ services:
   airflow-webserver:
     image: apache/airflow:2.7.0
     container_name: airflow-webserver
-    restart: unless-stopped
+    restart: no
     networks: [transit_net]
     env_file: .env
+    mem_limit: 1g
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,11 +168,11 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: transit_secret_2025
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      _PIP_ADDITIONAL_REQUIREMENTS: >-
-        kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
-        psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
-        python-dotenv>=1.0 gtfs-realtime-bindings==2.0.0
-        geopy>=2.3 elasticsearch>=8.0,<9.0 backports.zoneinfo
+      # ── Memory / concurrency limits (keeps VM free for VS Code) ──
+      AIRFLOW__CORE__PARALLELISM: '2'          # must match scheduler — controls max concurrent tasks
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '2'
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
+      AIRFLOW__WEBSERVER__WORKERS: '1'
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
@@ -180,12 +203,13 @@ services:
     ports:
       - "8081:8080"
     command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@transit.il 2>/dev/null || true && airflow webserver"
+    # ── healthcheck: port-only (NOT /health endpoint — that spawns zombie airflow jobs check processes!) ──
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
   # ─────────────────────────────────────────
   # AIRFLOW SCHEDULER
@@ -193,17 +217,28 @@ services:
   airflow-scheduler:
     image: apache/airflow:2.7.0
     container_name: airflow-scheduler
-    restart: unless-stopped
+    restart: no
     networks: [transit_net]
     env_file: .env
+    mem_limit: 800m
     depends_on:
       airflow-webserver:
-        condition: service_healthy
+        condition: service_started   # NOT service_healthy — avoids health-loop cascade
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PYTHONPATH: /opt/airflow
+      # ── Memory / concurrency limits ──
+      AIRFLOW__CORE__PARALLELISM: '2'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '1'
+      AIRFLOW__SCHEDULER__MAX_THREADS: '1'
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
+      # ── Prevent zombie health-check processes ──
+      AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '60'
+      AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '120'
+      AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: '60.0'
       _PIP_ADDITIONAL_REQUIREMENTS: >-
         kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
         psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
@@ -238,12 +273,15 @@ services:
     container_name: minio
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 256m
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
+      # Reduce Go GC pressure to keep memory usage low
+      GOGC: "20"
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -260,9 +298,12 @@ services:
     container_name: elasticsearch
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 900m
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      # Xms=Xmx avoids heap resize during startup → eliminates GC burst that blocked healthcheck
+      # 512m heap + ~300m JVM/OS overhead = stays within 900m container limit
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
@@ -272,8 +313,8 @@ services:
       test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
       interval: 15s
       timeout: 10s
-      retries: 15
-      start_period: 60s
+      retries: 20
+      start_period: 90s
 
   # ─────────────────────────────────────────
   # KIBANA - Live Dashboard
@@ -283,6 +324,7 @@ services:
     container_name: kibana
     restart: unless-stopped
     networks: [transit_net]
+    mem_limit: 512m
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -290,3 +332,29 @@ services:
       - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      # Cap Node.js heap so Kibana stays within 512m container limit
+      NODE_OPTIONS: "--max-old-space-size=384"
+
+  # ─────────────────────────────────────────
+  # PGADMIN - PostgreSQL Web UI
+  # Access: http://localhost:5050
+  # Login:  admin@transit.il / admin
+  # ─────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    networks: [transit_net]
+    mem_limit: 256m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@transit.il
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"       # single-user mode — no login prompt
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
