@@ -14,6 +14,7 @@ volumes:
   kafka_data:
   zookeeper_data:
   elasticsearch_data:
+  pgadmin_data:
 
 services:
 
@@ -332,3 +333,27 @@ services:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
       # Cap Node.js heap so Kibana stays within 512m container limit
       NODE_OPTIONS: "--max-old-space-size=384"
+
+  # ─────────────────────────────────────────
+  # PGADMIN - PostgreSQL Web UI
+  # Access: http://localhost:5050
+  # Login:  admin@transit.il / admin
+  # ─────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    networks: [transit_net]
+    mem_limit: 256m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@transit.il
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"       # single-user mode — no login prompt
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
