@@ -102,6 +102,10 @@ class ResilientProducer:
                 pass
 
     def _buffer(self, topic: str, value: Any, key: str = None):
+        # Guard: stop buffering if disk usage exceeds MAX_BUFFER_MB
+        if self.buffer_size_mb() >= MAX_BUFFER_MB:
+            log.error(f"Buffer limit ({MAX_BUFFER_MB} MB) reached — dropping message for topic {topic}")
+            return
         ts    = int(time.time() * 1000)
         fname = self.buffer_dir / f"{topic}_{ts}.json"
         try:

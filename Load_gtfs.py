@@ -156,10 +156,16 @@ def ensure_schema(conn):
     log.info("Schema ready")
 
 
-def download_gtfs() -> bytes:
-    """מוריד את קובץ ה-ZIP של GTFS."""
+def download_gtfs() -> str:
+    """
+    מוריד את קובץ ה-ZIP של GTFS לקובץ זמני בדיסק (ולא לזיכרון).
+    מחזיר נתיב לקובץ. הקורא אחראי למחוק אחרי שימוש.
+    """
+    import tempfile
+    import shutil
+    CHUNK = 1024 * 1024  # 1 MB
     for url in [GTFS_URL, GTFS_URL_ALT]:
-        log.info(f"Downloading GTFS from {url}...")
+        log.info(f"Downloading GTFS from {url} (streaming to disk)...")
         try:
             req = urllib.request.Request(
                 url,
@@ -168,23 +174,55 @@ def download_gtfs() -> bytes:
                     "Accept": "application/zip,*/*",
                 },
             )
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip", prefix="gtfs_")
+            total = 0
             with urllib.request.urlopen(req, timeout=120) as resp:
-                data = resp.read()
-            log.info(f"Downloaded {len(data)/1024/1024:.1f} MB")
-            return data
+                while True:
+                    chunk = resp.read(CHUNK)
+                    if not chunk:
+                        break
+                    tmp.write(chunk)
+                    total += len(chunk)
+            tmp.flush()
+            tmp.close()
+            log.info(f"Downloaded {total/1024/1024:.1f} MB → {tmp.name}")
+            return tmp.name
         except Exception as e:
             log.warning(f"Failed to download from {url}: {e}")
+            try: os.unlink(tmp.name)
+            except Exception: pass
     raise RuntimeError("Could not download GTFS from any source")
 
 
 def load_csv(zf: zipfile.ZipFile, filename: str) -> list[dict]:
-    """קורא CSV מתוך ה-ZIP, מחזיר list of dicts."""
+    """קורא CSV קטן מתוך ה-ZIP, מחזיר list of dicts. לקבצים גדולים השתמש ב-iter_csv."""
     if filename not in zf.namelist():
         log.warning(f"{filename} not found in ZIP")
         return []
     with zf.open(filename) as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
         return list(reader)
+
+
+def iter_csv_chunks(zf: zipfile.ZipFile, filename: str, chunk_size: int = 5000):
+    """
+    גרסה חסכונית בזיכרון: קורא CSV גדול (כגון stop_times.txt) מתוך ה-ZIP
+    ומחזיר generator של chunks (list of dicts) בגודל chunk_size.
+    כך לא נטען את כל הקובץ לזיכרון בבת אחת.
+    """
+    if filename not in zf.namelist():
+        log.warning(f"{filename} not found in ZIP")
+        return
+    with zf.open(filename) as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig"))
+        chunk = []
+        for row in reader:
+            chunk.append(row)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
 
 def bulk_insert(conn, table: str, rows: list[dict], columns: list[str], batch=5000):
@@ -280,26 +318,36 @@ def load_trips(zf, conn, route_ids: set = None):
 
 
 def load_stop_times(zf, conn, trip_ids: set, stop_ids: set):
-    """טוען stop_times — מסונן לפי trips ו-stops שנטענו."""
-    log.info("Loading stop_times (may take a while)...")
-    rows = load_csv(zf, "stop_times.txt")
-    filtered = [
-        r for r in rows
-        if r.get("trip_id") in trip_ids and r.get("stop_id") in stop_ids
-    ]
-    log.info(f"stop_times: {len(rows)} total → {len(filtered)} relevant")
+    """
+    טוען stop_times בchunks של 5,000 שורות — קובץ זה יכול להיות 5M+ שורות ו-500MB+.
+    קריאת כל הקובץ לzיכרון בבת אחת תגרום לOOM. chunked reading מונע זאת.
+    """
+    log.info("Loading stop_times in chunks (memory-safe)...")
     cols = ["trip_id","arrival_time","departure_time","stop_id",
             "stop_sequence","pickup_type","drop_off_type"]
-    for r in filtered:
-        try: r["stop_sequence"] = int(r.get("stop_sequence") or 0)
-        except: r["stop_sequence"] = 0
-        try: r["pickup_type"] = int(r.get("pickup_type") or 0)
-        except: r["pickup_type"] = 0
-        try: r["drop_off_type"] = int(r.get("drop_off_type") or 0)
-        except: r["drop_off_type"] = 0
-    n = bulk_insert(conn, "gtfs.stop_times", filtered, cols)
-    log.info(f"stop_times: {n} rows loaded")
-    return n
+    total_read = 0
+    total_inserted = 0
+
+    for chunk in iter_csv_chunks(zf, "stop_times.txt", chunk_size=5000):
+        total_read += len(chunk)
+        filtered = [
+            r for r in chunk
+            if r.get("trip_id") in trip_ids and r.get("stop_id") in stop_ids
+        ]
+        for r in filtered:
+            try: r["stop_sequence"] = int(r.get("stop_sequence") or 0)
+            except: r["stop_sequence"] = 0
+            try: r["pickup_type"] = int(r.get("pickup_type") or 0)
+            except: r["pickup_type"] = 0
+            try: r["drop_off_type"] = int(r.get("drop_off_type") or 0)
+            except: r["drop_off_type"] = 0
+        if filtered:
+            total_inserted += bulk_insert(conn, "gtfs.stop_times", filtered, cols)
+        if total_read % 50000 == 0:
+            log.info(f"  stop_times progress: {total_read:,} rows read, {total_inserted:,} inserted")
+
+    log.info(f"stop_times: {total_read:,} total rows read → {total_inserted:,} relevant rows loaded")
+    return total_inserted
 
 
 def load_calendar(zf, conn):
@@ -364,56 +412,59 @@ def main():
             cur.execute(f"TRUNCATE {t} CASCADE")
     conn.commit()
 
-    # הורד GTFS
-    data = download_gtfs()
+    # הורד GTFS לדיסק (לא לזיכרון — הקובץ 150MB+)
+    gtfs_path = download_gtfs()
+    try:
+        with zipfile.ZipFile(gtfs_path) as zf:
+            log.info(f"ZIP contents: {zf.namelist()}")
 
-    with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        log.info(f"ZIP contents: {zf.namelist()}")
+            # טען agency
+            load_agency(zf, conn)
 
-        # טען agency
-        load_agency(zf, conn)
+            # טען routes
+            routes_count = load_routes(zf, conn)
 
-        # טען routes
-        routes_count = load_routes(zf, conn)
+            if args.routes:
+                log.info("--routes flag: skipping stops, trips, stop_times")
+            else:
+                # קבל route_ids שנטענו
+                with conn.cursor() as cur:
+                    cur.execute("SELECT route_id FROM gtfs.routes")
+                    route_ids = {r[0] for r in cur.fetchall()}
 
-        if args.routes:
-            log.info("--routes flag: skipping stops, trips, stop_times")
-        else:
-            # קבל route_ids שנטענו
-            with conn.cursor() as cur:
-                cur.execute("SELECT route_id FROM gtfs.routes")
-                route_ids = {r[0] for r in cur.fetchall()}
+                # טען stops (סינון גיאוגרפי לגוש דן)
+                stops_count = load_stops(zf, conn, bbox_filter=True)
 
-            # טען stops (סינון גיאוגרפי לגוש דן)
-            stops_count = load_stops(zf, conn, bbox_filter=True)
+                # קבל stop_ids שנטענו
+                with conn.cursor() as cur:
+                    cur.execute("SELECT stop_id FROM gtfs.stops")
+                    stop_ids = {r[0] for r in cur.fetchall()}
 
-            # קבל stop_ids שנטענו
-            with conn.cursor() as cur:
-                cur.execute("SELECT stop_id FROM gtfs.stops")
-                stop_ids = {r[0] for r in cur.fetchall()}
+                # טען trips
+                trips_count = load_trips(zf, conn, route_ids)
 
-            # טען trips
-            trips_count = load_trips(zf, conn, route_ids)
+                # קבל trip_ids
+                with conn.cursor() as cur:
+                    cur.execute("SELECT trip_id FROM gtfs.trips")
+                    trip_ids = {r[0] for r in cur.fetchall()}
 
-            # קבל trip_ids
-            with conn.cursor() as cur:
-                cur.execute("SELECT trip_id FROM gtfs.trips")
-                trip_ids = {r[0] for r in cur.fetchall()}
+                # טען stop_times (הכבד ביותר)
+                if not args.no_stop_times:
+                    load_stop_times(zf, conn, trip_ids, stop_ids)
 
-            # טען stop_times (הכבד ביותר)
-            if not args.no_stop_times:
-                load_stop_times(zf, conn, trip_ids, stop_ids)
+                # טען calendar
+                load_calendar(zf, conn)
 
-            # טען calendar
-            load_calendar(zf, conn)
-
-            # שמור סטטוס
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO gtfs.load_status (source_url, routes_cnt, stops_cnt, trips_cnt) VALUES (%s,%s,%s,%s)",
-                    (GTFS_URL, routes_count, stops_count, trips_count)
-                )
-            conn.commit()
+                # שמור סטטוס
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO gtfs.load_status (source_url, routes_cnt, stops_cnt, trips_cnt) VALUES (%s,%s,%s,%s)",
+                        (GTFS_URL, routes_count, stops_count, trips_count)
+                    )
+                conn.commit()
+    finally:
+        try: os.unlink(gtfs_path)
+        except Exception: pass
 
     elapsed = time.time() - t0
     log.info(f"✅ GTFS load complete in {elapsed:.1f}s")

@@ -126,7 +126,7 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
         f"day={now.day:02d}/hour={now.hour:02d}/"
         f"{label}_{now.strftime('%Y%m%d_%H%M%S')}.json"
     )
-    body = json.dumps(records, ensure_ascii=False, indent=2).encode("utf-8")
+    body = json.dumps(records, ensure_ascii=False).encode("utf-8")  # compact JSON saves ~30% RAM vs indent=2
     path = f"s3://{MAIN_BUCKET}/{key}"
 
     last_err = None
@@ -204,7 +204,13 @@ def _get_last_stored_records(s3, prefix: str, now_ts: str) -> list:
         objs = [o for o in r.get("Contents", []) if o["Size"] > 0]
         if not objs:
             return []
-        latest_key = max(objs, key=lambda o: o["LastModified"])["Key"]
+        latest = max(objs, key=lambda o: o["LastModified"])
+        latest_key  = latest["Key"]
+        # Guard: skip files larger than 10 MB to prevent OOM
+        MAX_READ_BYTES = 10 * 1024 * 1024
+        if latest["Size"] > MAX_READ_BYTES:
+            log.warning(f"  Fallback skipped: {latest_key} is {latest['Size']//1024//1024}MB (> 10MB limit)")
+            return []
         body = s3.get_object(Bucket=MAIN_BUCKET, Key=latest_key)["Body"].read()
         try:
             records = json.loads(body)

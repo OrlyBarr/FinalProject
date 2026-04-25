@@ -59,15 +59,19 @@ def _hour_has_data(s3, bucket: str, prefix: str, year: int, month: int, day: int
 
 
 def _get_fallback_records(s3, bucket: str, prefix: str) -> list:
-    """קרא את הקובץ האחרון הידוע מ-MinIO לשימוש כ-fallback."""
+    """קרא את הקובץ האחרון הידוע מ-MinIO לשימוש כ-fallback. מוגבל ל-5 MB."""
     import json
+    MAX_READ_BYTES = 5 * 1024 * 1024  # 5 MB guard — prevent OOM on large files
     try:
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix + "/", MaxKeys=200)
+        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix + "/", MaxKeys=50)
         objs = [o for o in resp.get("Contents", []) if o["Size"] > 0]
         if not objs:
             return []
-        latest = max(objs, key=lambda o: o["LastModified"])["Key"]
-        body = s3.get_object(Bucket=bucket, Key=latest)["Body"].read()
+        latest = max(objs, key=lambda o: o["LastModified"])
+        if latest["Size"] > MAX_READ_BYTES:
+            print(f"  Fallback skipped: {latest['Key']} is {latest['Size']//1024//1024}MB (> 5MB limit)")
+            return []
+        body = s3.get_object(Bucket=bucket, Key=latest["Key"])["Body"].read()
         records = json.loads(body)
         return records if isinstance(records, list) else []
     except Exception:

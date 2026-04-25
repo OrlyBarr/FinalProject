@@ -82,39 +82,45 @@ def download_and_load(**context):
             cur.execute(f"TRUNCATE {t} CASCADE")
     conn.commit()
 
-    # הורד
-    data = download_gtfs()
-    context["ti"].xcom_push(key="zip_size_mb", value=round(len(data)/1024/1024, 1))
+    # הורד — download_gtfs() כותב לדיסק (לא לזיכרון) ומחזיר נתיב
+    gtfs_path = download_gtfs()
+    import os as _os
+    zip_size_mb = round(_os.path.getsize(gtfs_path) / 1024 / 1024, 1)
+    context["ti"].xcom_push(key="zip_size_mb", value=zip_size_mb)
 
-    with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        load_agency(zf, conn)
-        routes_n = load_routes(zf, conn)
+    try:
+        with zipfile.ZipFile(gtfs_path) as zf:
+            load_agency(zf, conn)
+            routes_n = load_routes(zf, conn)
 
-        with conn.cursor() as cur:
-            cur.execute("SELECT route_id FROM gtfs.routes")
-            route_ids = {r[0] for r in cur.fetchall()}
+            with conn.cursor() as cur:
+                cur.execute("SELECT route_id FROM gtfs.routes")
+                route_ids = {r[0] for r in cur.fetchall()}
 
-        stops_n  = load_stops(zf, conn, bbox_filter=True)
+            stops_n  = load_stops(zf, conn, bbox_filter=True)
 
-        with conn.cursor() as cur:
-            cur.execute("SELECT stop_id FROM gtfs.stops")
-            stop_ids = {r[0] for r in cur.fetchall()}
+            with conn.cursor() as cur:
+                cur.execute("SELECT stop_id FROM gtfs.stops")
+                stop_ids = {r[0] for r in cur.fetchall()}
 
-        trips_n = load_trips(zf, conn, route_ids)
+            trips_n = load_trips(zf, conn, route_ids)
 
-        with conn.cursor() as cur:
-            cur.execute("SELECT trip_id FROM gtfs.trips")
-            trip_ids = {r[0] for r in cur.fetchall()}
+            with conn.cursor() as cur:
+                cur.execute("SELECT trip_id FROM gtfs.trips")
+                trip_ids = {r[0] for r in cur.fetchall()}
 
-        st_n = load_stop_times(zf, conn, trip_ids, stop_ids)
-        load_calendar(zf, conn)
+            st_n = load_stop_times(zf, conn, trip_ids, stop_ids)
+            load_calendar(zf, conn)
 
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO gtfs.load_status (source_url,routes_cnt,stops_cnt,trips_cnt) VALUES (%s,%s,%s,%s)",
-                (GTFS_URL, routes_n, stops_n, trips_n)
-            )
-        conn.commit()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO gtfs.load_status (source_url,routes_cnt,stops_cnt,trips_cnt) VALUES (%s,%s,%s,%s)",
+                    (GTFS_URL, routes_n, stops_n, trips_n)
+                )
+            conn.commit()
+    finally:
+        try: _os.unlink(gtfs_path)
+        except Exception: pass
 
     context["ti"].xcom_push(key="routes_n", value=routes_n)
     context["ti"].xcom_push(key="stops_n",  value=stops_n)
