@@ -43,13 +43,19 @@ def aggregate_delay_stats(**context):
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     rw = RedshiftWriter()
 
-    rw.execute_query(f"""
-        DELETE FROM transit.agg_delay_stats WHERE stat_date = '{yesterday}';
+    # FIX #4: Split into two separate execute_query calls.
+    # psycopg2 cursor.execute() does not reliably handle multiple statements
+    # separated by semicolons — the INSERT was silently skipped in some drivers.
+    rw.execute_query(f"DELETE FROM transit.agg_delay_stats WHERE stat_date = '{yesterday}'")
 
+    # FIX #6: Added PERCENTILE_CONT for p90_delay_seconds — the column existed in
+    # the DDL but was never populated, so it was always NULL.
+    rw.execute_query(f"""
         INSERT INTO transit.agg_delay_stats
             (stat_date, stat_hour, time_period, route_id, route_short_name,
              total_trips, delayed_trips, cancelled_trips,
-             avg_delay_seconds, max_delay_seconds, delay_rate_pct, cancellation_rate)
+             avg_delay_seconds, max_delay_seconds, p90_delay_seconds,
+             delay_rate_pct, cancellation_rate)
         SELECT
             '{yesterday}'::DATE                   AS stat_date,
             hour_of_day                            AS stat_hour,
@@ -61,11 +67,14 @@ def aggregate_delay_stats(**context):
             SUM(CASE WHEN is_cancelled THEN 1 ELSE 0 END)  AS cancelled_trips,
             AVG(delay_seconds)                     AS avg_delay_seconds,
             MAX(delay_seconds)                     AS max_delay_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY delay_seconds)
+                                                   AS p90_delay_seconds,
             ROUND(100.0 * SUM(CASE WHEN is_delayed THEN 1 ELSE 0 END) / COUNT(*), 2) AS delay_rate_pct,
             ROUND(100.0 * SUM(CASE WHEN is_cancelled THEN 1 ELSE 0 END) / COUNT(*), 2) AS cancellation_rate
         FROM transit.fact_trip_updates
-        WHERE DATE(processed_at) = '{yesterday}'
-        GROUP BY hour_of_day, time_period, route_id, route_short_name;
+        WHERE processed_at >= '{yesterday}'::TIMESTAMP
+          AND processed_at <  '{yesterday}'::TIMESTAMP + INTERVAL '1 day'
+        GROUP BY hour_of_day, time_period, route_id, route_short_name
     """)
 
     rw.close()
@@ -80,9 +89,13 @@ def aggregate_route_performance(**context):
     yesterday = context["ti"].xcom_pull(task_ids="aggregate_delay_stats", key="report_date")
     rw = RedshiftWriter()
 
-    rw.execute_query(f"""
-        DELETE FROM transit.agg_route_performance WHERE perf_date = '{yesterday}';
+    # FIX #4 (cont): Split DELETE + INSERT into separate calls.
+    rw.execute_query(f"DELETE FROM transit.agg_route_performance WHERE perf_date = '{yesterday}'")
 
+    # FIX #3: DATE(column) in WHERE and JOIN ON prevents Redshift from using the
+    # processed_at SORTKEY (function-wrapped columns force a full segment scan).
+    # Replaced with open-ended range predicates that allow zone map pruning.
+    rw.execute_query(f"""
         INSERT INTO transit.agg_route_performance
             (perf_date, route_id, route_short_name, operator_name,
              total_vehicles, avg_speed_kmh, total_delays,
@@ -101,10 +114,12 @@ def aggregate_route_performance(**context):
                 / NULLIF(COUNT(t.trip_id), 0)), 2)  AS on_time_rate_pct
         FROM transit.fact_bus_positions b
         LEFT JOIN transit.fact_trip_updates t
-            ON b.route_id = t.route_id
-            AND DATE(b.processed_at) = DATE(t.processed_at)
-        WHERE DATE(b.processed_at) = '{yesterday}'
-        GROUP BY b.route_id, b.route_short_name, b.operator_name;
+            ON  b.route_id = t.route_id
+            AND t.processed_at >= '{yesterday}'::TIMESTAMP
+            AND t.processed_at <  '{yesterday}'::TIMESTAMP + INTERVAL '1 day'
+        WHERE b.processed_at >= '{yesterday}'::TIMESTAMP
+          AND b.processed_at <  '{yesterday}'::TIMESTAMP + INTERVAL '1 day'
+        GROUP BY b.route_id, b.route_short_name, b.operator_name
     """)
 
     rw.close()
@@ -334,7 +349,7 @@ with DAG(
     dag_id="dag_daily_analytics",
     default_args=default_args,
     description="Daily KPIs, aggregations, route performance report",
-    schedule_interval=timedelta(hours=24),     # run once per day
+    schedule_interval="0 1 * * *",             # FIX: 01:00 UTC = 04:00 IL winter / 04:00 IL summer (DST-aware cron). timedelta(hours=24) drifts relative to start_date and does not honour a fixed clock time.
     catchup=False,
     max_active_runs=1,
     tags=["analytics", "daily", "transit", "israel"],

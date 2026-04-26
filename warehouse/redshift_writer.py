@@ -237,6 +237,39 @@ class RedshiftWriter:
             logger.error(f"Upsert failed {table}: {e}")
             raise
 
+    def batch_upsert(self, table: str, records: list, conflict_key: str):
+        """
+        FIX: Added to support _consume_topic's upsert_key parameter.
+        Previously this method was called but did not exist, causing AttributeError
+        and silently preventing service alerts from ever reaching Redshift.
+
+        Deletes existing rows matching any of the conflict_key values in one DELETE,
+        then bulk-inserts all records in one execute_values call.
+        Much faster than the per-record upsert() method for batch workloads.
+        """
+        if not records:
+            return
+        keys = list({r[conflict_key] for r in records if r.get(conflict_key)})
+        if not keys:
+            logger.warning(f"batch_upsert: no valid {conflict_key} values in batch — skipping")
+            return
+        columns      = list(records[0].keys())
+        col_list     = ", ".join(columns)
+        placeholders = ", ".join(["%s"] * len(keys))
+        values       = [tuple(r.get(c) for c in columns) for r in records]
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    f"DELETE FROM {table} WHERE {conflict_key} IN ({placeholders})", keys
+                )
+                execute_values(cur, f"INSERT INTO {table} ({col_list}) VALUES %s", values, page_size=500)
+            self.conn.commit()
+            logger.info(f"batch_upsert: {len(records)} rows → {table} (key={conflict_key})")
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"batch_upsert failed {table}: {e}")
+            raise
+
     def execute_query(self, sql: str, params=None) -> list:
         try:
             with self.conn.cursor() as cur:

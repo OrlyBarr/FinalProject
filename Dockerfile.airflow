@@ -1,0 +1,20 @@
+# Dockerfile.airflow
+# Pre-bakes all Python dependencies into the image so the scheduler doesn't
+# run pip install on every restart (which caused a 2-5 minute startup delay
+# and a ~200MB memory spike during the pyarrow/pandas install).
+#
+# Build:   docker compose build
+# No code changes needed — docker-compose.yml references this file.
+
+FROM apache/airflow:2.7.0
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Copy requirements first so Docker layer cache is reused when only code changes
+COPY requirements-airflow.txt /requirements-airflow.txt
+RUN pip install --no-cache-dir -r /requirements-airflow.txt

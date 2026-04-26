@@ -93,7 +93,7 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       JAVA_OPTS: "-Xmx192m -Xms64m"
 
-# ─────────────────────────────────────────
+  # ─────────────────────────────────────────
   # KAFKA TOPIC INITIALIZER
   # ─────────────────────────────────────────
   # FIX: Added traffic-data topic (was missing — dag_traffic_ingestion producer
@@ -153,12 +153,15 @@ services:
   # AIRFLOW WEBSERVER
   # ─────────────────────────────────────────
   airflow-webserver:
-    image: apache/airflow:2.7.0
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow   # FIX: use pre-built image with all packages baked in
+    image: transit-airflow:latest
     container_name: airflow-webserver
     restart: no
     networks: [transit_net]
     env_file: .env
-    mem_limit: 1g
+    mem_limit: 600m  # FIX: was 1g — 1 gunicorn worker + no examples = 400-500m sufficient
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,9 +173,17 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       # ── Memory / concurrency limits (keeps VM free for VS Code) ──
       AIRFLOW__CORE__PARALLELISM: '2'          # must match scheduler — controls max concurrent tasks
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '2'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '1'  # FIX: was '2' — must match scheduler value
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
       AIRFLOW__WEBSERVER__WORKERS: '1'
+      # ── DAG parsing — reduce CPU/memory overhead ──────────────────────
+      AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '60'      # reparse DAG files every 60s max (default: 0 = continuous)
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'  # reduce Postgres hits for DAG serialization
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_FETCH_INTERVAL: '120'   # webserver: how often to reload serialized DAGs
+      # ── DB connection pool — reduce idle connections ───────────────────
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'       # default 5 — 2 is sufficient for 1-worker webserver
+      AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'    # default 10 — cap total connections at 3
+      AIRFLOW__WEBSERVER__RELOAD_ON_PLUGIN_CHANGE: 'false'  # prevent gunicorn restart on file changes
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
@@ -215,12 +226,15 @@ services:
   # AIRFLOW SCHEDULER
   # ─────────────────────────────────────────
   airflow-scheduler:
-    image: apache/airflow:2.7.0
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow   # FIX: use pre-built image with all packages baked in
+    image: transit-airflow:latest
     container_name: airflow-scheduler
     restart: no
     networks: [transit_net]
     env_file: .env
-    mem_limit: 800m
+    mem_limit: 512m  # FIX: was 800m — 1 parsing process + 1 thread = 512m sufficient
     depends_on:
       airflow-webserver:
         condition: service_started   # NOT service_healthy — avoids health-loop cascade
@@ -235,15 +249,20 @@ services:
       AIRFLOW__SCHEDULER__MAX_THREADS: '1'
       AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
+      # ── DAG parsing — reduce CPU/memory overhead ──────────────────────
+      AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '60'      # FIX: reparse DAG files max once/60s (default: 0 = tight loop)
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'  # FIX: reduce Postgres serialization writes
+      # ── DB connection pool ────────────────────────────────────────────
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'       # FIX: default 5 — scheduler only needs 2 idle connections
+      AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'    # FIX: cap total at 3 — avoids 15 idle Postgres connections
       # ── Prevent zombie health-check processes ──
       AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '60'
       AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '120'
       AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: '60.0'
-      _PIP_ADDITIONAL_REQUIREMENTS: >-
-        kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
-        psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
-        python-dotenv>=1.0 gtfs-realtime-bindings==2.0.0
-        geopy>=2.3 elasticsearch>=8.0,<9.0 backports.zoneinfo
+      # FIX: _PIP_ADDITIONAL_REQUIREMENTS removed — it ran pip install (pandas, pyarrow, etc.)
+      # on EVERY scheduler restart, causing a 2-5 minute startup delay and a large memory
+      # spike during install. Packages are now pre-baked into Dockerfile.airflow.
+      # To rebuild: docker compose build airflow-scheduler airflow-webserver
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

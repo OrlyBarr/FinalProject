@@ -109,11 +109,21 @@ def get_es_client() -> Elasticsearch:
     return Elasticsearch(ES_HOST, request_timeout=10)
 
 
+# FIX #5: Cache index names that have already been verified this process lifetime.
+# ensure_index() was calling es.indices.exists() on every index_topic() invocation:
+# 6 topics × every 3 min = 120 extra ES round-trips/hour that returned the same answer.
+_verified_indices: set = set()
+
+
 def ensure_index(es: Elasticsearch, index_name: str) -> None:
-    """Create the index with mappings if it doesn't exist yet."""
+    """Create the index with mappings if it doesn't exist yet.
+    Uses a module-level set so the exists() check is only made once per process."""
+    if index_name in _verified_indices:
+        return
     if not es.indices.exists(index=index_name):
         es.indices.create(index=index_name, body=INDEX_SETTINGS)
         log.info(f"Created Elasticsearch index: {index_name}")
+    _verified_indices.add(index_name)
 
 
 def _add_geo_point(doc: dict) -> dict:
@@ -133,9 +143,18 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
     Consume up to `max_msgs` messages from a Kafka topic and bulk-index
     them into the matching Elasticsearch index.
 
+    FIX: Now flushes to ES every BULK_CHUNK records instead of accumulating
+    all max_msgs into a single list. Previously, with max_msgs=1000 and
+    ~1-2 KB per document, a single call could hold 1-2 MB in the actions
+    list before the first bulk call. With 6 topics running concurrently
+    in dag_es_indexer, that was 6-12 MB of buffered documents at once.
+    Chunking caps peak memory to BULK_CHUNK × doc_size ≈ 500-1000 KB total.
+
     Returns the number of documents indexed.
     """
     from config.settings import KAFKA_TOPICS
+
+    BULK_CHUNK = 500   # flush to ES every N records to cap in-memory footprint
 
     kafka_topic  = KAFKA_TOPICS[topic_key]
     index_name   = TOPIC_INDEX_MAP[topic_key]
@@ -155,8 +174,18 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
         max_poll_records=500,
     )
 
-    actions = []
-    count   = 0
+    def _flush(actions: list) -> int:
+        if not actions:
+            return 0
+        success, errors = helpers.bulk(es, actions, raise_on_error=False)
+        if errors:
+            log.warning(f"ES bulk errors for {index_name}: {errors[:3]}")
+        return success
+
+    actions       = []
+    count         = 0
+    total_success = 0
+
     for msg in consumer:
         if count >= max_msgs:
             break
@@ -171,18 +200,22 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
         })
         count += 1
 
+        # FIX: flush every BULK_CHUNK records instead of accumulating everything
+        if len(actions) >= BULK_CHUNK:
+            total_success += _flush(actions)
+            actions = []
+
     consumer.commit()
     consumer.close()
 
-    if actions:
-        success, errors = helpers.bulk(es, actions, raise_on_error=False)
-        if errors:
-            log.warning(f"ES bulk errors for {index_name}: {errors[:3]}")
-        log.info(f"Indexed {success} docs into {index_name}")
-        return success
+    # Final flush for remaining records
+    total_success += _flush(actions)
 
-    log.info(f"No messages to index from {kafka_topic}")
-    return 0
+    if total_success:
+        log.info(f"Indexed {total_success} docs into {index_name}")
+    else:
+        log.info(f"No messages to index from {kafka_topic}")
+    return total_success
 
 
 def index_all_topics(max_msgs: int = 2000) -> dict:
@@ -299,7 +332,10 @@ def set_last_indexed_key(topic_key: str, date_prefix: str, last_key: str = "done
     es  = get_es_client()
     doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
     try:
-        es.index(index=_TRACKER_INDEX, id=doc_id, document={"last_key": last_key, "updated_at": datetime.now(IL_TZ).isoformat()})
+        es.index(index=_TRACKER_INDEX, id=doc_id, document={
+            "last_key":   last_key,
+            "updated_at": datetime.now(IL_TZ).isoformat(),
+        })
     except Exception as e:
         log.warning(f"Could not save indexer state: {e}")
 
