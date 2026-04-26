@@ -161,7 +161,7 @@ services:
     restart: no
     networks: [transit_net]
     env_file: .env
-    mem_limit: 600m  # FIX: was 1g — 1 gunicorn worker + no examples = 400-500m sufficient
+    mem_limit: 1200m  # VM proven: 600m causes OOM — webserver needs ~1g with 1 gunicorn worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -176,6 +176,7 @@ services:
       AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '1'  # FIX: was '2' — must match scheduler value
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
       AIRFLOW__WEBSERVER__WORKERS: '1'
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '600'  # VM proven: 120s causes worker timeout on DAG load
       # ── DAG parsing — reduce CPU/memory overhead ──────────────────────
       AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '60'      # reparse DAG files every 60s max (default: 0 = continuous)
       AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'  # reduce Postgres hits for DAG serialization
