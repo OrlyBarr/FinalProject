@@ -202,14 +202,14 @@ fi
 # ─────────────────────────────────────────────────────────────
 step "3 — Waiting for services to be ready"
 
-wait_for_service "Kafka UI"  "http://localhost:8085"        20
-wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 15
-wait_for_service "Airflow"   "http://localhost:8081/health"  60
+wait_for_service "Kafka UI"  "http://localhost:8085"        30
+wait_for_service "MinIO"     "http://localhost:9000/minio/health/live" 20
+wait_for_service "Airflow"   "http://localhost:8081/health"  150
 
 # Wait for Kafka broker to be healthy (health check uses localhost:9092 inside container)
 log "Waiting for Kafka broker to become healthy..."
 KAFKA_WAIT=0
-until [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] || [ $KAFKA_WAIT -ge 60 ]; do
+until [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ] || [ $KAFKA_WAIT -ge 180 ]; do
   echo -n "."
   sleep 3
   KAFKA_WAIT=$((KAFKA_WAIT + 3))
@@ -218,7 +218,7 @@ echo ""
 if [ "$(docker inspect kafka --format='{{.State.Health.Status}}' 2>/dev/null)" = "healthy" ]; then
   success "Kafka broker is healthy!"
 else
-  warn "Kafka broker did not become healthy within 60 seconds — continuing anyway"
+  warn "Kafka broker did not become healthy within 180 seconds — continuing anyway"
 fi
 
 # ─────────────────────────────────────────────────────────────
