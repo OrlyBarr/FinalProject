@@ -144,17 +144,101 @@ def get_route_stops(route_id: str, direction: int = 0) -> list[dict]:
     return []
 
 
-def get_route_stops_by_short_name(short_name: str) -> list[dict]:
-    """מחזיר תחנות לפי מספר קו (route_short_name)."""
-    rows = _q("""
-        SELECT route_id, agency_id, route_long_name
-        FROM gtfs.routes
-        WHERE route_short_name = %s
-        LIMIT 1
-    """, (short_name,))
+def get_route_stops_by_short_name(short_name: str, operator_id: str = "") -> list[dict]:
+    """מחזיר תחנות לפי מספר קו, עם סינון אופציונלי לפי מפעיל."""
+    where = ["route_short_name = %s"]
+    params: list = [short_name]
+    if operator_id:
+        where.append("agency_id = %s")
+        params.append(operator_id)
+    rows = _q(
+        f"SELECT route_id, agency_id, route_long_name FROM gtfs.routes "
+        f"WHERE {' AND '.join(where)} ORDER BY route_id LIMIT 1",
+        params,
+    )
     if not rows:
         return []
     return get_route_stops(rows[0]["route_id"])
+
+
+def get_route_schedule(short_name: str, operator_id: str = "",
+                       direction: int = 0) -> dict:
+    """
+    מחזיר פרטי קו מ-GTFS עם תחנות + זמן עזיבה מתוכנן הקרוב ביותר לכל תחנה
+    (לפי לוח זמנים סטטי של היום ומן הרגע הנוכחי).
+
+    Returns dict:
+        route: {route_id, route_short_name, route_long_name, agency_id, agency_name}
+        stops: [{stop_id, stop_name, stop_lat, stop_lon,
+                 stop_sequence, scheduled_dep}]
+        direction: int used
+    """
+    from datetime import datetime as _dt
+
+    now_str  = _dt.now().strftime("%H:%M:%S")
+    day_col  = ["monday","tuesday","wednesday","thursday",
+                "friday","saturday","sunday"][_dt.now().weekday()]
+
+    # Locate route
+    r_where  = ["r.route_short_name = %s"]
+    r_params: list = [short_name]
+    if operator_id:
+        r_where.append("r.agency_id = %s")
+        r_params.append(operator_id)
+
+    route_rows = _q(
+        f"SELECT r.route_id, r.route_short_name, r.route_long_name, "
+        f"       r.agency_id, a.agency_name "
+        f"FROM gtfs.routes r "
+        f"LEFT JOIN gtfs.agency a ON a.agency_id = r.agency_id "
+        f"WHERE {' AND '.join(r_where)} ORDER BY r.route_id LIMIT 1",
+        r_params,
+    )
+    if not route_rows:
+        return {}
+
+    route    = route_rows[0]
+    route_id = route["route_id"]
+
+    # Try requested direction; fall back to opposite then any
+    for dir_filter in [f"AND t.direction_id = {direction}",
+                       f"AND t.direction_id = {1 - direction}", ""]:
+        stops = _q(f"""
+            SELECT DISTINCT ON (st.stop_sequence)
+                s.stop_id,
+                s.stop_name,
+                s.stop_lat::float  AS stop_lat,
+                s.stop_lon::float  AS stop_lon,
+                st.stop_sequence,
+                st.departure_time  AS scheduled_dep
+            FROM gtfs.stop_times  st
+            JOIN gtfs.trips       t  ON t.trip_id   = st.trip_id
+            JOIN gtfs.stops       s  ON s.stop_id   = st.stop_id
+            LEFT JOIN gtfs.calendar c ON c.service_id = t.service_id
+            WHERE t.route_id = %s
+              {dir_filter}
+              AND st.departure_time >= %s
+              AND (c.{day_col} = 1 OR c.service_id IS NULL)
+            ORDER BY st.stop_sequence, st.departure_time
+            LIMIT 60
+        """, (route_id, now_str))
+        if stops:
+            return {"route": route, "stops": stops, "direction": direction}
+
+    # Last resort: no time filter (shows full stop list even if all trips passed)
+    stops = _q("""
+        SELECT DISTINCT ON (st.stop_sequence)
+            s.stop_id, s.stop_name,
+            s.stop_lat::float AS stop_lat, s.stop_lon::float AS stop_lon,
+            st.stop_sequence,  st.departure_time AS scheduled_dep
+        FROM gtfs.stop_times st
+        JOIN gtfs.trips  t ON t.trip_id = st.trip_id
+        JOIN gtfs.stops  s ON s.stop_id = st.stop_id
+        WHERE t.route_id = %s
+        ORDER BY st.stop_sequence
+        LIMIT 60
+    """, (route_id,))
+    return {"route": route, "stops": stops, "direction": -1} if stops else {}
 
 
 def get_nearby_stops(lat: float, lon: float, radius_m: int = 500) -> list[dict]:

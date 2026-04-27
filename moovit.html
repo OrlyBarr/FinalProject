@@ -266,7 +266,8 @@ body {
   width: 14px; height: 14px; right: -29px; top: 7px;
 }
 .stop-info { flex: 1; }
-.stop-name { font-size: 0.88rem; font-weight: 500; color: var(--text); }
+.stop-name { font-size: 0.88rem; font-weight: 500; color: var(--text); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stop-time { font-size: 0.78rem; font-weight: 700; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); padding: 1px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
 .stop-meta { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
 
 /* ── Nearby stops ─────────────────────────────────────── */
@@ -679,14 +680,15 @@ function renderResults(html) {
 
 function routeCard(r, col) {
   col = col || '#00B1D2';
-  const routeId = r.route_id || '';
+  const routeId  = r.route_id  || '';
   const shortName = r.route_short_name || routeId;
   const longName  = r.route_long_name  || '';
   const agency    = r.agency_name || '';
+  const agencyId  = r.agency_id  || '';
   const badge = shortName.length > 5 ? shortName.substring(0,5) : shortName;
   const sub = [agency, longName].filter(Boolean).join(' · ');
   return `<div class="route-card" style="--cc:${col}"
-    onclick="showLineDetail('${escHtml(routeId)}','${escHtml(shortName)}','${col}')">
+    onclick="showLineDetail('${escHtml(routeId)}','${escHtml(shortName)}','${col}','${escHtml(agencyId)}')">
     <div class="line-badge" style="background:${col}">${escHtml(badge)}</div>
     <div class="route-info">
       <div class="route-name">${escHtml(shortName)}${longName ? ' — ' + escHtml(longName) : ''}</div>
@@ -777,54 +779,40 @@ function searchLiveLines(q) {
 }
 
 // ── Line detail ───────────────────────────────────────────────────
-function showLineDetail(lineRef, lineName, col) {
+// operatorRef = agency_id (e.g. "3" for Dan) — used to find correct GTFS route
+function showLineDetail(lineRef, lineName, col, operatorRef) {
   col = col || '#00B1D2';
+  operatorRef = operatorRef || '';
   showResultsTab(`קו ${lineName}`,
     `<div class="loader"><div class="spinner"></div>טוען תחנות קו ${escHtml(lineName)}...</div>`);
 
-  fetch(`${API}/line_info?line_ref=${encodeURIComponent(lineRef)}`)
+  const params = new URLSearchParams({
+    line_ref:     lineRef,
+    short_name:   lineName,
+    operator_ref: operatorRef,
+  });
+  fetch(`${API}/line_info?${params}`)
     .then(r => r.json())
     .then(data => {
-      const dirs   = data.directions || [];
-      const vehs   = data.vehicles   || [];
-      const op     = data.operator   || '';
-
+      const dirs = data.directions || [];
+      const vehs = data.vehicles   || [];
+      const op   = data.operator   || '';
       if (!dirs.length) {
-        // Fallback: try GTFS route_stops
-        loadGtfsStops(lineRef, lineName, col);
+        renderResults(`<div class="empty-state"><div class="icon">🚌</div>
+          <div>לא נמצאו תחנות לקו ${escHtml(lineName)}</div>
+          <div style="font-size:0.75rem;margin-top:6px;color:var(--text-muted)">
+            GTFS לא נטען או הקו אינו פעיל היום</div></div>`);
         return;
       }
-
-      renderLineDetail(lineName, col, dirs, vehs, op);
-    })
-    .catch(() => loadGtfsStops(lineRef, lineName, col));
-}
-
-function loadGtfsStops(lineRef, lineName, col) {
-  // Try by short_name first
-  fetch(`${API}/gtfs/route_stops?short_name=${encodeURIComponent(lineName)}`)
-    .then(r => r.json())
-    .then(data => {
-      const stops = data.stops || [];
-      if (!stops.length) throw new Error('no stops');
-      const dirs = [{
-        first_stop: stops[0].stop_name,
-        last_stop:  stops[stops.length-1].stop_name,
-        stops: stops.map(s => ({
-          name: s.stop_name, stop_id: s.stop_id,
-          lat: s.stop_lat, lon: s.stop_lon,
-        })),
-      }];
-      renderLineDetail(lineName, col, dirs, [], '');
+      renderLineDetail(lineName, col, dirs, vehs, op, data.has_schedule);
     })
     .catch(() => {
-      renderResults(`<div class="empty-state"><div class="icon">🚌</div>
-        <div>לא נמצאו תחנות לקו ${escHtml(lineName)}<br>
-        <small>הקו אינו פעיל כרגע</small></div></div>`);
+      renderResults(`<div class="empty-state"><div class="icon">⚠️</div>
+        <div>שגיאה בטעינת תחנות קו ${escHtml(lineName)}</div></div>`);
     });
 }
 
-function renderLineDetail(lineName, col, dirs, vehs, op) {
+function renderLineDetail(lineName, col, dirs, vehs, op, hasSchedule) {
   clearStops();
   let html = '';
 
@@ -860,10 +848,13 @@ function renderLineDetail(lineName, col, dirs, vehs, op) {
       style="${di>0?'display:none':''}; --tl-color:${col}">`;
     d.stops.forEach((s, si) => {
       const dotClass = si === 0 ? 'first' : si === total - 1 ? 'last' : '';
+      const depTime  = s.scheduled_dep
+        ? `<span class="stop-time">${escHtml(s.scheduled_dep.substring(0,5))}</span>`
+        : '';
       html += `<div class="stop-item">
         <div class="stop-dot ${dotClass}"></div>
         <div class="stop-info">
-          <div class="stop-name">${escHtml(s.name)}</div>
+          <div class="stop-name">${escHtml(s.name)}${depTime}</div>
           ${s.stop_id ? `<div class="stop-meta">תחנה ${escHtml(s.stop_id)}</div>` : ''}
         </div>
       </div>`;

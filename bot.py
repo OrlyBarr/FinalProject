@@ -1902,11 +1902,13 @@ class BotHandler(BaseHTTPRequestHandler):
             self._proxy(target)
 
         # ── Line info — Moovit-style (stops × 2 directions + live vehicles) ─────
-        # GET /line_info?line_ref=X
+        # GET /line_info?line_ref=X&short_name=2&operator_ref=3
         elif path == "/line_info":
-            line_ref = (qs.get("line_ref") or [""])[0].strip()
-            if not line_ref:
-                self.send_json({"error": "?line_ref= required"}, status=400)
+            line_ref     = (qs.get("line_ref")     or [""])[0].strip()
+            short_name   = (qs.get("short_name")   or [""])[0].strip()
+            operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+            if not line_ref and not short_name:
+                self.send_json({"error": "?line_ref= or ?short_name= required"}, status=400)
                 return
             try:
                 import requests as _rq
@@ -2026,21 +2028,26 @@ class BotHandler(BaseHTTPRequestHandler):
                                 dirs.append(stops)
                                 break   # found 2 directions — done
 
-                # Also try GTFS as fallback when no active rides
-                gtfs_stops = []
+                # GTFS fallback — uses short_name + operator_ref for correct route
+                # (line_ref is a Stride internal ID, not a GTFS route_short_name)
+                gtfs_detail = {}
                 if not dirs:
                     try:
-                        from gtfs_query import get_route_stops_by_short_name
-                        rows = get_route_stops_by_short_name(line_ref)
-                        if rows:
-                            gtfs_stops = [{
-                                "name":    r.get("stop_name",""),
-                                "stop_id": str(r.get("stop_id","")),
-                                "lat":     r.get("stop_lat"),
-                                "lon":     r.get("stop_lon"),
-                                "order":   r.get("stop_sequence", i),
-                            } for i, r in enumerate(rows)]
-                            if gtfs_stops:
+                        from gtfs_query import get_route_schedule
+                        # Prefer short_name from params; fall back to line_ref only if
+                        # it looks like a route short_name (≤6 chars, not purely numeric >999)
+                        sn = short_name or (line_ref if (not line_ref.isdigit() or int(line_ref) < 1000) else "")
+                        if sn:
+                            gtfs_detail = get_route_schedule(sn, operator_ref)
+                            if gtfs_detail.get("stops"):
+                                gtfs_stops = [{
+                                    "name":          r.get("stop_name", ""),
+                                    "stop_id":       str(r.get("stop_id", "")),
+                                    "lat":           r.get("stop_lat"),
+                                    "lon":           r.get("stop_lon"),
+                                    "order":         r.get("stop_sequence", i),
+                                    "scheduled_dep": r.get("scheduled_dep", ""),
+                                } for i, r in enumerate(gtfs_detail["stops"])]
                                 dirs.append(gtfs_stops)
                     except Exception:
                         pass
@@ -2054,12 +2061,16 @@ class BotHandler(BaseHTTPRequestHandler):
                     for d in dirs if d
                 ]
 
+                gtfs_route = gtfs_detail.get("route", {})
                 self.send_json({
-                    "line_ref":   line_ref,
-                    "operator":   operator,
-                    "directions": directions,
-                    "vehicles":   vehicles[:12],
-                    "source":     "stride" if ride_ids else ("gtfs" if gtfs_stops else "none"),
+                    "line_ref":        line_ref,
+                    "short_name":      short_name or gtfs_route.get("route_short_name", ""),
+                    "long_name":       gtfs_route.get("route_long_name", ""),
+                    "operator":        operator or gtfs_route.get("agency_name", ""),
+                    "directions":      directions,
+                    "vehicles":        vehicles[:12],
+                    "source":          "stride" if ride_ids else ("gtfs" if gtfs_detail else "none"),
+                    "has_schedule":    bool(gtfs_detail.get("stops")),
                 })
             except Exception as e:
                 self.send_json({"error": str(e), "directions": [], "vehicles": []}, status=500)
