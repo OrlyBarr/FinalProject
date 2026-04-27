@@ -36,7 +36,9 @@ services:
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "2181"]
       interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ─────────────────────────────────────────
   # KAFKA BROKER
@@ -71,7 +73,9 @@ services:
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 15s
+      timeout: 10s
       retries: 5
+      start_period: 60s
 
   # ─────────────────────────────────────────
   # KAFKA UI
