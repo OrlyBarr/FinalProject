@@ -1248,6 +1248,57 @@ class BotHandler(BaseHTTPRequestHandler):
                     "count": 0, "status": "error", "error": str(e),
                 })
 
+        # ── Real-time active lines per operator from Stride SIRI ─────────────
+        # GET /api/active_lines?operator_ref=3
+        # Returns unique bus lines currently active (vehicles on road right now).
+        # Same data source as Waze/Google Maps Israel — MOT SIRI via Hasadna.
+        elif path == "/api/active_lines":
+            operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+            if not operator_ref:
+                self.send_json({"error": "operator_ref required", "routes": []}, status=400)
+            else:
+                try:
+                    import requests as _rq
+                    raw = _rq.get(
+                        f"{HASADNA_URL}/siri_vehicle_locations/list",
+                        params={
+                            "siri_route__operator_ref": operator_ref,
+                            "lat__greater_or_equal": 31.87,
+                            "lat__lower_or_equal":   32.21,
+                            "lon__greater_or_equal": 34.72,
+                            "lon__lower_or_equal":   34.95,
+                            "limit": 500,
+                            "order_by": "id desc",
+                        },
+                        timeout=12,
+                        headers={"User-Agent": "IsraelTransitBot/1.0"},
+                    ).json()
+                    seen = {}
+                    if isinstance(raw, list):
+                        for v in raw:
+                            lr  = str(v.get("siri_route__line_ref") or "").strip()
+                            rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                            rln = str(v.get("siri_route__gtfs_route__route_long_name") or "").strip()
+                            if not lr:
+                                continue
+                            if rsn:
+                                _learn_line(lr, rsn)
+                            if lr not in seen:
+                                seen[lr] = {
+                                    "route_id":         lr,
+                                    "route_short_name": rsn or _resolve_line(lr),
+                                    "route_long_name":  rln,
+                                    "agency_id":        operator_ref,
+                                    "agency_name":      (qs.get("op_name") or [""])[0] or operator_ref,
+                                }
+                    routes = sorted(
+                        seen.values(),
+                        key=lambda x: int(x["route_short_name"]) if x["route_short_name"].isdigit() else 9999
+                    )
+                    self.send_json({"routes": routes, "count": len(routes), "source": "stride_realtime"})
+                except Exception as e:
+                    self.send_json({"error": str(e), "routes": []}, status=500)
+
         # ── moovit.html (ממשק ראשי) ──────────────────────────────────────────
         elif path == "/":
             html_path = os.path.join(BASE_DIR, "moovit.html")

@@ -632,26 +632,42 @@ function buildOpGrid() {
   }).join('');
 }
 
-// ── Load operator lines ───────────────────────────────────────────
+// ── Load operator lines — real-time from Stride SIRI ─────────────
+// Queries live vehicle positions (same source as Google Maps / Moovit).
+// Falls back to GTFS static catalog if Stride returns nothing.
 function loadOperatorLines(opId, opName) {
   showResultsTab(`קווי ${opName}`,
-    `<div class="loader"><div class="spinner"></div>טוען קווים...</div>`);
+    `<div class="loader"><div class="spinner"></div>טוען קווים פעילים בזמן אמת...</div>`);
 
-  fetch(`${API}/gtfs/routes?operator_id=${opId}&limit=100`)
+  fetch(`${API}/api/active_lines?operator_ref=${opId}&op_name=${encodeURIComponent(opName)}`)
     .then(r => r.json())
     .then(data => {
       const routes = data.routes || [];
-      if (!routes.length) {
-        renderResults(`<div class="empty-state"><div class="icon">🚫</div>
-          <div>לא נמצאו קווים פעילים ל-${opName}</div></div>`);
-        return;
-      }
       const col = OP_COLORS[opId] || '#00B1D2';
+      if (!routes.length) {
+        // Fallback: GTFS static catalog
+        return fetch(`${API}/gtfs/routes?operator_id=${opId}&limit=200`)
+          .then(r => r.json())
+          .then(gtfs => {
+            const gr = gtfs.routes || [];
+            if (!gr.length) {
+              renderResults(`<div class="empty-state"><div class="icon">🚫</div>
+                <div>לא נמצאו קווים ל-${opName}</div>
+                <div style="font-size:0.75rem;margin-top:6px;color:var(--text-muted)">ייתכן שאין אוטובוסים פעילים כרגע באזור גוש דן</div></div>`);
+              return;
+            }
+            let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
+              📋 ${gr.length} קווים (מ-GTFS סטטי)</div>`;
+            html += gr.map(r => routeCard(r, col)).join('');
+            renderResults(html);
+            setTitle(`קווי ${opName} (${gr.length})`);
+          });
+      }
       let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
-        ${routes.length} קווים ל-${opName}</div>`;
+        🟢 ${routes.length} קווים פעילים עכשיו — נתוני GPS בזמן אמת</div>`;
       html += routes.map(r => routeCard(r, col)).join('');
       renderResults(html);
-      setTitle(`קווי ${opName} (${routes.length})`);
+      setTitle(`קווי ${opName} — ${routes.length} פעילים`);
     })
     .catch(() => renderResults(`<div class="empty-state"><div class="icon">⚠️</div>
       <div>שגיאה בטעינת קווים</div></div>`));
