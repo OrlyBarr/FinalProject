@@ -942,7 +942,7 @@ function loadNearbyAt(lat, lon, label) {
           const col = OP_COLORS[opId] || '#00B1D2';
           return `<span class="route-pill"
             style="background:${col}22;color:${col}"
-            onclick="showLineDetail('${escHtml(r.route_id || sn)}','${escHtml(sn)}','${col}')"
+            onclick="showLineDetail('${escHtml(r.route_id || sn)}','${escHtml(sn)}','${col}','${escHtml(opId)}')"
           >${escHtml(sn)}</span>`;
         }).join('');
         html += `<div class="nearby-card">
@@ -1043,7 +1043,7 @@ function planTrip() {
         const sub = [op, cnt ? `${cnt} כלי רכב` : '', os && fs ? `${os} → ${fs}` : os || ''].filter(Boolean).join(' · ');
         const badge = ln.length > 5 ? ln.substring(0,5) : ln;
         html += `<div class="route-card" style="--cc:${col}"
-          onclick="showLineDetail('${escHtml(lr)}','${escHtml(ln)}','${col}')">
+          onclick="showLineDetail('${escHtml(lr)}','${escHtml(ln)}','${col}','${escHtml(opId)}')">
           <div class="line-badge" style="background:${col}">${escHtml(badge)}</div>
           <div class="route-info">
             <div class="route-name">${escHtml(ln)}</div>

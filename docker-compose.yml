@@ -146,7 +146,11 @@ services:
       -c max_connections=20
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # ports: "5432:5432" removed — host port 5432 is occupied by native postgres; use internal network
+    # FIX: host port 5432 is occupied by native postgres on the VM — remove mapping to avoid conflict.
+    # To access from host tools (pgAdmin/DBeaver), connect via Docker exec instead:
+    #   docker exec -it postgres psql -U airflow airflow
+    # ports:
+    #   - "5432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
@@ -161,7 +165,7 @@ services:
       dockerfile: Dockerfile.airflow   # FIX: use pre-built image with all packages baked in
     image: transit-airflow:latest
     container_name: airflow-webserver
-    restart: "no"
+    restart: "no"  # FIX: unquoted 'no' is YAML boolean false — Docker Compose V2 rejects it
     networks: [transit_net]
     env_file: .env
     mem_limit: 1200m  # VM proven: 600m causes OOM — webserver needs ~1g with 1 gunicorn worker
@@ -235,7 +239,7 @@ services:
       dockerfile: Dockerfile.airflow   # FIX: use pre-built image with all packages baked in
     image: transit-airflow:latest
     container_name: airflow-scheduler
-    restart: "no"
+    restart: "no"  # FIX: unquoted 'no' is YAML boolean false — Docker Compose V2 rejects it
     networks: [transit_net]
     env_file: .env
     mem_limit: 512m  # FIX: was 800m — 1 parsing process + 1 thread = 512m sufficient

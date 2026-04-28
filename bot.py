@@ -1359,7 +1359,7 @@ class BotHandler(BaseHTTPRequestHandler):
                     "Transit Query Tool":   f"http://localhost:{BOT_PORT}/",
                     "Agent Dashboard":      f"http://localhost:{BOT_PORT}/agent",
                     "Airflow UI":           "http://localhost:8081",
-                    "Kafka UI":             "http://localhost:8080",
+                    "Kafka UI":             "http://localhost:8085",
                     "MinIO Console":        "http://localhost:9001",
                     "Kibana":               "http://localhost:5601",
                     "Bot API":              f"http://localhost:{BOT_PORT}",
