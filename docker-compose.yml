@@ -146,11 +146,10 @@ services:
       -c max_connections=20
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # FIX: host port 5432 is occupied by native postgres on the VM — remove mapping to avoid conflict.
-    # To access from host tools (pgAdmin/DBeaver), connect via Docker exec instead:
-    #   docker exec -it postgres psql -U airflow airflow
-    # ports:
-    #   - "5432:5432"
+    # FIX: host port 5432 is occupied by native postgres on the VM.
+    # Map to 15432 instead — no conflict, and GTFS load + pgAdmin can reach it on localhost:15432.
+    ports:
+      - "15432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s

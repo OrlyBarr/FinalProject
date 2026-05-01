@@ -144,45 +144,60 @@ success "Resilient buffer directories ready: /tmp/transit_buffer/"
 # ─────────────────────────────────────────────────────────────
 step "2 — Starting Docker services"
 
-# Check if all core containers are already running — if so, skip teardown entirely
-RUNNING=$(docker compose ps --services --filter status=running 2>/dev/null | wc -l)
-TOTAL=$(docker compose config --services 2>/dev/null | wc -l)
+# ── Pre-startup: reset unhealthy/stale containers ───────────────────────────────
+# On linub-vm, containers started by root can't be stopped with 'docker stop'
+# (permission denied). 'docker exec <c> kill 1' always works — it sends SIGTERM
+# to PID 1 inside the container, causing a clean shutdown regardless of ownership.
+# This ensures unhealthy containers are recreated with the latest config.
+log "Checking container states before startup..."
+for container in postgres zookeeper kafka minio elasticsearch \
+                 airflow-webserver airflow-scheduler kibana kafka-ui; do
+  STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
+  HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "none")
+  if [ "$STATUS" = "running" ] && [ "$HEALTH" = "unhealthy" ]; then
+    log "  Stopping unhealthy $container (will be recreated with fresh config)..."
+    docker exec "$container" kill 1 2>/dev/null || true
+    sleep 4
+  elif [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
+    log "  Removing stopped $container..."
+    sudo docker rm -f "$container" 2>/dev/null || \
+         docker rm -f "$container" 2>/dev/null || true
+  fi
+done
 
-if [ "$RUNNING" -ge "$TOTAL" ] 2>/dev/null; then
-  success "All containers already running — skipping teardown"
-else
-  # Only pull images that are not already cached locally
-  log "Checking for missing Docker images..."
-  docker compose pull --quiet --ignore-pull-failures 2>/dev/null || true
-
-  log "Removing old/stopped containers that may cause conflicts..."
-  # Only tear down stopped/exited containers; leave running ones alone
-  for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui; do
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-    if [ "$STATUS" = "exited" ] || [ "$STATUS" = "created" ]; then
-      docker rm -f "$container" 2>/dev/null || true
-    fi
-  done
+# ── Build custom Airflow image if not cached ────────────────────────────────────
+if ! docker image inspect transit-airflow:latest &>/dev/null 2>&1; then
+  log "Building Airflow image (first run — takes 3-5 min)..."
+  sudo docker compose build airflow-webserver 2>&1 || \
+       docker compose build airflow-webserver 2>&1 || \
+       warn "Airflow image build failed — will attempt to use upstream image"
 fi
 
-log "Starting all services (skips already-running containers)..."
-# NOTE: --remove-orphans is intentionally omitted — this machine runs other Docker
-# projects (NiFi, etc.) whose containers cannot be stopped without root permission.
-# Using --remove-orphans would cause a fatal permission-denied error and abort the
-# entire compose up, leaving airflow-webserver and other services uncreated.
-# --no-recreate prevents docker compose from trying to stop/restart already-running
-# containers started outside this compose project (avoids permission denied errors).
+# ── Pull updated images ─────────────────────────────────────────────────────────
+log "Checking for updated Docker images..."
+sudo docker compose pull --quiet --ignore-pull-failures 2>/dev/null || \
+     docker compose pull --quiet --ignore-pull-failures 2>/dev/null || true
+
+# ── Start all services ──────────────────────────────────────────────────────────
+log "Starting all services..."
+# NOTE: --remove-orphans intentionally omitted — other Docker projects (NiFi etc.)
+# run on this VM and their containers must not be touched.
+# sudo first: on linub-vm containers are owned by root; sudo allows recreation.
+# Fallback --no-recreate: for dev machines where user owns the Docker socket.
+sudo docker compose up -d 2>&1 || \
 docker compose up -d --no-recreate 2>&1 || {
-  warn "docker compose up exited with an error — attempting to start containers individually..."
-  for container in elasticsearch zookeeper kafka minio postgres airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
+  warn "docker compose up had errors — attempting to start containers individually..."
+  for container in postgres zookeeper kafka minio elasticsearch \
+                   airflow-webserver airflow-scheduler kibana kafka-ui kafka-init; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null || echo "")
-    if [ "$STATUS" = "created" ] || [ "$STATUS" = "exited" ]; then
-      docker start "$container" 2>/dev/null || true
+    if [ -z "$STATUS" ] || [ "$STATUS" = "created" ] || [ "$STATUS" = "exited" ]; then
+      sudo docker start "$container" 2>/dev/null || \
+           docker start "$container" 2>/dev/null || true
     fi
   done
 }
 
-success "All containers started"
+success "All services started"
 echo ""
 docker compose ps
 echo ""
@@ -366,11 +381,12 @@ EOF
 # ─────────────────────────────────────────────────────────────
 step "6.5 — GTFS Static → PostgreSQL"
 
-GTFS_ROUTES=$(POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 - 2>/dev/null <<'PYEOF'
+GTFS_ROUTES=$(POSTGRES_HOST=localhost POSTGRES_PORT=15432 python3 - 2>/dev/null <<'PYEOF'
 import sys; sys.path.insert(0, '.')
 try:
     import psycopg2
-    conn = psycopg2.connect(host='localhost', port=5432, dbname='airflow',
+    # port 15432 = Docker postgres mapped to host (native postgres occupies 5432)
+    conn = psycopg2.connect(host='localhost', port=15432, dbname='airflow',
                             user='airflow', password='airflow', connect_timeout=5)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM gtfs.routes")
@@ -386,7 +402,7 @@ if [ "${GTFS_ROUTES:-0}" -gt 100 ] 2>/dev/null; then
 else
   log "Downloading GTFS Static from MOT (~150 MB) and loading to PostgreSQL..."
   log "This takes 1–3 minutes. Streaming in 64 KB chunks — no large RAM spike."
-  POSTGRES_HOST=localhost POSTGRES_PORT=5432 python3 Load_gtfs.py && \
+  POSTGRES_HOST=localhost POSTGRES_PORT=15432 python3 Load_gtfs.py && \
     success "GTFS data loaded successfully!" || \
     warn "GTFS load failed — run manually later: python3 Load_gtfs.py"
 fi
