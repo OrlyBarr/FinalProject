@@ -36,7 +36,7 @@ except ImportError:
 default_args = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),
-    "email_on_failure":  True,
+    "email_on_failure":  False,  # OPT: no SMTP configured — errors would cascade
     "execution_timeout": timedelta(minutes=9),
 }
 
