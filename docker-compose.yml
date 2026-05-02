@@ -31,10 +31,13 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
       ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m"
+      # Allow 4-letter commands so ruok/stat work (needed by Kafka preflight cub zk-ready)
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "*"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      # Use ruok (4lw command) for a real ZK protocol check, not just TCP
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -65,6 +68,9 @@ services:
       KAFKA_MESSAGE_MAX_BYTES: 5242880
       # JVM heap limit — default is 1GB which crashes the VM; 256m is enough for this load
       KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
+      # Give Kafka more time to connect to ZK at startup (default 6000ms is too short)
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 60000
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 60000
       # Reduce network buffer to save RAM (default 100MB)
       KAFKA_SOCKET_SEND_BUFFER_BYTES: 10485760
       KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 10485760
