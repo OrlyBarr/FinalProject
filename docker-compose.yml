@@ -190,10 +190,13 @@ services:
       AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '60'      # reparse DAG files every 60s max (default: 0 = continuous)
       AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'  # reduce Postgres hits for DAG serialization
       AIRFLOW__CORE__MIN_SERIALIZED_DAG_FETCH_INTERVAL: '120'   # webserver: how often to reload serialized DAGs
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '120'   # scan dags/ for NEW files every 120s (default 300)
       # ── DB connection pool — reduce idle connections ───────────────────
       AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'       # default 5 — 2 is sufficient for 1-worker webserver
       AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'    # default 10 — cap total connections at 3
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: '1800' # recycle connections every 30min — prevents stale TCP after Postgres restart
       AIRFLOW__WEBSERVER__RELOAD_ON_PLUGIN_CHANGE: 'false'  # prevent gunicorn restart on file changes
+      AIRFLOW__WEBSERVER__WORKER_REFRESH_INTERVAL: '3600' # gunicorn workers refresh RAM every 1h (default 30s = memory thrashing)
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
@@ -263,9 +266,11 @@ services:
       # ── DAG parsing — reduce CPU/memory overhead ──────────────────────
       AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '60'      # FIX: reparse DAG files max once/60s (default: 0 = tight loop)
       AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'  # FIX: reduce Postgres serialization writes
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '120'   # scan dags/ for NEW files every 120s (default 300)
       # ── DB connection pool ────────────────────────────────────────────
       AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'       # FIX: default 5 — scheduler only needs 2 idle connections
       AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'    # FIX: cap total at 3 — avoids 15 idle Postgres connections
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: '1800' # recycle connections every 30min — prevents stale TCP after Postgres restart
       # ── Prevent zombie health-check processes ──
       AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '60'
       AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '120'
