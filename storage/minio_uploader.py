@@ -85,7 +85,7 @@ def upload_json(s3, data: list, prefix: str, label: str) -> str:
         f"day={now.day:02d}/hour={now.hour:02d}/"
         f"{label}_{now.strftime('%Y%m%d_%H%M%S')}.json"
     )
-    body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    body = json.dumps(data, ensure_ascii=False).encode("utf-8")  # compact JSON saves ~30% RAM vs indent=2
     s3.put_object(Bucket=S3_BUCKET, Key=key, Body=body,
                   ContentType="application/json")
     log.info(f"✅ Uploaded {len(data)} records → s3://{S3_BUCKET}/{key}")
@@ -187,14 +187,18 @@ def run_upload():
     else:
         log.warning("buses_with_nearest_stops.json empty/missing — skipping enriched upload")
 
-    # 2. Upload raw bus positions
-    raw = load_local_json("bus_positions.json") or fetch_live_bus_data()
+    # FIX: fetch live data ONCE and reuse for both uploads.
+    # Original code called fetch_live_bus_data() up to twice per run —
+    # once as fallback in step 2 and always in step 3 → doubled API calls.
+    live = fetch_live_bus_data()
+
+    # 2. Upload raw bus positions — prefer local cache, fall back to live data
+    raw = load_local_json("bus_positions.json") or live
     if raw:
         key = upload_json(s3, raw, "raw/bus-positions", "buses_raw")
         uploaded.append(key)
 
-    # 3. Fetch fresh live data and upload (always, as raw snapshot)
-    live = fetch_live_bus_data()
+    # 3. Upload live snapshot (reuse already-fetched data — no second API call)
     if live:
         key = upload_json(s3, live, "raw/bus-positions", "buses_live")
         uploaded.append(key)

@@ -451,7 +451,7 @@ def fetch_delays() -> list:
                 "limit": 500,
                 "order_by": "id desc",
             },
-            timeout=60,
+            timeout=15,  # FIX: was 60s — task timeout is 4min with 5 fetch calls; 60s risks timeout
         )
         r.raise_for_status()
         records = r.json()

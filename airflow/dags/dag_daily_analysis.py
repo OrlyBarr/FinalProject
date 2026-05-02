@@ -190,7 +190,8 @@ def calculate_kpis(**context):
             ROUND(AVG(delay_minutes), 1)               AS avg_delay_min,
             MAX(delay_minutes)                         AS max_delay_min
         FROM transit.fact_train_positions
-        WHERE DATE(processed_at) = '{yesterday}';
+        WHERE processed_at >= '{yesterday}'::TIMESTAMP
+          AND processed_at <  '{yesterday}'::TIMESTAMP + INTERVAL '1 day';
     """)
 
     rw.close()

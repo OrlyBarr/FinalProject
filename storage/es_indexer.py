@@ -278,12 +278,18 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
     total_docs = 0
     files_done = 0
 
+    MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB guard — prevent OOM on large MinIO files
+
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             if files_done >= max_files:
                 break
             key = obj["Key"]
             if not key.endswith(".json"):
+                continue
+            if obj.get("Size", 0) > MAX_FILE_BYTES:
+                log.warning(f"MinIO→ES: skipping {key} ({obj['Size']//1024//1024}MB > 10MB limit)")
+                files_done += 1
                 continue
             try:
                 body    = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
