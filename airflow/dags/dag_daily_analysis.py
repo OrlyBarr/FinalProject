@@ -1,5 +1,5 @@
 """
-airflow/dags/dag_daily_analytics.py
+airflow/dags/dag_daily_analysis.py
 DAG 3: Daily KPI aggregations, performance reports, HTML summary
 Schedule: 04:00 IL time (01:00 UTC) - after end of service day
 """
@@ -347,7 +347,7 @@ def generate_daily_report(**context):
 # DAG
 # ─────────────────────────────────────────
 with DAG(
-    dag_id="dag_daily_analytics",
+    dag_id="dag_daily_analysis",
     default_args=default_args,
     description="Daily KPIs, aggregations, route performance report",
     schedule_interval="0 1 * * *",             # FIX: 01:00 UTC = 04:00 IL winter / 04:00 IL summer (DST-aware cron). timedelta(hours=24) drifts relative to start_date and does not honour a fixed clock time.

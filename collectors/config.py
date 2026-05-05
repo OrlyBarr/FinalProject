@@ -48,7 +48,7 @@ HISTORICAL_DAYS_BACK = 7
 HISTORICAL_BATCH_SIZE = 500
 
 # ─── Elasticsearch ────────────────────────────────────────────────────────────
-ES_HOST  = os.getenv("ES_HOST", "localhost:9200")
+ES_HOST  = os.getenv("ELASTICSEARCH_HOST", os.getenv("ES_HOST", "http://localhost:9200"))
 ES_INDEX_BUS_DELAYS   = "bus-delays"
 ES_INDEX_TRAIN_DELAYS = "train-delays"
 
