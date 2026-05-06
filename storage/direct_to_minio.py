@@ -718,48 +718,50 @@ def run(dry_run=False, only=None) -> dict:
     uploaded = []
 
     # ── Bus positions ──────────────────────────────────────────────────────────
-    if not buses:
-        log.warning("No bus positions fetched — trying stored fallback")
-        buses = _get_last_stored_records(s3, "raw/bus-positions/", now.isoformat())
-    if buses:
-        uploaded.append(upload(s3, buses, "raw/bus-positions",       "buses_raw"))
-        try:
-            from etl.transformers import BusPositionTransformer
-            # Remap field names to what the transformer expects
-            remapped = [
-                {**b, "latitude": b.get("lat", 0), "longitude": b.get("lon", 0)}
-                for b in buses
-            ]
-            processed = transform_records(remapped, BusPositionTransformer)
-            if processed:
-                uploaded.append(upload(s3, processed, "processed/bus-positions", "buses_processed"))
-        except Exception as e:
-            log.warning(f"Bus ETL transform skipped: {e}")
-        results["buses"] = len(buses)
-    else:
-        log.warning("No bus positions fetched (API down, no stored fallback)")
-        results["buses"] = 0
+    if do_buses:
+        if not buses:
+            log.warning("No bus positions fetched — trying stored fallback")
+            buses = _get_last_stored_records(s3, "raw/bus-positions/", now.isoformat())
+        if buses:
+            uploaded.append(upload(s3, buses, "raw/bus-positions",       "buses_raw"))
+            try:
+                from etl.transformers import BusPositionTransformer
+                # Remap field names to what the transformer expects
+                remapped = [
+                    {**b, "latitude": b.get("lat", 0), "longitude": b.get("lon", 0)}
+                    for b in buses
+                ]
+                processed = transform_records(remapped, BusPositionTransformer)
+                if processed:
+                    uploaded.append(upload(s3, processed, "processed/bus-positions", "buses_processed"))
+            except Exception as e:
+                log.warning(f"Bus ETL transform skipped: {e}")
+            results["buses"] = len(buses)
+        else:
+            log.warning("No bus positions fetched (API down, no stored fallback)")
+            results["buses"] = 0
 
     # ── Train positions ────────────────────────────────────────────────────────
-    if not trains:
-        log.warning("No train positions fetched — trying stored fallback")
-        trains = _get_last_stored_records(s3, "raw/train-positions/", now.isoformat())
-    if trains:
-        uploaded.append(upload(s3, trains, "raw/train-positions",       "trains_raw"))
-        try:
-            from etl.transformers import TrainPositionTransformer
-            processed = transform_records(trains, TrainPositionTransformer)
-            if processed:
-                uploaded.append(upload(s3, processed, "processed/train-positions", "trains_processed"))
-        except Exception as e:
-            log.warning(f"Train ETL transform skipped: {e}")
-        results["trains"] = len(trains)
-    else:
-        log.warning("No train positions fetched (API down, no stored fallback)")
-        results["trains"] = 0
+    if do_trains:
+        if not trains:
+            log.warning("No train positions fetched — trying stored fallback")
+            trains = _get_last_stored_records(s3, "raw/train-positions/", now.isoformat())
+        if trains:
+            uploaded.append(upload(s3, trains, "raw/train-positions",       "trains_raw"))
+            try:
+                from etl.transformers import TrainPositionTransformer
+                processed = transform_records(trains, TrainPositionTransformer)
+                if processed:
+                    uploaded.append(upload(s3, processed, "processed/train-positions", "trains_processed"))
+            except Exception as e:
+                log.warning(f"Train ETL transform skipped: {e}")
+            results["trains"] = len(trains)
+        else:
+            log.warning("No train positions fetched (API down, no stored fallback)")
+            results["trains"] = 0
 
     # ── Traffic ────────────────────────────────────────────────────────────────
-    if traffic:
+    if do_traffic and traffic:
         uploaded.append(upload(s3, traffic, "raw/traffic-data",       "traffic_raw"))
         try:
             from etl.traffic_transformer import TrafficTransformer
@@ -773,30 +775,31 @@ def run(dry_run=False, only=None) -> dict:
         results["traffic"] = 0
 
     # ── Trip updates / delays ──────────────────────────────────────────────────
-    if delays:
-        uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
-        # Processed layer: enrich with computed flags; keep all records
-        processed_delays = []
-        for d in delays:
-            delay_sec = d.get("delay_seconds")
-            processed_delays.append({
-                **d,
-                "is_delayed":   delay_sec is not None and delay_sec > 180,
-                "is_very_late": delay_sec is not None and delay_sec > 600,
-                "is_early":     delay_sec is not None and delay_sec < -60,
-            })
-        uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
-        results["delays"] = len(delays)
-    else:
-        log.warning("No delay records fetched — trying stored fallback")
-        fallback_delays = _get_last_stored_records(s3, "raw/trip-updates/", now.isoformat())
-        if fallback_delays:
-            uploaded.append(upload(s3, fallback_delays, "raw/trip-updates",       "delays_raw"))
-            uploaded.append(upload(s3, fallback_delays, "processed/trip-updates", "delays_processed"))
-        results["delays"] = len(fallback_delays)
+    if do_delays:
+        if delays:
+            uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
+            # Processed layer: enrich with computed flags; keep all records
+            processed_delays = []
+            for d in delays:
+                delay_sec = d.get("delay_seconds")
+                processed_delays.append({
+                    **d,
+                    "is_delayed":   delay_sec is not None and delay_sec > 180,
+                    "is_very_late": delay_sec is not None and delay_sec > 600,
+                    "is_early":     delay_sec is not None and delay_sec < -60,
+                })
+            uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
+            results["delays"] = len(delays)
+        else:
+            log.warning("No delay records fetched — trying stored fallback")
+            fallback_delays = _get_last_stored_records(s3, "raw/trip-updates/", now.isoformat())
+            if fallback_delays:
+                uploaded.append(upload(s3, fallback_delays, "raw/trip-updates",       "delays_raw"))
+                uploaded.append(upload(s3, fallback_delays, "processed/trip-updates", "delays_processed"))
+            results["delays"] = len(fallback_delays)
 
     # ── Service alerts ─────────────────────────────────────────────────────────
-    if alerts:
+    if do_alerts and alerts:
         uploaded.append(upload(s3, alerts, "raw/service-alerts", "alerts_raw"))
         # Processed layer: enrich with a severity score; keep all records
         processed_alerts = []
