@@ -97,9 +97,13 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     # Previously it was instantiated inside _flush_chunk, opening a new Redshift
     # TCP+SSL connection every 500 records — expensive and unnecessary.
     rw = None
-    if os.getenv("REDSHIFT_HOST"):
-        from warehouse.redshift_writer import RedshiftWriter
-        rw = RedshiftWriter()
+    _redshift_host = os.getenv("REDSHIFT_HOST", "")
+    if _redshift_host and "your-cluster" not in _redshift_host:
+        try:
+            from warehouse.redshift_writer import RedshiftWriter
+            rw = RedshiftWriter()
+        except Exception as _e:
+            print(f"[WARN] Redshift unavailable, skipping: {_e}")
 
     raw_records       = []
     processed_records = []
