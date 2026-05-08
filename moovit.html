@@ -644,25 +644,19 @@ function loadOperatorLines(opId, opName) {
     .then(r => r.json())
     .then(data => {
       const routes = data.routes || [];
+      const totalSeen = data.total_lines_seen || 0;
       const col = OP_COLORS[opId] || '#00B1D2';
       if (!routes.length) {
-        // Fallback: GTFS static catalog
-        return fetch(`${API}/gtfs/routes?operator_id=${opId}&limit=200`)
-          .then(r => r.json())
-          .then(gtfs => {
-            const gr = gtfs.routes || [];
-            if (!gr.length) {
-              renderResults(`<div class="empty-state"><div class="icon">🚫</div>
-                <div>לא נמצאו קווים ל-${opName}</div>
-                <div style="font-size:0.75rem;margin-top:6px;color:var(--text-muted)">ייתכן שאין אוטובוסים פעילים כרגע באזור גוש דן</div></div>`);
-              return;
-            }
-            let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
-              📋 ${gr.length} קווים (מ-GTFS סטטי)</div>`;
-            html += gr.map(r => routeCard(r, col)).join('');
-            renderResults(html);
-            setTitle(`קווי ${opName} (${gr.length})`);
-          });
+        // No moving lines for this operator right now → clear empty-state
+        const subMsg = totalSeen > 0
+          ? `יש ${totalSeen} קווים של ${opName} ברשת אבל אף אחד לא נע כרגע`
+          : `אין כרגע אוטובוסים של ${opName} באזור גוש דן`;
+        renderResults(`<div class="empty-state"><div class="icon">🚏</div>
+          <div style="font-weight:600;font-size:1rem">אין כרגע קווים פעילים</div>
+          <div style="font-size:0.75rem;margin-top:8px;color:var(--text-muted)">${escHtml(subMsg)}</div>
+          <div style="font-size:0.7rem;margin-top:4px;color:var(--text-muted)">נסי לחזור עוד כמה דקות — נתונים מתעדכנים בזמן אמת</div></div>`);
+        setTitle(`${opName} — אין קווים פעילים`);
+        return;
       }
       let html = `<div style="font-size:0.78rem;color:var(--text-muted);margin:10px 0 8px">
         🟢 ${routes.length} קווים פעילים עכשיו — נתוני GPS בזמן אמת</div>`;
