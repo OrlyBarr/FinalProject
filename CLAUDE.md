@@ -100,10 +100,14 @@ finalproject-main/
 ## Stride API — פרמטרים חשובים
 
 ```
-# פרמטרי סינון נכונים לsiri_vehicle_locations/list:
-siri_route__operator_ref=2        # רכבת ישראל
-siri_route__line_ref=89           # מספר קו (יחיד! לא line_refs)
-siri_route__operator_ref=3        # דן (יחיד! לא operator_refs)
+# פרמטרי סינון QUERY ל-siri_vehicle_locations/list — שימי לב לרבים:
+siri_routes__operator_ref=2       # רכבת ישראל   ← רבים "routes"!
+siri_routes__line_ref=89          # מספר קו        ← רבים "routes"!
+siri_routes__operator_ref=3       # דן             ← רבים "routes"!
+
+# ⚠️  חשוב: השדות בתשובה (RESPONSE) הם ביחיד —
+# v["siri_route__operator_ref"], v["siri_route__line_ref"]
+# אם משתמשים ב-singular בשאילתה — Stride מתעלמת בשקט ומחזירה את כל המפעילים.
 
 # פרמטרי bbox נכונים:
 lat__greater_or_equal=31.97       # ✅ נכון
