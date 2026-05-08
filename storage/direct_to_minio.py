@@ -129,8 +129,13 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
     body = json.dumps(records, ensure_ascii=False).encode("utf-8")  # compact JSON saves ~30% RAM vs indent=2
     path = f"s3://{MAIN_BUCKET}/{key}"
 
+    # Skip retries if we already know MinIO is down — go straight to buffer
+    import storage.direct_to_minio as _mod
+    minio_up = getattr(_mod, '_MINIO_AVAILABLE', True)
+    
     last_err = None
-    for attempt in range(4):
+    max_attempts = 4 if minio_up else 1
+    for attempt in range(max_attempts):
         try:
             s3.put_object(
                 Bucket=MAIN_BUCKET,
@@ -143,15 +148,23 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
             return path
         except Exception as e:
             last_err = e
+            if not minio_up:
+                break  # Don't waste time retrying when MinIO is known-down
             wait = min(2 ** attempt, 30)
-            log.warning(f"  MinIO upload attempt {attempt+1}/4 failed: {e}. Retry in {wait}s")
+            log.warning(f"  MinIO upload attempt {attempt+1}/{max_attempts} failed: {e}. Retry in {wait}s")
             _time.sleep(wait)
 
     # All retries exhausted — save locally for background retry by ResilientMinioWriter
     log.error(f"  MinIO upload failed after 4 attempts: {last_err}")
     try:
-        from resilient_pipeline import BUFFER_DIR
-        pending = BUFFER_DIR / "minio_pending"
+        # Prefer env var; fall back to resilient_pipeline default
+        _buf_env = os.environ.get('BUFFER_DIR')
+        if _buf_env:
+            from pathlib import Path as _P
+            BUFFER_DIR_PATH = _P(_buf_env)
+        else:
+            from resilient_pipeline import BUFFER_DIR as BUFFER_DIR_PATH
+        pending = BUFFER_DIR_PATH / "minio_pending"
         pending.mkdir(parents=True, exist_ok=True)
         safe = key.replace("/", "_")
         (pending / f"{safe}.data").write_bytes(body)
@@ -706,14 +719,20 @@ def run(dry_run=False, only=None) -> dict:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         return {"buses": len(buses), "trains": len(trains), "traffic": len(traffic), "delays": len(delays), "alerts": len(alerts)}
 
-    # ── Connect ────────────────────────────────────────────────────────────────
+    # ── Connect (non-fatal — buffer to disk if down) ───────────────────────────
+    minio_available = True
     try:
         s3 = get_s3()
         ensure_bucket(s3)
     except Exception as e:
-        log.error(f"Cannot connect to MinIO at {MINIO_ENDPOINT}: {e}")
-        log.error("Make sure Docker is running: docker-compose up -d minio")
-        return {"error": str(e)}
+        log.warning(f"⚠️  MinIO unreachable at {MINIO_ENDPOINT}: {e}")
+        log.warning("   → continuing; data will be BUFFERED to disk and flushed when MinIO is back up")
+        s3 = get_s3()  # client object — may not work but upload() will catch & buffer
+        minio_available = False
+    
+    # Tell upload() to skip retries and go straight to buffer when MinIO is down
+    import storage.direct_to_minio as _self_mod
+    _self_mod._MINIO_AVAILABLE = minio_available
 
     uploaded = []
 

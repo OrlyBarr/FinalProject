@@ -257,6 +257,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
         "train_positions": "raw/train-positions",
         "service_alerts":  "raw/service-alerts",
         "delay_events":    "raw/delay-events",
+        "traffic_data":   "raw/traffic-data",
     }
     prefix     = slug_map.get(topic_key, f"raw/{topic_key}")
     index_name = TOPIC_INDEX_MAP[topic_key]
@@ -303,9 +304,24 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
                     doc["_indexed_at"]   = datetime.now(IL_TZ).isoformat()
                     actions.append({"_index": index_name, "_source": doc})
                 if actions:
-                    success, _ = helpers.bulk(es, actions, raise_on_error=False)
-                    total_docs += success
-                    log.info(f"MinIO→ES: {key} → {success} docs → {index_name}")
+                    # Index in chunks to avoid ES bulk timeout under high load
+                    chunk_size = 50
+                    file_success = 0
+                    for i in range(0, len(actions), chunk_size):
+                        chunk = actions[i:i+chunk_size]
+                        for attempt in range(3):
+                            try:
+                                ok, _ = helpers.bulk(es, chunk, raise_on_error=False, request_timeout=45)
+                                file_success += ok
+                                break
+                            except Exception as chunk_err:
+                                if attempt < 2:
+                                    import time as _t; _t.sleep(5 * (attempt + 1))
+                                else:
+                                    log.warning(f"MinIO→ES chunk {i//chunk_size} failed after 3 attempts: {chunk_err}")
+                        import time as _t; _t.sleep(0.3)
+                    total_docs += file_success
+                    log.info(f"MinIO→ES: {key} → {file_success} docs → {index_name}")
                 files_done += 1
             except Exception as e:
                 log.error(f"MinIO→ES error on {key}: {e}")
