@@ -1,1 +1,86 @@
-[]
+[
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.01499,
+    "lon": 34.76242,
+    "speed_kmh": 13.888889,
+    "free_flow_kmh": 21.666668,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.1192,
+    "lon": 34.8107,
+    "speed_kmh": 16.666668,
+    "free_flow_kmh": 29.166668,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.03795,
+    "lon": 34.82998,
+    "speed_kmh": 10.555556,
+    "free_flow_kmh": 17.5,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.08115,
+    "lon": 34.79749,
+    "speed_kmh": 19.722223,
+    "free_flow_kmh": 28.611113,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.0769,
+    "lon": 34.79422,
+    "speed_kmh": 1.6666667,
+    "free_flow_kmh": 28.88889,
+    "jam_factor": 9.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.10789,
+    "lon": 34.79185,
+    "speed_kmh": 10.555556,
+    "free_flow_kmh": 17.222223,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  },
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.12262,
+    "lon": 34.79436,
+    "speed_kmh": 10.277778,
+    "free_flow_kmh": 17.222223,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-10T21:46:49.385113+00:00",
+    "source": "github-actions"
+  }
+]
