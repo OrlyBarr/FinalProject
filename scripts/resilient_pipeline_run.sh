@@ -46,7 +46,7 @@ echo "[BACKLOG] MinIO pending: $PENDING_MINIO files, ES pending: $PENDING_ES fil
 # ─── Step 0: Sync GitHub buffer (catches data missed during sleep) ──
 if [ -d "$PROJECT/.git" ]; then
   echo '[0] Syncing data from GitHub buffer...' >> $LOG
-  cd $PROJECT && git pull origin main --quiet >> $LOG 2>&1
+  timeout 25 git pull origin main --quiet >> $LOG 2>&1 || echo "[0] git pull timed out or failed — continuing" >> $LOG
   $VENV $PROJECT/scripts/sync_from_github.py >> $LOG 2>&1
   cd $PROJECT
 fi
