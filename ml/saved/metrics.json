@@ -1,0 +1,56 @@
+{
+  "model_version": "v1-velocity-synth-2026-05-10",
+  "best_model": "GradientBoosting",
+  "all_metrics": [
+    {
+      "name": "GradientBoosting",
+      "mae": 0.6040110126947529,
+      "rmse": 0.8876767278281803,
+      "r2": 0.677811658733972
+    },
+    {
+      "name": "RandomForest",
+      "mae": 0.6197897338232076,
+      "rmse": 0.9598786784635996,
+      "r2": 0.6232677126308099
+    },
+    {
+      "name": "LinearRegression",
+      "mae": 0.590849687047144,
+      "rmse": 1.1002790870601877,
+      "r2": 0.5049992357041805
+    }
+  ],
+  "n_train": 10747,
+  "n_test": 2687,
+  "feature_importance_top20": {
+    "expected_kmh": 0.2627721037241786,
+    "operator_name_GB Tours": 0.12449861216932444,
+    "avg_jam_factor": 0.1050961398923542,
+    "hour_of_day": 0.10344169218756073,
+    "route_bucket_17083": 0.050849811513111735,
+    "route_bucket_34396": 0.03517571877165221,
+    "route_bucket_35886": 0.02848970536247202,
+    "route_bucket_11688": 0.025593455616511936,
+    "route_bucket_32249": 0.019448602038110916,
+    "operator_name_Metropoline": 0.018624695400059246,
+    "operator_name_Unknown": 0.015395024564146704,
+    "operator_name_Nateev Express": 0.014228614067386142,
+    "route_bucket_40913": 0.01356299033265504,
+    "route_bucket_40911": 0.013173772361107602,
+    "route_bucket_34104": 0.011448517838420928,
+    "operator_name_Dan": 0.011014983674986857,
+    "route_bucket_36797": 0.010172247780338779,
+    "route_bucket_16721": 0.009935383962220172,
+    "route_bucket_40011": 0.009854420786798468,
+    "route_bucket_other": 0.008863782554283403
+  },
+  "target_stats": {
+    "mean_minutes": 2.2091944300551387,
+    "std_minutes": 1.573621566361654,
+    "p50_minutes": 2.038189015476016,
+    "p90_minutes": 3.9237813731797964
+  },
+  "residual_std_test": 0.8876556423759315,
+  "elapsed_seconds": 5.7
+}
