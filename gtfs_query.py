@@ -261,7 +261,7 @@ def get_nearby_stops(lat: float, lon: float, radius_m: int = 500) -> list[dict]:
                 SQRT(
                     POWER((s.stop_lat - %s) * 111320, 2) +
                     POWER((s.stop_lon - %s) * 88000,  2)
-                )::numeric, 0
+                )::integer
             ) AS distance_m
         FROM gtfs.stops s
         WHERE s.stop_lat BETWEEN %s AND %s
