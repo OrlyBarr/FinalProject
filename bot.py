@@ -2593,24 +2593,9 @@ def main():
     ).start()
     print("📚 GTFS LineRef cache loading in background...")
 
-    server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
-
-    # ── Auto-enable HTTPS if cert.pem + key.pem exist ───────────────────
-    _cert = os.path.join(BASE_DIR, "cert.pem")
-    _key  = os.path.join(BASE_DIR, "key.pem")
-    _proto = "http"
-    if os.path.isfile(_cert) and os.path.isfile(_key):
-        try:
-            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ctx.load_cert_chain(_cert, _key)
-            server.socket = ctx.wrap_socket(server.socket, server_side=True)
-            server._is_https = True   # used by _sec_headers() for HSTS
-            _proto = "https"
-            print(f"🔒 SSL enabled (cert: {_cert})")
-        except Exception as ssl_err:
-            print(f"⚠️  SSL setup failed ({ssl_err}) — falling back to HTTP")
-
-    print(f"🤖 Transit Bot API → {_proto}://0.0.0.0:{BOT_PORT}")
+    # ── HTTP server on BOT_PORT (always on, for normal access) ─────────
+    http_server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
+    print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
     print(f"   /gushdan                  → 🚌 Gush Dan Transit App (Moovit-style)")
     print(f"   /                         → Transit Query Tool (index.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
@@ -2621,13 +2606,37 @@ def main():
     print(f"   /geocode?q=address        → address → GPS (Nominatim proxy)")
     print(f"   /proxy/stride/<path>?...  → Hasadna Open Bus Stride API proxy")
     print(f"   /proxy/rail?...           → Israel Railways API proxy")
-    if _proto == "https":
-        print(f"   /cert.pem                 → 📥 Download CA cert (install on Android)")
+
+    # ── HTTPS server on BOT_PORT+443 (if cert.pem + key.pem exist) ──────
+    _cert = os.path.join(BASE_DIR, "cert.pem")
+    _key  = os.path.join(BASE_DIR, "key.pem")
+    https_server = None
+    HTTPS_PORT = int(os.getenv("HTTPS_PORT", BOT_PORT + 443))   # default 5443
+    if os.path.isfile(_cert) and os.path.isfile(_key):
+        try:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.load_cert_chain(_cert, _key)
+            https_server = ThreadingHTTPServer(("0.0.0.0", HTTPS_PORT), BotHandler)
+            https_server.socket = ctx.wrap_socket(https_server.socket, server_side=True)
+            https_server._is_https = True
+            print(f"🔒 HTTPS also on port {HTTPS_PORT} → https://0.0.0.0:{HTTPS_PORT}")
+            print(f"   /cert.pem                 → 📥 Download CA cert (install on Android)")
+            # Start HTTPS in a background thread
+            threading.Thread(
+                target=https_server.serve_forever,
+                daemon=True, name="https-server"
+            ).start()
+        except Exception as ssl_err:
+            print(f"⚠️  HTTPS setup failed: {ssl_err}")
+
     try:
-        server.serve_forever()
+        http_server.serve_forever()
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped.")
-        server.server_close()
+        http_server.server_close()
+        if https_server:
+            https_server.server_close()
 
 
 if __name__ == "__main__":
