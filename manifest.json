@@ -1,7 +1,7 @@
 {
   "id": "/app/israel-transit-gushdan",
   "name": "Israel Transit — גוש דן",
-  "short_name": "Transit",
+  "short_name": "Transit IL",
   "description": "ניטור תחבורה ציבורית בזמן אמת לגוש דן — אוטובוסים, רכבות, רכבת קלה ותחנות קרובות.",
   "start_url": "/gushdan",
   "scope": "/",
@@ -13,6 +13,16 @@
   "theme_color": "#00B1D2",
   "background_color": "#EAF8FB",
   "categories": ["travel", "navigation", "utilities"],
+  "iarc_rating_id": "",
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "מסך ראשי — מפה עם אוטובוסים חיים"
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -44,7 +54,7 @@
       "name": "תחנות קרובות",
       "short_name": "קרוב אלי",
       "description": "מצא תחנות אוטובוס ורכבת בקרבת המיקום הנוכחי",
-      "url": "/?action=nearby",
+      "url": "/gushdan?action=nearby",
       "icons": [
         { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
@@ -53,11 +63,12 @@
       "name": "תכנון מסלול",
       "short_name": "מסלול",
       "description": "תכנן מסלול נסיעה בתחבורה ציבורית",
-      "url": "/?action=plan",
+      "url": "/gushdan?action=plan",
       "icons": [
         { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }
       ]
     }
   ],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "related_applications": []
 }
