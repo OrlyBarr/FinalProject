@@ -1,8 +1,9 @@
 {
+  "id": "/app/israel-transit-gushdan",
   "name": "Israel Transit — גוש דן",
   "short_name": "Transit",
   "description": "ניטור תחבורה ציבורית בזמן אמת לגוש דן — אוטובוסים, רכבות, רכבת קלה ותחנות קרובות.",
-  "start_url": "/",
+  "start_url": "/gushdan",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

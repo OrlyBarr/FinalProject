@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import os
+import ssl
 import sys
 import threading
 import time
@@ -410,12 +411,24 @@ class BotHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
 
+    def _sec_headers(self):
+        """Add security headers required for PWA install on Android/Chrome."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("X-XSS-Protection", "1; mode=block")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        # HSTS only when running over HTTPS
+        if getattr(self.server, "_is_https", False):
+            self.send_header("Strict-Transport-Security",
+                             "max-age=31536000; includeSubDomains")
+
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", len(body))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self._sec_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -427,6 +440,7 @@ class BotHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", len(body))
             self.send_header("Access-Control-Allow-Origin", "*")
+            self._sec_headers()
             self.end_headers()
             self.wfile.write(body)
         except FileNotFoundError:
@@ -1428,6 +1442,24 @@ class BotHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "service-worker.js not found"}, status=404)
             except Exception as e:
                 self.send_json({"error": str(e)}, status=500)
+
+        # ── SSL Certificate download (for Android trust installation) ───────
+        # Navigate to https://<VM-IP>:5000/cert.pem on Android → install trust
+        elif path == "/cert.pem":
+            cert_path = os.path.join(BASE_DIR, "cert.pem")
+            if not os.path.isfile(cert_path):
+                self.send_json({"error": "cert.pem not found — server not running HTTPS"}, status=404)
+            else:
+                with open(cert_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                # application/x-pem-file triggers "Install certificate" on Android
+                self.send_header("Content-Type", "application/x-pem-file")
+                self.send_header("Content-Disposition", 'attachment; filename="transit-ca.pem"')
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
 
         # ── PWA: icons ───────────────────────────────────────────────────────
         elif path.startswith("/icons/"):
@@ -2562,7 +2594,23 @@ def main():
     print("📚 GTFS LineRef cache loading in background...")
 
     server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
-    print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
+
+    # ── Auto-enable HTTPS if cert.pem + key.pem exist ───────────────────
+    _cert = os.path.join(BASE_DIR, "cert.pem")
+    _key  = os.path.join(BASE_DIR, "key.pem")
+    _proto = "http"
+    if os.path.isfile(_cert) and os.path.isfile(_key):
+        try:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(_cert, _key)
+            server.socket = ctx.wrap_socket(server.socket, server_side=True)
+            server._is_https = True   # used by _sec_headers() for HSTS
+            _proto = "https"
+            print(f"🔒 SSL enabled (cert: {_cert})")
+        except Exception as ssl_err:
+            print(f"⚠️  SSL setup failed ({ssl_err}) — falling back to HTTP")
+
+    print(f"🤖 Transit Bot API → {_proto}://0.0.0.0:{BOT_PORT}")
     print(f"   /gushdan                  → 🚌 Gush Dan Transit App (Moovit-style)")
     print(f"   /                         → Transit Query Tool (index.html)")
     print(f"   /agent                    → Agent Transit Dashboard")
@@ -2573,6 +2621,8 @@ def main():
     print(f"   /geocode?q=address        → address → GPS (Nominatim proxy)")
     print(f"   /proxy/stride/<path>?...  → Hasadna Open Bus Stride API proxy")
     print(f"   /proxy/rail?...           → Israel Railways API proxy")
+    if _proto == "https":
+        print(f"   /cert.pem                 → 📥 Download CA cert (install on Android)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
