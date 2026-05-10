@@ -461,6 +461,61 @@ button {
   #pwa-install .pwa-text small { display: none; }   /* keep banner short on phones */
 }
 
+/* ── Manual install button (always visible in topbar) ──────────────── */
+#btn-install-manual {
+  background: rgba(255,255,255,0.18);
+  border: 1.5px solid rgba(255,255,255,0.5);
+  color: #fff; border-radius: 20px;
+  padding: 5px 10px; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  font-family: inherit; letter-spacing: 0.2px;
+  display: flex; align-items: center; gap: 4px;
+}
+#btn-install-manual:active { opacity: 0.7; }
+
+/* ── Install instructions modal ─────────────────────────────────────── */
+#install-modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9990;
+  background: rgba(0,0,0,0.55); align-items: flex-end; justify-content: center;
+}
+#install-modal-overlay.open { display: flex; }
+#install-modal {
+  background: #fff; border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 480px;
+  padding: 20px 20px 36px;
+  direction: rtl; text-align: right;
+  animation: slide-up 0.3s ease-out;
+}
+@keyframes slide-up {
+  from { transform: translateY(60px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+#install-modal h2 {
+  margin: 0 0 4px; font-size: 1.2rem; color: #0090B0;
+}
+#install-modal .install-subtitle {
+  margin: 0 0 18px; font-size: 0.82rem; color: #888;
+}
+#install-modal .install-step {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 16px;
+}
+#install-modal .step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #0090B0; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 800; flex-shrink: 0; margin-top: 1px;
+}
+#install-modal .step-text { font-size: 0.9rem; color: #1a2a3a; line-height: 1.45; }
+#install-modal .step-text strong { color: #0090B0; }
+#install-modal .install-close {
+  width: 100%; margin-top: 8px;
+  background: #0090B0; color: #fff; border: none;
+  border-radius: 12px; padding: 13px; font-size: 1rem;
+  font-weight: 700; cursor: pointer; font-family: inherit;
+}
+#install-modal .install-close:active { background: #007a98; }
+
 /* ── Splash overlay (shown briefly on first load) ──────────────────── */
 #pwa-splash {
   position: fixed; inset: 0; z-index: 9999;
@@ -540,6 +595,36 @@ button {
   <span class="title">NAYA Transit</span>
   <span id="status-label">מתחבר...</span>
   <div id="status-dot" class="offline"></div>
+  <button id="btn-install-manual" onclick="openInstallModal()" title="הוסף למסך הבית">
+    📲 הורדה
+  </button>
+</div>
+
+<!-- ── Install instructions modal ────────────────────────────────────── -->
+<div id="install-modal-overlay" onclick="if(event.target===this)closeInstallModal()">
+  <div id="install-modal">
+    <h2>📲 הוסף לדף הבית</h2>
+    <p class="install-subtitle">כך מתקינים את האפליקציה בלחיצה אחת מהמסך הראשי של הטלפון</p>
+
+    <div class="install-step">
+      <div class="step-num">1</div>
+      <div class="step-text">פתחי את <strong>תפריט Chrome</strong> — לחצי על שלושת הנקודות <strong>⋮</strong> בפינה הימנית העליונה</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">2</div>
+      <div class="step-text">גללי למטה ובחרי <strong>«הוסף לדף הבית»</strong><br><small style="color:#888">באנגלית: "Add to Home screen"</small></div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">3</div>
+      <div class="step-text">לחצי <strong>«הוסף»</strong> בחלון שנפתח — האפליקציה תופיע על שולחן העבודה שלך כמו אפליקציה רגילה ✅</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">💡</div>
+      <div class="step-text" style="color:#888;font-size:0.82rem">ב-iPhone: לחצי על <strong>□↑</strong> (Share) בתחתית Safari ← <strong>«הוסף למסך הבית»</strong></div>
+    </div>
+
+    <button class="install-close" onclick="closeInstallModal()">הבנתי, תודה!</button>
+  </div>
 </div>
 
 <!-- Search bar -->
@@ -1383,6 +1468,18 @@ setTimeout(() => {
   var banner   = document.getElementById('pwa-install');
   var goBtn    = document.getElementById('pwa-install-btn');
   var skipBtn  = document.getElementById('pwa-dismiss-btn');
+
+  // ── Manual install modal (always available, no HTTPS required) ──────
+  window.openInstallModal = function () {
+    var overlay = document.getElementById('install-modal-overlay');
+    if (overlay) overlay.classList.add('open');
+  };
+  window.closeInstallModal = function () {
+    var overlay = document.getElementById('install-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
+  };
+  // If beforeinstallprompt fires (HTTPS only) — wire install button to native prompt too
+
 
   function userDismissed() {
     try { return localStorage.getItem('pwa-install-dismissed') === '1'; }
