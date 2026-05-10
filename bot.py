@@ -1190,10 +1190,7 @@ class BotHandler(BaseHTTPRequestHandler):
         qs     = urllib.parse.parse_qs(parsed.query)
 
         # ── Gush Dan Transit App ─────────────────────────────────────────────
-        if path == "/gushdan":
-            self.send_html(os.path.join(BASE_DIR, "gushdan_app.html"))
-
-        elif path == "/moovit":
+        if path == "/gushdan" or path == "/moovit":
             self.send_html(os.path.join(BASE_DIR, "moovit.html"))
 
         # ── Dankal Red Line — live vehicles + alert status ────────────────────
