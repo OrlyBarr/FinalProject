@@ -294,9 +294,21 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
                 continue
             try:
                 body    = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
-                records = json.loads(body)
-                if isinstance(records, dict):
-                    records = [records]
+                # Support both JSON array/object AND NDJSON (one JSON per line)
+                try:
+                    records = json.loads(body)
+                    if isinstance(records, dict):
+                        records = [records]
+                except json.JSONDecodeError:
+                    # Fallback: try NDJSON (newline-delimited JSON)
+                    records = []
+                    for line in body.splitlines():
+                        line = line.strip()
+                        if line:
+                            try:
+                                records.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
                 actions = []
                 for doc in records:
                     doc = _add_geo_point(doc)
