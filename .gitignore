@@ -10,3 +10,8 @@ __pycache__/
 # PWA manifest — must be tracked even though *.json is ignored above
 !manifest.json
 !ml/saved/*.json
+
+# GitHub Actions data buffer — must be tracked (populated by collect_transit.yml)
+!data-buffer/buses_latest.json
+!data-buffer/traffic_latest.json
+!data-buffer/meta.json

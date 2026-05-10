@@ -1,0 +1,163 @@
+name: Collect Transit Data
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv
+
+      - name: Collect transit data
+        env:
+          HERE_API_KEY: aA-oKmUbysYkQVjd1zoCkykr_wU9laXvEldsvT_KcYA
+        run: |
+          python - <<'PYEOF'
+          import json
+          import os
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          import requests
+
+          HERE_API_KEY = os.environ.get("HERE_API_KEY", "")
+          STRIDE_URL = "https://open-bus-stride-api.hasadna.org.il"
+          OUTPUT_DIR = Path("data-buffer")
+          OUTPUT_DIR.mkdir(exist_ok=True)
+
+          collected_at = datetime.now(timezone.utc).isoformat()
+
+          # ── Fetch bus positions ───────────────────────────────────────────
+          buses = []
+          try:
+              r = requests.get(
+                  f"{STRIDE_URL}/siri_vehicle_locations/list",
+                  params={"limit": 300, "order_by": "id desc"},
+                  timeout=20,
+              )
+              r.raise_for_status()
+              raw = r.json()
+              for rec in raw:
+                  if rec.get("lat") is None or rec.get("lon") is None:
+                      continue
+                  recorded = rec.get("recorded_at_time", "")
+                  if recorded and int(recorded[:4]) >= 2037:
+                      continue  # filter sentinel timestamps
+                  buses.append({
+                      "vehicle_id":       str(rec.get("id", "")),
+                      "route_id":         str(rec.get("siri_route_id") or rec.get("siri_route__id") or ""),
+                      "trip_id":          str(rec.get("siri_ride_id") or ""),
+                      "line_ref":         str(rec.get("siri_route__line_ref") or ""),
+                      "route_short_name": str(rec.get("siri_route__line_ref") or ""),
+                      "operator_id":      str(rec.get("siri_route__operator_ref") or ""),
+                      "lat":              rec.get("lat"),
+                      "lon":              rec.get("lon"),
+                      "bearing":          rec.get("bearing"),
+                      "velocity":         rec.get("velocity"),
+                      "recorded_at":      recorded,
+                      "collected_at":     collected_at,
+                      "source":           "github-actions",
+                  })
+              print(f"Buses: {len(buses)} records")
+          except Exception as e:
+              print(f"Bus fetch failed: {e}", file=sys.stderr)
+
+          # ── Fetch traffic (Gush Dan bbox only for Actions — lighter) ──────
+          traffic = []
+          if HERE_API_KEY:
+              try:
+                  r = requests.get(
+                      "https://data.traffic.hereapi.com/v7/flow",
+                      params={
+                          "apiKey":              HERE_API_KEY,
+                          "in":                  "bbox:34.73,31.97,34.93,32.19",
+                          "locationReferencing": "shape",
+                          "lang":                "en-US",
+                      },
+                      timeout=25,
+                  )
+                  if r.status_code == 401:
+                      print("HERE API: Invalid API key (401)", file=sys.stderr)
+                  elif r.status_code == 429:
+                      print("HERE API: Rate limit (429)", file=sys.stderr)
+                  else:
+                      r.raise_for_status()
+                      CONGESTION_MAP = {1: "free", 2: "minor", 3: "moderate", 4: "heavy", 5: "blocked"}
+                      for result in r.json().get("results", []):
+                          cf        = result.get("currentFlow", {})
+                          speed     = cf.get("speed", 0)
+                          free_flow = cf.get("freeFlow", 0)
+                          jam       = cf.get("jamFactor", 0)
+                          cong_raw  = cf.get("congestion", {})
+                          cong_val  = cong_raw.get("value", 1) if isinstance(cong_raw, dict) else 1
+                          location  = result.get("location", {})
+                          shape     = location.get("shape", {})
+                          links     = shape.get("links", [{}])
+                          points    = (links[0] if links else {}).get("points", [{}])
+                          mid       = points[len(points) // 2] if points else {}
+                          traffic.append({
+                              "segment_id":   result.get("id", ""),
+                              "description":  location.get("description", ""),
+                              "lat":          mid.get("lat"),
+                              "lon":          mid.get("lng"),
+                              "speed_kmh":    speed,
+                              "free_flow_kmh": free_flow,
+                              "jam_factor":   jam,
+                              "congestion":   CONGESTION_MAP.get(cong_val, "unknown"),
+                              "collected_at": collected_at,
+                              "source":       "github-actions",
+                          })
+                  print(f"Traffic: {len(traffic)} records")
+              except Exception as e:
+                  print(f"Traffic fetch failed: {e}", file=sys.stderr)
+          else:
+              print("HERE_API_KEY not set — skipping traffic", file=sys.stderr)
+
+          # ── Write output files ────────────────────────────────────────────
+          (OUTPUT_DIR / "buses_latest.json").write_text(
+              json.dumps(buses, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          (OUTPUT_DIR / "traffic_latest.json").write_text(
+              json.dumps(traffic, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          meta = {
+              "collected_at":  collected_at,
+              "bus_count":     len(buses),
+              "traffic_count": len(traffic),
+          }
+          (OUTPUT_DIR / "meta.json").write_text(
+              json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print(f"Wrote data-buffer/: buses={len(buses)}, traffic={len(traffic)}, collected_at={collected_at}")
+          PYEOF
+
+      - name: Commit and push data snapshot
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "actions@github.com"
+          git add data-buffer/buses_latest.json \
+                  data-buffer/traffic_latest.json \
+                  data-buffer/meta.json
+          if git diff --cached --quiet; then
+            echo "No data changes — skipping commit"
+          else
+            TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+            git commit -m "chore(data): transit snapshot ${TIMESTAMP}"
+            git push origin main
+          fi

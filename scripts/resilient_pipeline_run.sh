@@ -43,6 +43,14 @@ PENDING_MINIO=$(ls $BUFFER_DIR/minio_pending/*.meta.json 2>/dev/null | wc -l)
 PENDING_ES=$(ls $BUFFER_DIR/es_pending/*.json 2>/dev/null | wc -l)
 echo "[BACKLOG] MinIO pending: $PENDING_MINIO files, ES pending: $PENDING_ES files" >> $LOG
 
+# ─── Step 0: Sync GitHub buffer (catches data missed during sleep) ──
+if [ -d "$PROJECT/.git" ]; then
+  echo '[0] Syncing data from GitHub buffer...' >> $LOG
+  cd $PROJECT && git pull origin main --quiet >> $LOG 2>&1
+  $VENV $PROJECT/scripts/sync_from_github.py >> $LOG 2>&1
+  cd $PROJECT
+fi
+
 # ─── Step 1: ALWAYS fetch from APIs (independent of containers) ──
 echo '[1] Fetching from external APIs...' >> $LOG
 $VENV storage/direct_to_minio.py >> $LOG 2>&1
