@@ -2,8 +2,26 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>NAYA Transit — תחבורה ציבורית ישראל</title>
+
+<!-- ── PWA: manifest + theme ─────────────────────────────────────────── -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#00B1D2">
+<meta name="color-scheme" content="light">
+<meta name="application-name" content="Israel Transit">
+<meta name="description" content="ניטור תחבורה ציבורית בזמן אמת לגוש דן — אוטובוסים, רכבות, רכבת קלה ותחנות קרובות.">
+
+<!-- ── iOS / Apple PWA tags ──────────────────────────────────────────── -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Transit">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+<link rel="shortcut icon" href="/icons/icon-192.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -22,6 +40,12 @@
   --shadow: 0 2px 16px rgba(0,0,0,0.12);
   --radius: 16px;
 }
+html, body {
+  -webkit-tap-highlight-color: rgba(0,177,210,0.18);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-y: contain;   /* kill iOS pull-to-refresh on the shell */
+}
 body {
   font-family: 'Heebo', sans-serif;
   background: #E8EDF2;
@@ -29,7 +53,19 @@ body {
   height: 100dvh;
   overflow: hidden;
   direction: rtl;
+  /* Safe-area aware so the iPhone home indicator / notch don't cover UI. */
+  padding-top:    env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
+/* All buttons: bigger tap targets on phones, no text-selection on tap */
+button {
+  min-height: 44px;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+/* Tabs and small toolbar buttons can be a bit smaller, but never below 40px */
+.tab-btn, #panel-close, #btn-back { min-height: 40px; }
 
 /* ── Map ─────────────────────────────────────────────── */
 #map { position: fixed; inset: 0; z-index: 0; }
@@ -210,6 +246,18 @@ body {
   50%      { opacity: 0.6; transform: scale(1.3); }
 }
 
+/* ── AI delay prediction badge ────────────────────────── */
+.ai-pred-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 10px;
+  margin: 8px 0; font-size: 0.82rem; font-weight: 600;
+  border-right: 3px solid var(--primary);
+  background: #E6FFFA; color: var(--primary);
+}
+.ai-pred-badge.warn   { background: #FFFBEB; color: #B45309; border-right-color: #F59E0B; }
+.ai-pred-badge.danger { background: #FEF2F2; color: #B91C1C; border-right-color: #DC2626; }
+.ai-pred-badge .ci    { font-weight: 400; opacity: 0.75; font-size: 0.75rem; margin-right: 4px; }
+
 /* ── Route cards ──────────────────────────────────────── */
 .route-card {
   display: flex; align-items: center; gap: 10px;
@@ -370,9 +418,115 @@ body {
   #bottom-panel.open { transform: translateX(-50%) translateY(0); }
   #fab-nearby { left: calc(50% - 230px + 14px); }
 }
+
+/* ── PWA: safe-area insets so iPhone notch / home indicator don't cover UI ── */
+#topbar      { padding-top: env(safe-area-inset-top, 0); height: calc(52px + env(safe-area-inset-top, 0)); }
+#searchbar   { top: calc(52px + env(safe-area-inset-top, 0)); }
+#bottom-panel{ padding-bottom: env(safe-area-inset-bottom, 0); }
+#panel-content{ padding-bottom: calc(24px + env(safe-area-inset-bottom, 0)); }
+
+/* ── PWA install banner (shown when beforeinstallprompt fires) ──────── */
+#pwa-install {
+  position: fixed; z-index: 250;
+  left: 12px; right: 12px;
+  top: calc(52px + env(safe-area-inset-top, 0) + 64px);
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff; border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,144,176,0.35);
+  display: none; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  animation: pwa-slide-in 0.3s ease-out;
+}
+#pwa-install.visible { display: flex; }
+#pwa-install .pwa-icon {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+#pwa-install .pwa-text { flex: 1; min-width: 0; line-height: 1.25; }
+#pwa-install .pwa-text strong { display: block; font-size: 0.9rem; font-weight: 700; }
+#pwa-install .pwa-text small  { font-size: 0.72rem; opacity: 0.9; }
+#pwa-install button {
+  border: none; cursor: pointer; font-family: inherit; font-weight: 700;
+  border-radius: 10px; padding: 8px 12px; font-size: 0.82rem;
+  flex-shrink: 0;
+}
+#pwa-install .pwa-go      { background: #fff; color: var(--primary-dark); }
+#pwa-install .pwa-dismiss { background: transparent; color: #fff; opacity: 0.8; padding: 8px 6px; }
+@keyframes pwa-slide-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 480px) {
+  #pwa-install .pwa-text small { display: none; }   /* keep banner short on phones */
+}
+
+/* ── Splash overlay (shown briefly on first load) ──────────────────── */
+#pwa-splash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: linear-gradient(160deg, var(--primary), var(--primary-dark));
+  color: #fff; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  transition: opacity 0.45s ease, visibility 0.45s ease;
+}
+#pwa-splash.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+#pwa-splash .splash-logo {
+  width: 86px; height: 86px; border-radius: 22px; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.4rem; box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+}
+#pwa-splash .splash-title { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.3px; }
+#pwa-splash .splash-spinner {
+  width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.4);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+
+/* ── <noscript> styling ────────────────────────────────────────────── */
+.noscript-msg {
+  position: fixed; inset: 0; z-index: 10000;
+  background: #EAF8FB; color: #1A1A2E;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; font-family: 'Heebo', sans-serif;
+}
+.noscript-msg .box {
+  background: #fff; border-radius: 16px; padding: 24px;
+  box-shadow: 0 8px 24px rgba(0,177,210,0.18); max-width: 320px;
+}
 </style>
 </head>
 <body>
+
+<!-- ── No-JavaScript fallback ───────────────────────────────────────── -->
+<noscript>
+  <div class="noscript-msg">
+    <div class="box">
+      <div style="font-size:2.5rem;margin-bottom:8px">🚍</div>
+      <h2 style="color:#0090B0;margin-bottom:8px">דרוש JavaScript</h2>
+      <p style="color:#6B7280;line-height:1.5">
+        האפליקציה דורשת JavaScript כדי להציג מפה ונתוני תחבורה בזמן אמת.
+        <br>הפעלי JavaScript בדפדפן ורעננו את הדף.
+      </p>
+    </div>
+  </div>
+</noscript>
+
+<!-- ── Splash overlay (hidden by JS once map is ready) ───────────────── -->
+<div id="pwa-splash">
+  <div class="splash-logo">🚍</div>
+  <div class="splash-title">Israel Transit — גוש דן</div>
+  <div class="splash-spinner"></div>
+</div>
+
+<!-- ── PWA install banner (revealed by beforeinstallprompt) ──────────── -->
+<div id="pwa-install" role="dialog" aria-label="התקנת אפליקציה">
+  <div class="pwa-icon">📲</div>
+  <div class="pwa-text">
+    <strong>התקיני את האפליקציה</strong>
+    <small>גישה מהירה ממסך הבית, גם ללא חיבור</small>
+  </div>
+  <button class="pwa-go" id="pwa-install-btn" type="button">התקיני</button>
+  <button class="pwa-dismiss" id="pwa-dismiss-btn" type="button" aria-label="סגור">✕</button>
+</div>
 
 <div id="map"></div>
 
@@ -773,6 +927,28 @@ function searchLiveLines(q) {
 }
 
 // ── Line detail ───────────────────────────────────────────────────
+// AI delay prediction badge — fetched async, hidden on failure
+function fetchDelayPrediction(lineName, operatorRef) {
+  const params = new URLSearchParams({ line: lineName, operator_ref: operatorRef || '' });
+  fetch(`${API}/api/predict_delay?${params}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || d.error || typeof d.predicted_delay_minutes !== 'number') return;
+      const el = document.getElementById('ai-pred-' + lineName);
+      if (!el) return;
+      const m = d.predicted_delay_minutes;
+      const ci = d.confidence_interval || [];
+      let cls = '';
+      if (m >= 5)      cls = 'danger';
+      else if (m >= 2) cls = 'warn';
+      el.className = 'ai-pred-badge ' + cls;
+      el.style.display = 'flex';
+      const ciTxt = (ci.length === 2) ? `<span class="ci">(${ci[0].toFixed(1)}–${ci[1].toFixed(1)})</span>` : '';
+      el.innerHTML = `🤖 חיזוי AI: עיכוב של ~${m.toFixed(1)} דק׳ בקו זה ${ciTxt}`;
+    })
+    .catch(() => { /* silent — model may not be loaded */ });
+}
+
 // operatorRef = agency_id (e.g. "3" for Dan) — used to find correct GTFS route
 function showLineDetail(lineRef, lineName, col, operatorRef) {
   col = col || '#00B1D2';
@@ -798,7 +974,7 @@ function showLineDetail(lineRef, lineName, col, operatorRef) {
             GTFS לא נטען או הקו אינו פעיל היום</div></div>`);
         return;
       }
-      renderLineDetail(lineName, col, dirs, vehs, op, data.has_schedule);
+      renderLineDetail(lineName, col, dirs, vehs, op, data.has_schedule, operatorRef);
     })
     .catch(() => {
       renderResults(`<div class="empty-state"><div class="icon">⚠️</div>
@@ -806,9 +982,13 @@ function showLineDetail(lineRef, lineName, col, operatorRef) {
     });
 }
 
-function renderLineDetail(lineName, col, dirs, vehs, op, hasSchedule) {
+function renderLineDetail(lineName, col, dirs, vehs, op, hasSchedule, operatorRef) {
   clearStops();
   let html = '';
+
+  // AI prediction badge — populated asynchronously, fails silently
+  html += `<div id="ai-pred-${escHtml(lineName)}" class="ai-pred-badge" style="display:none"></div>`;
+  fetchDelayPrediction(lineName, operatorRef);
 
   // Vehicles bar
   if (vehs.length) {
@@ -1144,6 +1324,148 @@ setTimeout(() => {
   document.getElementById('bottom-panel').classList.add('open');
   panelOpen = true;
 }, 300);
+</script>
+
+<!-- ─────────────────────────────────────────────────────────────────────
+     PWA boot script — service worker registration, install banner,
+     splash screen dismissal, orientation handling.
+     Kept in its own <script> block so it runs even if the main app
+     script throws (e.g. on a very old browser).
+     ───────────────────────────────────────────────────────────────────── -->
+<script>
+(function () {
+  'use strict';
+
+  // ── Hide splash once Leaflet/map is up (or after a hard cap) ──────
+  function hideSplash() {
+    var s = document.getElementById('pwa-splash');
+    if (s && !s.classList.contains('hidden')) s.classList.add('hidden');
+  }
+  // Map is created in the main script — give it ~700ms; cap at 3.5s.
+  setTimeout(hideSplash, 700);
+  setTimeout(hideSplash, 3500);
+  window.addEventListener('load', function () { setTimeout(hideSplash, 200); });
+
+  // ── Recompute --vh on orientation change (some Android keyboards) ─
+  function setVH() {
+    document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
+  }
+  setVH();
+  window.addEventListener('resize', setVH, { passive: true });
+  window.addEventListener('orientationchange', function () {
+    setTimeout(function () {
+      setVH();
+      // Nudge Leaflet to recompute size after rotation.
+      if (window.map && typeof window.map.invalidateSize === 'function') {
+        try { window.map.invalidateSize(); } catch (e) {}
+      }
+    }, 250);
+  });
+
+  // ── Service worker registration ───────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+        .then(function (reg) {
+          // If a new SW is waiting, activate it on next load (no force-reload loop).
+          if (reg && reg.waiting) {
+            try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (e) {}
+          }
+        })
+        .catch(function (err) {
+          console.warn('[PWA] SW registration failed:', err);
+        });
+    });
+  }
+
+  // ── Install prompt UI (Chrome / Edge / Samsung Internet) ──────────
+  var deferredPrompt = null;
+  var banner   = document.getElementById('pwa-install');
+  var goBtn    = document.getElementById('pwa-install-btn');
+  var skipBtn  = document.getElementById('pwa-dismiss-btn');
+
+  function userDismissed() {
+    try { return localStorage.getItem('pwa-install-dismissed') === '1'; }
+    catch (e) { return false; }
+  }
+  function rememberDismiss() {
+    try { localStorage.setItem('pwa-install-dismissed', '1'); } catch (e) {}
+  }
+
+  // Already installed? (display-mode: standalone is the canonical signal.)
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      || window.navigator.standalone === true;
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone() && !userDismissed() && banner) {
+      banner.classList.add('visible');
+    }
+  });
+
+  if (goBtn) {
+    goBtn.addEventListener('click', function () {
+      if (!deferredPrompt) {
+        // Fallback hint (e.g. iOS Safari, where there's no programmatic prompt)
+        alert('להתקנה: פתחי את התפריט של הדפדפן ובחרי "הוסף למסך הבית".');
+        return;
+      }
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function (choice) {
+        if (choice && choice.outcome !== 'accepted') rememberDismiss();
+        deferredPrompt = null;
+        if (banner) banner.classList.remove('visible');
+      });
+    });
+  }
+  if (skipBtn) {
+    skipBtn.addEventListener('click', function () {
+      rememberDismiss();
+      if (banner) banner.classList.remove('visible');
+    });
+  }
+
+  window.addEventListener('appinstalled', function () {
+    rememberDismiss();
+    if (banner) banner.classList.remove('visible');
+  });
+
+  // ── Manifest "shortcuts" launch handling (?action=nearby|plan) ────
+  try {
+    var qsAction = new URLSearchParams(location.search).get('action');
+    if (qsAction) {
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          if (qsAction === 'nearby' && typeof window.showNearby === 'function') {
+            window.showNearby();
+          } else if (qsAction === 'plan') {
+            var planBtn = document.querySelectorAll('.tab-btn')[1];
+            if (planBtn && typeof window.switchTab === 'function') {
+              window.switchTab('plan', planBtn);
+            }
+          }
+        }, 600);
+      });
+    }
+  } catch (e) {}
+
+  // ── iOS hint (Safari has no install banner) ───────────────────────
+  // If on iOS Safari and not already installed, surface the "share → add" hint.
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPhone|iPad|iPod/.test(ua) && !window.MSStream;
+  var isSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS/.test(ua);
+  if (isSafari && !isStandalone() && !userDismissed() && banner) {
+    var txt = banner.querySelector('.pwa-text strong');
+    var sub = banner.querySelector('.pwa-text small');
+    if (txt) txt.textContent = 'להוספה למסך הבית';
+    if (sub) sub.textContent = 'לחצי על שיתוף ⤴ ואז "הוסף למסך הבית"';
+    if (goBtn) goBtn.style.display = 'none';
+    setTimeout(function () { banner.classList.add('visible'); }, 1500);
+  }
+})();
 </script>
 </body>
 </html>

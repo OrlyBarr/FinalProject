@@ -1248,6 +1248,78 @@ class BotHandler(BaseHTTPRequestHandler):
                     "count": 0, "status": "error", "error": str(e),
                 })
 
+        # ── ML delay prediction (lazy-loaded) ─────────────────────────────────
+        # GET /api/predict_delay?line=171&operator_ref=3[&hour=8&day_of_week=1&jam_factor=3.5]
+        # Returns the model's expected delay (minutes) for the given line/time.
+        elif path == "/api/predict_delay":
+            try:
+                line = (qs.get("line") or [""])[0].strip()
+                operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+                operator_name = (qs.get("operator") or [""])[0].strip()
+                hour_param = (qs.get("hour") or [""])[0].strip()
+                dow_param = (qs.get("day_of_week") or [""])[0].strip()
+                jam_param = (qs.get("jam_factor") or [""])[0].strip()
+
+                # Map operator_ref -> operator_name used at training time
+                _OP_NAME_MAP = {
+                    "2": "Israel Railways", "3": "Dan", "5": "Egged",
+                    "6": "NTA", "14": "Metropoline", "15": "Egged Taavura",
+                    "16": "Tnufa", "18": "Superbus", "21": "Kavim",
+                    "25": "Nateev Express", "32": "V-Line", "42": "Afikim",
+                }
+                if not operator_name and operator_ref:
+                    operator_name = _OP_NAME_MAP.get(operator_ref, "Unknown")
+
+                hour_val = int(hour_param) if hour_param.isdigit() else None
+                dow_val = int(dow_param) if dow_param.isdigit() else None
+                jam_val = float(jam_param) if jam_param else None
+
+                # If jam_factor not given, fetch real-time average from ES
+                if jam_val is None:
+                    try:
+                        import urllib.request as _ureq
+                        body = json.dumps({
+                            "size": 0,
+                            "query": {"range": {"recorded_at": {"gte": "now-1h"}}},
+                            "aggs": {"jam": {"avg": {"field": "jam_factor"}}},
+                        }).encode("utf-8")
+                        req = _ureq.Request(
+                            "http://localhost:9200/transit-traffic/_search",
+                            data=body,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with _ureq.urlopen(req, timeout=5) as resp:
+                            d = json.loads(resp.read())
+                            jam_val = float(
+                                d.get("aggregations", {}).get("jam", {}).get("value")
+                                or 2.0
+                            )
+                    except Exception:
+                        jam_val = 2.0
+
+                # Lazy import — keeps bot.py startup fast and tolerates
+                # missing pkl gracefully.
+                try:
+                    sys.path.insert(0, os.path.join(BASE_DIR, "ml"))
+                    import predict as _ml_predict  # type: ignore
+                except Exception as ex:
+                    self.send_json({"error": f"model not loaded: {ex}"}, status=503)
+                    return
+
+                result = _ml_predict.predict_delay(
+                    line=line or None,
+                    operator=operator_name or None,
+                    hour=hour_val,
+                    day_of_week=dow_val,
+                    jam_factor=jam_val,
+                )
+                if result is None:
+                    self.send_json({"error": "model not loaded"}, status=503)
+                else:
+                    self.send_json(result)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
         # ── Real-time active lines per operator from Stride SIRI ─────────────
         # GET /api/active_lines?operator_ref=3
         # Returns unique bus lines currently active (vehicles on road right now).
@@ -1316,6 +1388,79 @@ class BotHandler(BaseHTTPRequestHandler):
                     })
                 except Exception as e:
                     self.send_json({"error": str(e), "routes": []}, status=500)
+
+        # ── PWA: manifest.json ───────────────────────────────────────────────
+        elif path == "/manifest.json":
+            try:
+                manifest_path = os.path.join(BASE_DIR, "manifest.json")
+                with open(manifest_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except FileNotFoundError:
+                self.send_json({"error": "manifest.json not found"}, status=404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── PWA: service worker ──────────────────────────────────────────────
+        # Must be served from the project root with Service-Worker-Allowed: /
+        # so the SW can claim scope "/" even though the file path is /service-worker.js.
+        elif path == "/service-worker.js":
+            try:
+                sw_path = os.path.join(BASE_DIR, "service-worker.js")
+                with open(sw_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                # SW updates: don't let the browser hold an old copy forever.
+                self.send_header("Cache-Control", "no-cache, max-age=0")
+                self.send_header("Service-Worker-Allowed", "/")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except FileNotFoundError:
+                self.send_json({"error": "service-worker.js not found"}, status=404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── PWA: icons ───────────────────────────────────────────────────────
+        elif path.startswith("/icons/"):
+            # Reject path traversal — only allow basenames inside /icons/.
+            fname = path[len("/icons/"):]
+            if not fname or "/" in fname or ".." in fname or "\\" in fname:
+                self.send_json({"error": "invalid icon path"}, status=400)
+            else:
+                icon_path = os.path.join(BASE_DIR, "icons", fname)
+                if not os.path.isfile(icon_path):
+                    self.send_json({"error": f"icon not found: {fname}"}, status=404)
+                else:
+                    ext = os.path.splitext(fname)[1].lower()
+                    ctype = {
+                        ".png":  "image/png",
+                        ".svg":  "image/svg+xml",
+                        ".ico":  "image/x-icon",
+                        ".jpg":  "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".webp": "image/webp",
+                    }.get(ext, "application/octet-stream")
+                    try:
+                        with open(icon_path, "rb") as f:
+                            body = f.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", ctype)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.send_header("Cache-Control", "public, max-age=86400")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        self.wfile.write(body)
+                    except Exception as e:
+                        self.send_json({"error": str(e)}, status=500)
 
         # ── moovit.html (ממשק ראשי) ──────────────────────────────────────────
         elif path == "/":

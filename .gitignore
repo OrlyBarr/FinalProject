@@ -6,3 +6,7 @@ __pycache__/
 *.json
 !package.json
 *.json
+
+# PWA manifest — must be tracked even though *.json is ignored above
+!manifest.json
+!ml/saved/*.json
