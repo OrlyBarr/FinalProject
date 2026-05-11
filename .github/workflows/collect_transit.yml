@@ -2,7 +2,7 @@ name: Collect Transit Data
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -43,13 +43,22 @@ jobs:
 
           collected_at = datetime.now(timezone.utc).isoformat()
 
-          # ── Fetch bus positions ───────────────────────────────────────────
+          # ── Fetch bus positions (Gush Dan + wider Israel bbox) ───────────
+          # Two calls: Gush Dan full detail + national sample for context
           buses = []
           try:
+              # Call 1: All vehicles in Gush Dan bbox (complete coverage)
               r = requests.get(
                   f"{STRIDE_URL}/siri_vehicle_locations/list",
-                  params={"limit": 300, "order_by": "id desc"},
-                  timeout=20,
+                  params={
+                      "lat__greater_or_equal": 31.87,
+                      "lat__lower_or_equal":   32.22,
+                      "lon__greater_or_equal": 34.72,
+                      "lon__lower_or_equal":   34.96,
+                      "limit": 1000,
+                      "order_by": "id desc",
+                  },
+                  timeout=25,
               )
               r.raise_for_status()
               raw = r.json()
