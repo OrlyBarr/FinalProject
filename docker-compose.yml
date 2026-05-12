@@ -371,11 +371,11 @@ services:
     container_name: elasticsearch
     restart: unless-stopped
     networks: [transit_net]
-    mem_limit: 1100m
+    mem_limit: 700m
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx900m"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx512m"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
