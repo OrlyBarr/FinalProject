@@ -98,17 +98,35 @@ def get_s3():
         endpoint_url=MINIO_ENDPOINT,
         aws_access_key_id=MINIO_ACCESS,
         aws_secret_access_key=MINIO_SECRET,
-        config=Config(signature_version="s3v4"),
+        config=Config(signature_version="s3v4", connect_timeout=8, read_timeout=25, retries={"max_attempts": 0}),
         region_name="us-east-1",
     )
 
 
 def ensure_bucket(s3):
+    import signal
+
+    class _BucketTimeout(Exception):
+        pass
+
+    def _timeout_handler(signum, frame):
+        raise _BucketTimeout("ensure_bucket timed out after 10s")
+
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(10)  # 10-second timeout
     try:
         s3.head_bucket(Bucket=MAIN_BUCKET)
+    except _BucketTimeout:
+        log.warning("ensure_bucket: head_bucket timed out after 10s — skipping bucket check")
     except Exception:
-        s3.create_bucket(Bucket=MAIN_BUCKET)
-        log.info(f"Created bucket '{MAIN_BUCKET}'")
+        try:
+            s3.create_bucket(Bucket=MAIN_BUCKET)
+            log.info(f"Created bucket '{MAIN_BUCKET}'")
+        except _BucketTimeout:
+            log.warning("ensure_bucket: create_bucket timed out after 10s")
+    finally:
+        signal.alarm(0)  # Cancel the alarm
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def upload(s3, records: list, prefix: str, label: str) -> str:
@@ -146,7 +164,13 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
             )
             log.info(f"  ✅ {len(records)} records → {path}")
             return path
+        except (SystemExit, KeyboardInterrupt) as e:
+            raise  # Never retry termination signals
         except Exception as e:
+            # Don't retry if this is a task timeout/termination
+            if 'SIGTERM' in str(e) or 'Timeout' in str(e) and 'PID' in str(e):
+                log.error(f"  Task termination detected, not retrying: {e}")
+                raise
             last_err = e
             if not minio_up:
                 break  # Don't waste time retrying when MinIO is known-down
@@ -203,6 +227,8 @@ _OPERATOR_NAMES = {
     "42": "Malam",
     "44": "GB Tours",
     "52": "Gush Dan Bus",
+    "40": "Kavim Hatichon",
+    "135": "Tnufa",
 }
 
 
@@ -233,7 +259,13 @@ def _get_last_stored_records(s3, prefix: str, now_ts: str) -> list:
         for rec in records:
             rec["fetched_at"] = now_ts
             rec["fallback"]   = True
-        log.info(f"  Fallback: re-using {len(records)} records from {latest_key}")
+        # Skip fallback if data is older than 4 hours — stale data is misleading
+        from datetime import timezone as _tz
+        age_hours = (datetime.now(_tz.utc) - latest["LastModified"].replace(tzinfo=_tz.utc)).total_seconds() / 3600
+        if age_hours > 4:
+            log.warning(f"  Fallback skipped: {latest_key} is {age_hours:.1f}h old (>4h limit)")
+            return []
+        log.info(f"  Fallback: re-using {len(records)} records from {latest_key} (age={age_hours:.1f}h)")
         return records
     except Exception as e:
         log.warning(f"  Fallback load failed for {prefix}: {e}")

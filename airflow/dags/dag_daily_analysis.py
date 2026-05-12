@@ -353,6 +353,7 @@ with DAG(
     schedule_interval="0 1 * * *",             # FIX: 01:00 UTC = 04:00 IL winter / 04:00 IL summer (DST-aware cron). timedelta(hours=24) drifts relative to start_date and does not honour a fixed clock time.
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["analytics", "daily", "transit", "israel"],
 ) as dag:
 

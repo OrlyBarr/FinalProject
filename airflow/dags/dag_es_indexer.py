@@ -29,7 +29,7 @@ except ImportError:
     RESILIENT_DEFAULT_ARGS = {
         "owner": "transit-team",
         "depends_on_past": False,
-        "retries": 5,
+        "retries": 1,
         "retry_delay": timedelta(minutes=2),
         "retry_exponential_backoff": True,
         "max_retry_delay": timedelta(minutes=5),
@@ -155,6 +155,7 @@ with DAG(
     schedule_interval=timedelta(minutes=3),    # FIX: 1min was spawning too many subprocesses on VM
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["elasticsearch", "kibana", "transit"],
 ) as dag:
 

@@ -52,6 +52,22 @@ BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 
 # טעינת Google Maps API Key מ-.env
 from dotenv import load_dotenv
+
+# Module-level MinIO client (lazy init) for /status fallback
+_status_s3 = None
+def _get_status_s3():
+    global _status_s3
+    if _status_s3 is None:
+        try:
+            import boto3
+            from botocore.config import Config as _BC
+            _status_s3 = boto3.client("s3", endpoint_url="http://localhost:9000",
+                aws_access_key_id="minioadmin", aws_secret_access_key="minioadmin123",
+                config=_BC(signature_version="s3v4", connect_timeout=2, read_timeout=3,
+                           retries={"max_attempts": 0}))
+        except Exception:
+            pass
+    return _status_s3
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 GOOGLE_MAPS_API_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
 ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
@@ -1538,33 +1554,56 @@ class BotHandler(BaseHTTPRequestHandler):
 
         # ── status ────────────────────────────────────────────────────────────
         elif path == "/status":
-            # Fetch ES freshness quickly
+            # Fetch ES freshness quickly (with MinIO fallback)
             es_freshness = {}
+            _es_ok = True  # once one ES query fails, skip remaining
+            _minio_s3 = None
             for _key, _idx, _tfield in [
                 ("bus",     "transit-bus-positions",   "fetched_at"),
                 ("train",   "transit-train-positions", "recorded_at"),
                 ("traffic", "transit-traffic",         "recorded_at"),
             ]:
+                if _es_ok:
+                    try:
+                        _ts_filter = {"range": {_tfield: {"gte": "2025-01-01", "lte": "2027-12-31"}}}
+                        _req = urllib.request.Request(
+                            f"http://localhost:9200/{_idx}/_search",
+                            data=json.dumps({
+                                "size": 1,
+                                "query": _ts_filter,
+                                "sort": [{_tfield: {"order": "desc"}}],
+                                "_source": [_tfield],
+                            }).encode(),
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(_req, timeout=1) as _r:
+                            _d = json.loads(_r.read())
+                            _hits = _d.get("hits", {}).get("hits", [])
+                            es_freshness[_key] = {
+                                "total": _d["hits"]["total"]["value"],
+                                "latest": _hits[0]["_source"].get(_tfield) if _hits else None,
+                            }
+                            continue
+                    except Exception:
+                        _es_ok = False  # skip ES for remaining keys
+                # MinIO fallback (reuse module-level client — fast)
                 try:
-                    # Filter to reasonable date range to avoid bogus synthetic timestamps (e.g. 2038)
-                    _ts_filter = {"range": {_tfield: {"gte": "2025-01-01", "lte": "2027-12-31"}}}
-                    _req = urllib.request.Request(
-                        f"http://localhost:9200/{_idx}/_search",
-                        data=json.dumps({
-                            "size": 1,
-                            "query": _ts_filter,
-                            "sort": [{_tfield: {"order": "desc"}}],
-                            "_source": [_tfield],
-                        }).encode(),
-                        headers={"Content-Type": "application/json"},
-                    )
-                    with urllib.request.urlopen(_req, timeout=3) as _r:
-                        _d = json.loads(_r.read())
-                        _hits = _d.get("hits", {}).get("hits", [])
-                        es_freshness[_key] = {
-                            "total": _d["hits"]["total"]["value"],
-                            "latest": _hits[0]["_source"].get(_tfield) if _hits else None,
-                        }
+                    from datetime import datetime as _dt
+                    _s3c = _get_status_s3()
+                    if _s3c:
+                        _now = _dt.utcnow()
+                        _minio_map = {"bus": "raw/bus-positions/", "train": "raw/train-positions/", "traffic": "raw/traffic-data/"}
+                        _mp = _minio_map.get(_key, "")
+                        _day_prefix = f"{_mp}year={_now.year}/month={_now.month:02d}/day={_now.day:02d}/"
+                        _r2 = _s3c.list_objects_v2(Bucket="israel-transit-lake", Prefix=_day_prefix, MaxKeys=50)
+                        _objs = [o for o in _r2.get("Contents", []) if o["Key"].endswith(".json")]
+                        if _objs:
+                            _latest = max(_objs, key=lambda x: x["LastModified"])
+                            es_freshness[_key] = {"total": len(_objs), "latest": _latest["LastModified"].isoformat(), "source": "minio"}
+                        else:
+                            es_freshness[_key] = {"total": 0, "latest": None}
+                    else:
+                        es_freshness[_key] = {"total": 0, "latest": None}
                 except Exception:
                     es_freshness[_key] = {"total": 0, "latest": None}
 
@@ -1614,22 +1653,43 @@ class BotHandler(BaseHTTPRequestHandler):
 
         # ── stops — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/stops":
-            all_data = load_json("buses_with_nearest_stops.json")
-            filtered = []
-            for b in all_data:
-                if not _in_gush_dan(
-                    b.get("lat") or b.get("latitude"),
-                    b.get("lon") or b.get("longitude")
-                ):
-                    continue
-                lr  = str(b.get("line_ref") or b.get("route_id") or "")
-                rsn = str(b.get("route_short_name") or "")
-                if not rsn or rsn == lr:
-                    rsn = _resolve_line(lr)
-                b = dict(b)
-                b["line_name"] = rsn or lr
-                filtered.append(b)
-            self.send_json(filtered[:200])
+            # FIX: Return actual GTFS stops instead of bus position data
+            q = (qs.get("q") or [""])[0].strip()
+            lat = (qs.get("lat") or [""])[0].strip()
+            lon = (qs.get("lon") or [""])[0].strip()
+            limit = int((qs.get("limit") or ["100"])[0])
+            try:
+                if q:
+                    from gtfs_query import search_stops
+                    stops = search_stops(q, limit=limit)
+                elif lat and lon:
+                    from gtfs_query import _q
+                    stops = _q("""
+                        SELECT stop_id, stop_name, stop_lat, stop_lon,
+                               (6371000 * acos(LEAST(1.0, cos(radians(%s)) * cos(radians(stop_lat))
+                                * cos(radians(stop_lon) - radians(%s))
+                                + sin(radians(%s)) * sin(radians(stop_lat))))) AS distance_m
+                        FROM gtfs.stops
+                        WHERE stop_lat BETWEEN %s AND %s
+                          AND stop_lon BETWEEN %s AND %s
+                        ORDER BY distance_m
+                        LIMIT %s
+                    """, (float(lat), float(lon), float(lat),
+                          float(lat)-0.02, float(lat)+0.02,
+                          float(lon)-0.02, float(lon)+0.02, limit))
+                else:
+                    from gtfs_query import _q
+                    stops = _q("""
+                        SELECT stop_id, stop_name, stop_lat, stop_lon
+                        FROM gtfs.stops
+                        WHERE stop_lat BETWEEN 31.9 AND 32.25
+                          AND stop_lon BETWEEN 34.65 AND 34.95
+                        ORDER BY stop_name
+                        LIMIT %s
+                    """, (limit,))
+                self.send_json({"stops": stops, "count": len(stops)})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
 
         # ── GTFS — routes by operator ─────────────────────────────────────────
         # GET /gtfs/routes?operator_id=6&q=63
@@ -1930,24 +1990,56 @@ class BotHandler(BaseHTTPRequestHandler):
                 "q": q, "format": "json", "limit": 1,
                 "countrycodes": "il", "accept-language": "he",
             })
+            # FIX: Multi-provider geocoding with fallback
+            _geo_result = None
+
+            # 1. Nominatim (original)
             try:
-                req = urllib.request.Request(
-                    target,
-                    headers={"User-Agent": "IsraelTransitBot/1.0 (transit-project)"},
-                )
-                with urllib.request.urlopen(req, timeout=8) as resp:
+                req = urllib.request.Request(target,
+                    headers={"User-Agent": "IsraelTransitBot/1.0 (transit-project)"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
                     results = json.loads(resp.read())
-                if not results:
-                    self.send_json({"error": f"Address not found: {address}"}, status=404)
-                    return
-                r = results[0]
-                self.send_json({
-                    "lat":          float(r["lat"]),
-                    "lon":          float(r["lon"]),
-                    "display_name": r.get("display_name", address),
-                })
-            except Exception as e:
-                self.send_json({"error": f"geocoding error: {e}"}, status=500)
+                if results:
+                    r = results[0]
+                    _geo_result = {"lat": float(r["lat"]), "lon": float(r["lon"]),
+                                   "display_name": r.get("display_name", address), "source": "nominatim"}
+            except Exception:
+                pass
+
+            # 2. Photon (komoot) — free, no key needed
+            if not _geo_result:
+                try:
+                    _photon_url = "https://photon.komoot.io/api?" + urllib.parse.urlencode({
+                        "q": q, "limit": 1, "lang": "he", "lat": 32.08, "lon": 34.78})
+                    _preq = urllib.request.Request(_photon_url,
+                        headers={"User-Agent": "IsraelTransitBot/1.0"})
+                    with urllib.request.urlopen(_preq, timeout=5) as _presp:
+                        _pdata = json.loads(_presp.read())
+                    _feats = _pdata.get("features", [])
+                    if _feats:
+                        _coords = _feats[0]["geometry"]["coordinates"]
+                        _props = _feats[0].get("properties", {})
+                        _geo_result = {"lat": _coords[1], "lon": _coords[0],
+                                       "display_name": _props.get("name", address), "source": "photon"}
+                except Exception:
+                    pass
+
+            # 3. GTFS stops fallback
+            if not _geo_result:
+                try:
+                    from gtfs_query import search_stops as _gs
+                    _gstops = _gs(address, limit=1)
+                    if _gstops:
+                        _s = _gstops[0]
+                        _geo_result = {"lat": float(_s["stop_lat"]), "lon": float(_s["stop_lon"]),
+                                       "display_name": _s["stop_name"], "source": "gtfs"}
+                except Exception:
+                    pass
+
+            if _geo_result:
+                self.send_json(_geo_result)
+            else:
+                self.send_json({"error": f"Address not found: {address}"}, status=404)
 
         # ── streets → רשימת רחובות מ-Google Places ──────────────────────────
         # GET /streets?city=תל+אביב

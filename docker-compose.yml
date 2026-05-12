@@ -251,8 +251,8 @@ services:
       # FIX: parallelism 2→4, max_active_tasks_per_dag 1→3.
       #      With parallelism=2 and max_active=1 the ETL's 5 consumer tasks ran
       #      sequentially (50+ min/run). Now they can run 3 at a time.
-      AIRFLOW__CORE__PARALLELISM: '4'
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '3'
+      AIRFLOW__CORE__PARALLELISM: '8'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '4'
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '180'
       AIRFLOW__WEBSERVER__WORKERS: '1'
       AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '1200'
@@ -323,8 +323,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PYTHONPATH: /opt/airflow
       # FIX: parallelism and max_active must match webserver values
-      AIRFLOW__CORE__PARALLELISM: '4'
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '3'
+      AIRFLOW__CORE__PARALLELISM: '8'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '4'
       AIRFLOW__SCHEDULER__MAX_THREADS: '2'
       AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '180'
@@ -338,7 +338,10 @@ services:
       AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '30'
       # FIX: was 120s — DAG file parse can take ~8 min, causing heartbeat gap > threshold
       AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '300'
-      AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: '60.0'
+      AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: "60.0"
+      AIRFLOW__SCHEDULER__MAX_TIS_PER_QUERY: "8"
+      AIRFLOW__SCHEDULER__ORPHANED_TASKS_CHECK_INTERVAL: "300"
+      AIRFLOW__CORE__KILLED_TASK_CLEANUP_TIME: "120"
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

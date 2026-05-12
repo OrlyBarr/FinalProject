@@ -308,6 +308,7 @@ with DAG(
     schedule_interval="0 * * * *",   # כל שעה ב-:00 בדיוק (cron)
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["minio", "coverage", "backfill", "hourly"],
 ) as dag:
 

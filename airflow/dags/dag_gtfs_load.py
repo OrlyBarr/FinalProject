@@ -158,6 +158,7 @@ with DAG(
     schedule_interval="0 3 * * *",   # 03:00 כל יום
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["gtfs", "static", "postgres", "transit"],
 ) as dag:
 
