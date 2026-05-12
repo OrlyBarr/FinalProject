@@ -612,3 +612,9 @@ echo -e "  • ${GREEN}Redshift${NC} for data warehousing (Data Warehouse)"
 echo -e "  • ${GREEN}Delay Collectors${NC} (bus, train, historical) → run: bash scripts/start_collectors.sh"
 echo -e "  • ${GREEN}Kibana Dashboard${NC} → import: bash scripts/import_kibana.sh"
 echo ""
+# ─────────────────────────────────────────────────────────────
+#  Wake Backfill — fill data gaps from sleep mode
+# ─────────────────────────────────────────────────────────────
+echo -e "${BOLD}${BLUE}[$(date '+%H:%M:%S')]${NC} Checking for data gaps from sleep mode..."
+python3 scripts/wake_backfill.py >> /tmp/wake_backfill.log 2>&1 &
+echo -e "${GREEN}✅ Wake backfill running in background (log: /tmp/wake_backfill.log)${NC}"
