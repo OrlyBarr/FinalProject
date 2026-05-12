@@ -17,7 +17,7 @@
  * cleaned up on `activate`.
  */
 
-const CACHE_VERSION = 'transit-v1';
+const CACHE_VERSION = 'transit-v2';
 const STATIC_CACHE  = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const API_CACHE     = `api-${CACHE_VERSION}`;
