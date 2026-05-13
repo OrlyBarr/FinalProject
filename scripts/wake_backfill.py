@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-wake_backfill.py - Run after VM resume from sleep.
-Detects the gap since last data collection and backfills from Stride API.
-Usage: python3 scripts/wake_backfill.py
+wake_backfill.py - Runs every 15 min via cron.
+Scans the last 24h hour-by-hour, detects gaps, and backfills from Stride API.
 """
 import json
 import os
@@ -24,7 +23,6 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo
 IL_TZ = ZoneInfo("Asia/Jerusalem")
 
-# Force localhost for host-side scripts (Docker uses minio:9000)
 MINIO_ENDPOINT = "http://localhost:9000"
 MINIO_ACCESS   = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET   = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
@@ -43,25 +41,43 @@ def get_s3():
         config=BotoConfig(signature_version="s3v4", connect_timeout=5, read_timeout=30))
 
 
-def get_last_upload_time(s3):
-    """Find the most recent file upload time in MinIO."""
+def find_gaps(s3):
+    """Scan last 24h hour-by-hour and return list of (start, end) gaps."""
     now = datetime.now(IL_TZ)
-    for day_offset in range(2):
-        d = now - timedelta(days=day_offset)
-        prefix = f"raw/bus-positions/year={d.year}/month={d.month:02d}/day={d.day:02d}/"
+    gaps = []
+    gap_start = None
+
+    for hours_ago in range(24, 0, -1):
+        check_time = now - timedelta(hours=hours_ago)
+        prefix = (
+            f"raw/bus-positions/year={check_time.year}/"
+            f"month={check_time.month:02d}/day={check_time.day:02d}/"
+            f"hour={check_time.hour:02d}/"
+        )
         try:
-            r = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix, MaxKeys=500)
-            objs = [o for o in r.get("Contents", []) if o["Key"].endswith(".json")]
-            if objs:
-                latest = max(objs, key=lambda x: x["LastModified"])
-                return latest["LastModified"].replace(tzinfo=timezone.utc)
+            r = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix, MaxKeys=1)
+            has_data = r.get("KeyCount", 0) > 0
         except Exception:
-            continue
-    return datetime.now(timezone.utc) - timedelta(hours=1)
+            has_data = False
+
+        if not has_data:
+            if gap_start is None:
+                gap_start = check_time.replace(minute=0, second=0, microsecond=0)
+        else:
+            if gap_start is not None:
+                gap_end = check_time.replace(minute=0, second=0, microsecond=0)
+                gaps.append((gap_start, gap_end))
+                gap_start = None
+
+    # Close trailing gap
+    if gap_start is not None:
+        gap_end = now.replace(minute=0, second=0, microsecond=0)
+        gaps.append((gap_start, gap_end))
+
+    return gaps
 
 
 def stride_fetch(endpoint, params, timeout=30):
-    """Generic Stride API fetch."""
     url = f"{STRIDE_URL}/{endpoint}?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"accept": "application/json"})
     try:
@@ -74,14 +90,14 @@ def stride_fetch(endpoint, params, timeout=30):
 
 
 def fetch_bus_positions(from_dt, to_dt):
-    """Fetch bus positions from Stride siri_vehicle_locations."""
+    from_utc = from_dt.astimezone(timezone.utc)
+    to_utc = to_dt.astimezone(timezone.utc)
     records = stride_fetch("siri_vehicle_locations/list", {
-        "recorded_at_time_from": from_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-        "recorded_at_time_to": to_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+        "recorded_at_time_from": from_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+        "recorded_at_time_to": to_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
         "limit": 500,
         "order_by": "recorded_at_time desc",
     })
-    # Transform to our format
     buses = []
     for r in records:
         buses.append({
@@ -100,18 +116,18 @@ def fetch_bus_positions(from_dt, to_dt):
 
 
 def fetch_rides(from_dt, to_dt):
-    """Fetch ride data for alerts/delays."""
+    from_utc = from_dt.astimezone(timezone.utc)
+    to_utc = to_dt.astimezone(timezone.utc)
     return stride_fetch("siri_rides/list", {
-        "scheduled_start_time_from": from_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-        "scheduled_start_time_to": to_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+        "scheduled_start_time_from": from_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+        "scheduled_start_time_to": to_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
         "limit": 200,
         "order_by": "scheduled_start_time desc",
     })
 
 
 def upload_records(s3, records, prefix, label, ts):
-    """Upload records to MinIO with proper time partitioning."""
-    il_time = ts.astimezone(IL_TZ)
+    il_time = ts if ts.tzinfo and str(ts.tzinfo) == "Asia/Jerusalem" else ts.astimezone(IL_TZ)
     key = (
         f"{prefix}/"
         f"year={il_time.year}/month={il_time.month:02d}/"
@@ -126,62 +142,62 @@ def upload_records(s3, records, prefix, label, ts):
 
 def main():
     log.info("=" * 60)
-    log.info("  Wake Backfill - checking for data gaps")
+    log.info("  Wake Backfill - scanning last 24h for gaps")
     log.info("=" * 60)
 
     s3 = get_s3()
-    now = datetime.now(timezone.utc)
-    last_upload = get_last_upload_time(s3)
-    gap_minutes = (now - last_upload).total_seconds() / 60
+    gaps = find_gaps(s3)
 
-    log.info(f"  Last data: {last_upload.isoformat()}")
-    log.info(f"  Now:       {now.isoformat()}")
-    log.info(f"  Gap:       {gap_minutes:.0f} minutes")
-
-    if gap_minutes < 5:
-        log.info("  No significant gap - pipeline is current!")
+    if not gaps:
+        log.info("  No gaps found in last 24h - all good!")
         return
 
-    if gap_minutes > 720:
-        log.warning(f"  Gap too large ({gap_minutes:.0f} min). Limiting to 12 hours.")
-        last_upload = now - timedelta(hours=12)
-        gap_minutes = 720
+    log.info(f"  Found {len(gaps)} gap(s):")
+    for i, (gs, ge) in enumerate(gaps):
+        duration = (ge - gs).total_seconds() / 60
+        log.info(f"    Gap {i+1}: {gs.strftime('%d/%m %H:%M')} -> {ge.strftime('%d/%m %H:%M')} ({duration:.0f} min)")
 
-    log.info(f"  Backfilling {gap_minutes:.0f} minutes of data...")
-
-    # Split into 15-minute chunks
-    chunk_size = timedelta(minutes=15)
-    current = last_upload
     total_buses = 0
     total_rides = 0
-    chunks_done = 0
+    total_chunks = 0
 
-    while current < now:
-        chunk_end = min(current + chunk_size, now)
-        chunk_label = f"{current.strftime('%H:%M')}-{chunk_end.strftime('%H:%M')}"
+    for gap_start, gap_end in gaps:
+        duration = (gap_end - gap_start).total_seconds() / 60
+        if duration < 10:
+            log.info(f"  Skipping tiny gap ({duration:.0f} min)")
+            continue
+        if duration > 720:
+            log.warning(f"  Gap too large ({duration:.0f} min), limiting to 12h")
+            gap_start = gap_end - timedelta(hours=12)
 
-        # Bus positions
-        buses = fetch_bus_positions(current, chunk_end)
-        if buses:
-            key = upload_records(s3, buses, "raw/bus-positions", "buses", chunk_end)
-            total_buses += len(buses)
-            log.info(f"  [{chunk_label}] {len(buses)} bus positions uploaded")
+        log.info(f"  Backfilling {gap_start.strftime('%d/%m %H:%M')} -> {gap_end.strftime('%d/%m %H:%M')}...")
 
-        # Rides/alerts
-        rides = fetch_rides(current, chunk_end)
-        if rides:
-            key = upload_records(s3, rides, "raw/service-alerts", "alerts", chunk_end)
-            total_rides += len(rides)
-            log.info(f"  [{chunk_label}] {len(rides)} ride records uploaded")
+        chunk_size = timedelta(minutes=15)
+        current = gap_start
+        while current < gap_end:
+            chunk_end = min(current + chunk_size, gap_end)
+            chunk_label = f"{current.strftime('%H:%M')}-{chunk_end.strftime('%H:%M')}"
 
-        current = chunk_end
-        chunks_done += 1
+            buses = fetch_bus_positions(current, chunk_end)
+            if buses:
+                upload_records(s3, buses, "raw/bus-positions", "buses", chunk_end)
+                total_buses += len(buses)
+                log.info(f"    [{chunk_label}] {len(buses)} bus positions")
+
+            rides = fetch_rides(current, chunk_end)
+            if rides:
+                upload_records(s3, rides, "raw/service-alerts", "alerts", chunk_end)
+                total_rides += len(rides)
+                log.info(f"    [{chunk_label}] {len(rides)} ride records")
+
+            current = chunk_end
+            total_chunks += 1
 
     log.info(f"")
     log.info(f"  === Backfill complete ===")
     log.info(f"  Buses:  {total_buses} records")
     log.info(f"  Rides:  {total_rides} records")
-    log.info(f"  Chunks: {chunks_done}")
+    log.info(f"  Chunks: {total_chunks}")
 
 
 if __name__ == "__main__":
