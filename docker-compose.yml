@@ -44,7 +44,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 256m
     depends_on:
@@ -74,7 +74,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: kafka
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 512m
     depends_on:
@@ -149,7 +149,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 256m
     depends_on:
@@ -171,7 +171,7 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 256m
     environment:
@@ -204,7 +204,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 384m
     ports:
@@ -233,8 +233,8 @@ services:
       dockerfile: Dockerfile.airflow
     image: transit-airflow:latest
     container_name: airflow-webserver
-    # FIX: was "no" — webserver never restarted after VM reboot.
-    restart: unless-stopped
+    # FIX: boot-storm — set to "no" to prevent simultaneous restart on VM boot.
+    restart: "no"
     init: true
     networks: [transit_net]
     env_file: .env
@@ -307,8 +307,8 @@ services:
       dockerfile: Dockerfile.airflow
     image: transit-airflow:latest
     container_name: airflow-scheduler
-    # FIX: was "no" — scheduler never restarted after VM reboot.
-    restart: unless-stopped
+    # FIX: boot-storm — set to "no" to prevent simultaneous restart on VM boot.
+    restart: "no"
     init: true
     networks: [transit_net]
     env_file: .env
@@ -369,7 +369,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
     container_name: elasticsearch
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 700m
     environment:
@@ -393,7 +393,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.8.0
     container_name: kibana
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 512m
     depends_on:
@@ -412,7 +412,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
-    restart: unless-stopped
+    restart: "no"
     networks: [transit_net]
     mem_limit: 384m
     depends_on:
