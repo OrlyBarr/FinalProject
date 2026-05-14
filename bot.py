@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import os
+import ssl
 import sys
 import threading
 import time
@@ -51,6 +52,22 @@ BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 
 # טעינת Google Maps API Key מ-.env
 from dotenv import load_dotenv
+
+# Module-level MinIO client (lazy init) for /status fallback
+_status_s3 = None
+def _get_status_s3():
+    global _status_s3
+    if _status_s3 is None:
+        try:
+            import boto3
+            from botocore.config import Config as _BC
+            _status_s3 = boto3.client("s3", endpoint_url="http://localhost:9000",
+                aws_access_key_id="minioadmin", aws_secret_access_key="minioadmin123",
+                config=_BC(signature_version="s3v4", connect_timeout=2, read_timeout=3,
+                           retries={"max_attempts": 0}))
+        except Exception:
+            pass
+    return _status_s3
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 GOOGLE_MAPS_API_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
 ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
@@ -410,12 +427,24 @@ class BotHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
 
+    def _sec_headers(self):
+        """Add security headers required for PWA install on Android/Chrome."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("X-XSS-Protection", "1; mode=block")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        # HSTS only when running over HTTPS
+        if getattr(self.server, "_is_https", False):
+            self.send_header("Strict-Transport-Security",
+                             "max-age=31536000; includeSubDomains")
+
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", len(body))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self._sec_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -427,6 +456,7 @@ class BotHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", len(body))
             self.send_header("Access-Control-Allow-Origin", "*")
+            self._sec_headers()
             self.end_headers()
             self.wfile.write(body)
         except FileNotFoundError:
@@ -536,8 +566,8 @@ class BotHandler(BaseHTTPRequestHandler):
                 if not reply:
                     try:
                         veh = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
-                            params={"siri_route__line_ref": line,
-                                    "siri_route__operator_ref": "2",
+                            params={"siri_routes__line_ref": line,
+                                    "siri_routes__operator_ref": "2",
                                     "limit": 1, "order_by": "id desc"}, timeout=8).json()
                         if veh:
                             ride_id = veh[0].get("siri_ride__id") or veh[0].get("ride_id")
@@ -599,7 +629,7 @@ class BotHandler(BaseHTTPRequestHandler):
                     # fallback — Stride live
                     try:
                         sr = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
-                            params={"siri_route__line_ref":line,"limit":20,"order_by":"id desc"},
+                            params={"siri_routes__line_ref":line,"limit":20,"order_by":"id desc"},
                             timeout=8).json()
                         if sr:
                             ops = list({v.get("siri_route__operator_ref","?") for v in sr})
@@ -830,7 +860,7 @@ class BotHandler(BaseHTTPRequestHandler):
                             try:
                                 sr = _req.get(
                                     f"{STRIDE}/siri_vehicle_locations/list",
-                                    params={"siri_route__operator_ref": op_id,
+                                    params={"siri_routes__operator_ref": op_id,
                                             "limit": 200, "order_by": "id desc"},
                                     timeout=9
                                 ).json()
@@ -872,7 +902,7 @@ class BotHandler(BaseHTTPRequestHandler):
                         r_val = 0.15
                         sr = _req.get(f"{STRIDE}/siri_vehicle_locations/list",
                             params={
-                                "siri_route__operator_ref":"2",
+                                "siri_routes__operator_ref":"2",
                                 "lat__greater_or_equal": float(lat)-r_val,
                                 "lat__lower_or_equal":   float(lat)+r_val,
                                 "lon__greater_or_equal": float(lon)-r_val,
@@ -1176,10 +1206,7 @@ class BotHandler(BaseHTTPRequestHandler):
         qs     = urllib.parse.parse_qs(parsed.query)
 
         # ── Gush Dan Transit App ─────────────────────────────────────────────
-        if path == "/gushdan":
-            self.send_html(os.path.join(BASE_DIR, "gushdan_app.html"))
-
-        elif path == "/moovit":
+        if path == "/gushdan" or path == "/moovit":
             self.send_html(os.path.join(BASE_DIR, "moovit.html"))
 
         # ── Dankal Red Line — live vehicles + alert status ────────────────────
@@ -1191,7 +1218,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 vehs_raw = _rq.get(
                     f"{HASADNA_URL}/siri_vehicle_locations/list",
                     params={
-                        "siri_route__operator_ref": "6",
+                        "siri_routes__operator_ref": "6",
                         "lat__greater_or_equal": 32.02,
                         "lat__lower_or_equal":   32.13,
                         "lon__greater_or_equal": 34.74,
@@ -1248,6 +1275,238 @@ class BotHandler(BaseHTTPRequestHandler):
                     "count": 0, "status": "error", "error": str(e),
                 })
 
+        # ── ML delay prediction (lazy-loaded) ─────────────────────────────────
+        # GET /api/predict_delay?line=171&operator_ref=3[&hour=8&day_of_week=1&jam_factor=3.5]
+        # Returns the model's expected delay (minutes) for the given line/time.
+        elif path == "/api/predict_delay":
+            try:
+                line = (qs.get("line") or [""])[0].strip()
+                operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+                operator_name = (qs.get("operator") or [""])[0].strip()
+                hour_param = (qs.get("hour") or [""])[0].strip()
+                dow_param = (qs.get("day_of_week") or [""])[0].strip()
+                jam_param = (qs.get("jam_factor") or [""])[0].strip()
+
+                # Map operator_ref -> operator_name used at training time
+                _OP_NAME_MAP = {
+                    "2": "Israel Railways", "3": "Dan", "5": "Egged",
+                    "6": "NTA", "14": "Metropoline", "15": "Egged Taavura",
+                    "16": "Tnufa", "18": "Superbus", "21": "Kavim",
+                    "25": "Nateev Express", "32": "V-Line", "42": "Afikim",
+                }
+                if not operator_name and operator_ref:
+                    operator_name = _OP_NAME_MAP.get(operator_ref, "Unknown")
+
+                hour_val = int(hour_param) if hour_param.isdigit() else None
+                dow_val = int(dow_param) if dow_param.isdigit() else None
+                jam_val = float(jam_param) if jam_param else None
+
+                # If jam_factor not given, fetch real-time average from ES
+                if jam_val is None:
+                    try:
+                        import urllib.request as _ureq
+                        body = json.dumps({
+                            "size": 0,
+                            "query": {"range": {"recorded_at": {"gte": "now-1h"}}},
+                            "aggs": {"jam": {"avg": {"field": "jam_factor"}}},
+                        }).encode("utf-8")
+                        req = _ureq.Request(
+                            "http://localhost:9200/transit-traffic/_search",
+                            data=body,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with _ureq.urlopen(req, timeout=5) as resp:
+                            d = json.loads(resp.read())
+                            jam_val = float(
+                                d.get("aggregations", {}).get("jam", {}).get("value")
+                                or 2.0
+                            )
+                    except Exception:
+                        jam_val = 2.0
+
+                # Lazy import — keeps bot.py startup fast and tolerates
+                # missing pkl gracefully.
+                try:
+                    sys.path.insert(0, os.path.join(BASE_DIR, "ml"))
+                    import predict as _ml_predict  # type: ignore
+                except Exception as ex:
+                    self.send_json({"error": f"model not loaded: {ex}"}, status=503)
+                    return
+
+                result = _ml_predict.predict_delay(
+                    line=line or None,
+                    operator=operator_name or None,
+                    hour=hour_val,
+                    day_of_week=dow_val,
+                    jam_factor=jam_val,
+                )
+                if result is None:
+                    self.send_json({"error": "model not loaded"}, status=503)
+                else:
+                    self.send_json(result)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── Real-time active lines per operator from Stride SIRI ─────────────
+        # GET /api/active_lines?operator_ref=3
+        # Returns unique bus lines currently active (vehicles on road right now).
+        # Same data source as Waze/Google Maps Israel — MOT SIRI via Hasadna.
+        elif path == "/api/active_lines":
+            operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+            if not operator_ref:
+                self.send_json({"error": "operator_ref required", "routes": []}, status=400)
+            else:
+                try:
+                    import requests as _rq
+                    raw = _rq.get(
+                        f"{HASADNA_URL}/siri_vehicle_locations/list",
+                        params={
+                            "siri_routes__operator_ref": operator_ref,
+                            "lat__greater_or_equal": 31.87,
+                            "lat__lower_or_equal":   32.21,
+                            "lon__greater_or_equal": 34.72,
+                            "lon__lower_or_equal":   34.95,
+                            "limit": 500,
+                            "order_by": "id desc",
+                        },
+                        timeout=12,
+                        headers={"User-Agent": "IsraelTransitBot/1.0"},
+                    ).json()
+                    seen = {}
+                    line_velocity = {}  # line_ref → max velocity seen
+                    if isinstance(raw, list):
+                        for v in raw:
+                            lr  = str(v.get("siri_route__line_ref") or "").strip()
+                            rsn = str(v.get("siri_route__gtfs_route__route_short_name") or "").strip()
+                            rln = str(v.get("siri_route__gtfs_route__route_long_name") or "").strip()
+                            vel = int(v.get("velocity") or 0)
+                            if not lr:
+                                continue
+                            # Track max velocity per line
+                            if vel > line_velocity.get(lr, 0):
+                                line_velocity[lr] = vel
+                            if rsn:
+                                _learn_line(lr, rsn)
+                            if lr not in seen:
+                                seen[lr] = {
+                                    "route_id":         lr,
+                                    "route_short_name": rsn or _resolve_line(lr),
+                                    "route_long_name":  rln,
+                                    "agency_id":        operator_ref,
+                                    "agency_name":      (qs.get("op_name") or [""])[0] or operator_ref,
+                                }
+                    # Filter to only lines with at least one moving vehicle (real "active")
+                    active_routes = [
+                        r for lr, r in seen.items()
+                        if line_velocity.get(lr, 0) > 0
+                    ]
+                    # Attach max_velocity for each line (so frontend can show "live" badge)
+                    for r in active_routes:
+                        r["max_velocity"] = line_velocity.get(r["route_id"], 0)
+                    routes = sorted(
+                        active_routes,
+                        key=lambda x: int(x["route_short_name"]) if x["route_short_name"].isdigit() else 9999
+                    )
+                    self.send_json({
+                        "routes": routes,
+                        "count":  len(routes),
+                        "total_lines_seen": len(seen),
+                        "source": "stride_realtime_active_only",
+                    })
+                except Exception as e:
+                    self.send_json({"error": str(e), "routes": []}, status=500)
+
+        # ── PWA: manifest.json ───────────────────────────────────────────────
+        elif path == "/manifest.json":
+            try:
+                manifest_path = os.path.join(BASE_DIR, "manifest.json")
+                with open(manifest_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except FileNotFoundError:
+                self.send_json({"error": "manifest.json not found"}, status=404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── PWA: service worker ──────────────────────────────────────────────
+        # Must be served from the project root with Service-Worker-Allowed: /
+        # so the SW can claim scope "/" even though the file path is /service-worker.js.
+        elif path == "/service-worker.js":
+            try:
+                sw_path = os.path.join(BASE_DIR, "service-worker.js")
+                with open(sw_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                # SW updates: don't let the browser hold an old copy forever.
+                self.send_header("Cache-Control", "no-cache, max-age=0")
+                self.send_header("Service-Worker-Allowed", "/")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except FileNotFoundError:
+                self.send_json({"error": "service-worker.js not found"}, status=404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── SSL Certificate download (for Android trust installation) ───────
+        # Navigate to https://<VM-IP>:5000/cert.pem on Android → install trust
+        elif path == "/cert.pem":
+            cert_path = os.path.join(BASE_DIR, "cert.pem")
+            if not os.path.isfile(cert_path):
+                self.send_json({"error": "cert.pem not found — server not running HTTPS"}, status=404)
+            else:
+                with open(cert_path, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                # application/x-pem-file triggers "Install certificate" on Android
+                self.send_header("Content-Type", "application/x-pem-file")
+                self.send_header("Content-Disposition", 'attachment; filename="transit-ca.pem"')
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+
+        # ── PWA: icons ───────────────────────────────────────────────────────
+        elif path.startswith("/icons/"):
+            # Reject path traversal — only allow basenames inside /icons/.
+            fname = path[len("/icons/"):]
+            if not fname or "/" in fname or ".." in fname or "\\" in fname:
+                self.send_json({"error": "invalid icon path"}, status=400)
+            else:
+                icon_path = os.path.join(BASE_DIR, "icons", fname)
+                if not os.path.isfile(icon_path):
+                    self.send_json({"error": f"icon not found: {fname}"}, status=404)
+                else:
+                    ext = os.path.splitext(fname)[1].lower()
+                    ctype = {
+                        ".png":  "image/png",
+                        ".svg":  "image/svg+xml",
+                        ".ico":  "image/x-icon",
+                        ".jpg":  "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".webp": "image/webp",
+                    }.get(ext, "application/octet-stream")
+                    try:
+                        with open(icon_path, "rb") as f:
+                            body = f.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", ctype)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.send_header("Cache-Control", "public, max-age=86400")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        self.wfile.write(body)
+                    except Exception as e:
+                        self.send_json({"error": str(e)}, status=500)
+
         # ── moovit.html (ממשק ראשי) ──────────────────────────────────────────
         elif path == "/":
             html_path = os.path.join(BASE_DIR, "moovit.html")
@@ -1295,24 +1554,81 @@ class BotHandler(BaseHTTPRequestHandler):
 
         # ── status ────────────────────────────────────────────────────────────
         elif path == "/status":
+            # Fetch ES freshness quickly (with MinIO fallback)
+            es_freshness = {}
+            _es_ok = True  # once one ES query fails, skip remaining
+            _minio_s3 = None
+            for _key, _idx, _tfield in [
+                ("bus",     "transit-bus-positions",   "fetched_at"),
+                ("train",   "transit-train-positions", "recorded_at"),
+                ("traffic", "transit-traffic",         "recorded_at"),
+            ]:
+                if _es_ok:
+                    try:
+                        _ts_filter = {"range": {_tfield: {"gte": "2025-01-01", "lte": "2027-12-31"}}}
+                        _req = urllib.request.Request(
+                            f"http://localhost:9200/{_idx}/_search",
+                            data=json.dumps({
+                                "size": 1,
+                                "query": _ts_filter,
+                                "sort": [{_tfield: {"order": "desc"}}],
+                                "_source": [_tfield],
+                            }).encode(),
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(_req, timeout=1) as _r:
+                            _d = json.loads(_r.read())
+                            _hits = _d.get("hits", {}).get("hits", [])
+                            es_freshness[_key] = {
+                                "total": _d["hits"]["total"]["value"],
+                                "latest": _hits[0]["_source"].get(_tfield) if _hits else None,
+                            }
+                            continue
+                    except Exception:
+                        _es_ok = False  # skip ES for remaining keys
+                # MinIO fallback (reuse module-level client — fast)
+                try:
+                    from datetime import datetime as _dt
+                    _s3c = _get_status_s3()
+                    if _s3c:
+                        _now = _dt.utcnow()
+                        _minio_map = {"bus": "raw/bus-positions/", "train": "raw/train-positions/", "traffic": "raw/traffic-data/"}
+                        _mp = _minio_map.get(_key, "")
+                        _day_prefix = f"{_mp}year={_now.year}/month={_now.month:02d}/day={_now.day:02d}/"
+                        _r2 = _s3c.list_objects_v2(Bucket="israel-transit-lake", Prefix=_day_prefix, MaxKeys=50)
+                        _objs = [o for o in _r2.get("Contents", []) if o["Key"].endswith(".json")]
+                        if _objs:
+                            _latest = max(_objs, key=lambda x: x["LastModified"])
+                            es_freshness[_key] = {"total": len(_objs), "latest": _latest["LastModified"].isoformat(), "source": "minio"}
+                        else:
+                            es_freshness[_key] = {"total": 0, "latest": None}
+                    else:
+                        es_freshness[_key] = {"total": 0, "latest": None}
+                except Exception:
+                    es_freshness[_key] = {"total": 0, "latest": None}
+
             self.send_json({
                 "status": "running",
                 "service": "Israel Public Transit Monitoring — גוש דן ותל אביב",
+                "server_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "area": {
                     "name": "גוש דן ותל אביב",
                     "lat": f"{GUSH_DAN['lat_min']}–{GUSH_DAN['lat_max']}",
                     "lon": f"{GUSH_DAN['lon_min']}–{GUSH_DAN['lon_max']}",
                 },
+                "data_freshness": es_freshness,
                 "endpoints": {
-                    "Gush Dan Transit App": f"http://localhost:{BOT_PORT}/gushdan",
-                    "Transit Query Tool":   f"http://localhost:{BOT_PORT}/",
-                    "Agent Dashboard":      f"http://localhost:{BOT_PORT}/agent",
-                    "Airflow UI":           "http://localhost:8081",
-                    "Kafka UI":             "http://localhost:8080",
-                    "MinIO Console":        "http://localhost:9001",
-                    "Kibana":               "http://localhost:5601",
-                    "Bot API":              f"http://localhost:{BOT_PORT}",
-                }
+                    "Gush Dan Transit App":  f"http://linub-vm:{BOT_PORT}/gushdan",
+                    "Transit Query Tool":    f"http://linub-vm:{BOT_PORT}/",
+                    "Agent Dashboard":       f"http://linub-vm:{BOT_PORT}/agent",
+                    "Airflow UI":            "http://linub-vm:8081",
+                    "Kafka UI":              "http://linub-vm:8085",
+                    "MinIO Console":         "http://linub-vm:9001",
+                    "Kibana":                "http://linub-vm:5601",
+                    "Pipeline Status":       f"http://linub-vm:{BOT_PORT}/api/pipeline_status",
+                    "ES Summary":            f"http://linub-vm:{BOT_PORT}/api/es_summary",
+                    "Active Lines (Dan)":    f"http://linub-vm:{BOT_PORT}/api/active_lines?operator_ref=3",
+                },
             })
 
         # ── buses — גוש דן ותל אביב בלבד ────────────────────────────────────
@@ -1337,22 +1653,43 @@ class BotHandler(BaseHTTPRequestHandler):
 
         # ── stops — גוש דן ותל אביב בלבד ────────────────────────────────────
         elif path == "/stops":
-            all_data = load_json("buses_with_nearest_stops.json")
-            filtered = []
-            for b in all_data:
-                if not _in_gush_dan(
-                    b.get("lat") or b.get("latitude"),
-                    b.get("lon") or b.get("longitude")
-                ):
-                    continue
-                lr  = str(b.get("line_ref") or b.get("route_id") or "")
-                rsn = str(b.get("route_short_name") or "")
-                if not rsn or rsn == lr:
-                    rsn = _resolve_line(lr)
-                b = dict(b)
-                b["line_name"] = rsn or lr
-                filtered.append(b)
-            self.send_json(filtered[:200])
+            # FIX: Return actual GTFS stops instead of bus position data
+            q = (qs.get("q") or [""])[0].strip()
+            lat = (qs.get("lat") or [""])[0].strip()
+            lon = (qs.get("lon") or [""])[0].strip()
+            limit = int((qs.get("limit") or ["100"])[0])
+            try:
+                if q:
+                    from gtfs_query import search_stops
+                    stops = search_stops(q, limit=limit)
+                elif lat and lon:
+                    from gtfs_query import _q
+                    stops = _q("""
+                        SELECT stop_id, stop_name, stop_lat, stop_lon,
+                               (6371000 * acos(LEAST(1.0, cos(radians(%s)) * cos(radians(stop_lat))
+                                * cos(radians(stop_lon) - radians(%s))
+                                + sin(radians(%s)) * sin(radians(stop_lat))))) AS distance_m
+                        FROM gtfs.stops
+                        WHERE stop_lat BETWEEN %s AND %s
+                          AND stop_lon BETWEEN %s AND %s
+                        ORDER BY distance_m
+                        LIMIT %s
+                    """, (float(lat), float(lon), float(lat),
+                          float(lat)-0.02, float(lat)+0.02,
+                          float(lon)-0.02, float(lon)+0.02, limit))
+                else:
+                    from gtfs_query import _q
+                    stops = _q("""
+                        SELECT stop_id, stop_name, stop_lat, stop_lon
+                        FROM gtfs.stops
+                        WHERE stop_lat BETWEEN 31.9 AND 32.25
+                          AND stop_lon BETWEEN 34.65 AND 34.95
+                        ORDER BY stop_name
+                        LIMIT %s
+                    """, (limit,))
+                self.send_json({"stops": stops, "count": len(stops)})
+            except Exception as e:
+                self.send_json({"error": str(e), "stops": []}, status=500)
 
         # ── GTFS — routes by operator ─────────────────────────────────────────
         # GET /gtfs/routes?operator_id=6&q=63
@@ -1576,7 +1913,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 return
             target = (
                 f"{HASADNA_URL}/siri_vehicle_locations/list?"
-                f"siri_route__line_ref={urllib.parse.quote(line_ref)}"
+                f"siri_routes__line_ref={urllib.parse.quote(line_ref)}"
                 f"&limit=30&order_by=id+desc"
             )
             self._proxy(target)
@@ -1592,7 +1929,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 if not ride_id and line_ref:
                     # Get most recent ride for this line
                     veh = _rq.get(f"{STRIDE}/siri_vehicle_locations/list",
-                        params={"siri_route__line_ref": line_ref, "limit": 1,
+                        params={"siri_routes__line_ref": line_ref, "limit": 1,
                                 "order_by": "id desc"}, timeout=8).json()
                     if veh:
                         ride_id = str(veh[0].get("siri_ride__id",""))
@@ -1653,24 +1990,56 @@ class BotHandler(BaseHTTPRequestHandler):
                 "q": q, "format": "json", "limit": 1,
                 "countrycodes": "il", "accept-language": "he",
             })
+            # FIX: Multi-provider geocoding with fallback
+            _geo_result = None
+
+            # 1. Nominatim (original)
             try:
-                req = urllib.request.Request(
-                    target,
-                    headers={"User-Agent": "IsraelTransitBot/1.0 (transit-project)"},
-                )
-                with urllib.request.urlopen(req, timeout=8) as resp:
+                req = urllib.request.Request(target,
+                    headers={"User-Agent": "IsraelTransitBot/1.0 (transit-project)"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
                     results = json.loads(resp.read())
-                if not results:
-                    self.send_json({"error": f"Address not found: {address}"}, status=404)
-                    return
-                r = results[0]
-                self.send_json({
-                    "lat":          float(r["lat"]),
-                    "lon":          float(r["lon"]),
-                    "display_name": r.get("display_name", address),
-                })
-            except Exception as e:
-                self.send_json({"error": f"geocoding error: {e}"}, status=500)
+                if results:
+                    r = results[0]
+                    _geo_result = {"lat": float(r["lat"]), "lon": float(r["lon"]),
+                                   "display_name": r.get("display_name", address), "source": "nominatim"}
+            except Exception:
+                pass
+
+            # 2. Photon (komoot) — free, no key needed
+            if not _geo_result:
+                try:
+                    _photon_url = "https://photon.komoot.io/api?" + urllib.parse.urlencode({
+                        "q": q, "limit": 1, "lang": "he", "lat": 32.08, "lon": 34.78})
+                    _preq = urllib.request.Request(_photon_url,
+                        headers={"User-Agent": "IsraelTransitBot/1.0"})
+                    with urllib.request.urlopen(_preq, timeout=5) as _presp:
+                        _pdata = json.loads(_presp.read())
+                    _feats = _pdata.get("features", [])
+                    if _feats:
+                        _coords = _feats[0]["geometry"]["coordinates"]
+                        _props = _feats[0].get("properties", {})
+                        _geo_result = {"lat": _coords[1], "lon": _coords[0],
+                                       "display_name": _props.get("name", address), "source": "photon"}
+                except Exception:
+                    pass
+
+            # 3. GTFS stops fallback
+            if not _geo_result:
+                try:
+                    from gtfs_query import search_stops as _gs
+                    _gstops = _gs(address, limit=1)
+                    if _gstops:
+                        _s = _gstops[0]
+                        _geo_result = {"lat": float(_s["stop_lat"]), "lon": float(_s["stop_lon"]),
+                                       "display_name": _s["stop_name"], "source": "gtfs"}
+                except Exception:
+                    pass
+
+            if _geo_result:
+                self.send_json(_geo_result)
+            else:
+                self.send_json({"error": f"Address not found: {address}"}, status=404)
 
         # ── streets → רשימת רחובות מ-Google Places ──────────────────────────
         # GET /streets?city=תל+אביב
@@ -1843,7 +2212,7 @@ class BotHandler(BaseHTTPRequestHandler):
                 lon_min = GUSH_DAN["lon_min"]
                 lon_max = GUSH_DAN["lon_max"]
             stride_params = (
-                f"siri_route__operator_ref=2&limit=50&order_by=id+desc"
+                f"siri_routes__operator_ref=2&limit=50&order_by=id+desc"
                 f"&lat__greater_or_equal={lat_min}&lat__lower_or_equal={lat_max}"
                 f"&lon__greater_or_equal={lon_min}&lon__lower_or_equal={lon_max}"
             )
@@ -1851,11 +2220,13 @@ class BotHandler(BaseHTTPRequestHandler):
             self._proxy(target)
 
         # ── Line info — Moovit-style (stops × 2 directions + live vehicles) ─────
-        # GET /line_info?line_ref=X
+        # GET /line_info?line_ref=X&short_name=2&operator_ref=3
         elif path == "/line_info":
-            line_ref = (qs.get("line_ref") or [""])[0].strip()
-            if not line_ref:
-                self.send_json({"error": "?line_ref= required"}, status=400)
+            line_ref     = (qs.get("line_ref")     or [""])[0].strip()
+            short_name   = (qs.get("short_name")   or [""])[0].strip()
+            operator_ref = (qs.get("operator_ref") or [""])[0].strip()
+            if not line_ref and not short_name:
+                self.send_json({"error": "?line_ref= or ?short_name= required"}, status=400)
                 return
             try:
                 import requests as _rq
@@ -1869,130 +2240,161 @@ class BotHandler(BaseHTTPRequestHandler):
                     "32":"V-Line","42":"אפיקים"
                 }
 
-                # Step 1: active vehicles for this line
+                # Step 1: active vehicles for this line — only ACTIVE (velocity > 0)
+                # Also constrain by operator_ref so we don't accidentally pull a different
+                # operator's line that happens to share the same line_ref.
+                _veh_params = {"siri_routes__line_ref": line_ref,
+                               "limit": 30, "order_by": "id desc"}
+                if operator_ref:
+                    _veh_params["siri_routes__operator_ref"] = operator_ref
                 vehs = _rq.get(
                     f"{STRIDE}/siri_vehicle_locations/list",
-                    params={"siri_route__line_ref": line_ref,
-                            "limit": 20, "order_by": "id desc"},
+                    params=_veh_params,
                     timeout=10
                 ).json()
                 if not isinstance(vehs, list):
                     vehs = []
 
-                op_id    = str((vehs[0] if vehs else {}).get("siri_route__operator_ref",""))
+                # Filter to only moving vehicles (real "active" — speed > 0)
+                vehs_active = [v for v in vehs if (v.get("velocity") or 0) > 0]
+                # Use active list for vehicle markers; fall back to all if none moving
+                vehs_for_display = vehs_active if vehs_active else vehs
+
+                op_id = str((vehs[0] if vehs else {}).get("siri_route__operator_ref","")) or operator_ref
                 operator = _OP2.get(op_id, f"מפעיל {op_id}" if op_id else "לא ידוע")
 
                 vehicles = []
-                for v in vehs:
+                for v in vehs_for_display:
                     try:
                         vlat = float(v.get("lat") or v.get("calculated_lat") or 0)
                         vlon = float(v.get("lon") or v.get("calculated_lon") or 0)
-                        if vlat and vlon:
+                        vel  = int(v.get("velocity") or 0)
+                        if vlat and vlon and vel > 0:  # only render moving vehicles
                             vehicles.append({
-                                "lat": vlat, "lon": vlon,
-                                "vel": int(v.get("velocity") or 0),
+                                "lat": vlat, "lon": vlon, "vel": vel,
                                 "ride_id": v.get("siri_ride__id"),
                             })
                     except Exception:
                         pass
 
-                # Step 2: unique ride_ids (up to 8, to find 2 distinct directions)
-                ride_ids = []
-                for v in vehs:
-                    rid = v.get("siri_ride__id")
-                    if rid and rid not in ride_ids:
-                        ride_ids.append(rid)
-                ride_ids = ride_ids[:8]
+                # ── Step 2: Get authoritative stop list from Stride GTFS ──────────
+                # Find gtfs_route by route_short_name + operator_ref (today),
+                # then a gtfs_ride for that route, then ride_stops for that ride.
+                # This gives proper stop names + lat/lon (matches Google Maps/Moovit).
+                import datetime as _dt
+                today = _dt.date.today().isoformat()
 
-                def _fetch_stops(rid):
-                    rs = _rq.get(
-                        f"{STRIDE}/siri_ride_stops/list",
-                        params={"siri_ride__id": rid,
-                                "limit": 80, "order_by": "order asc"},
-                        timeout=6
-                    ).json()
+                def _gtfs_route_stops(direction_filter=None):
+                    """Returns list of stop dicts for the route in the requested direction (1 or 2)."""
+                    if not short_name:
+                        return [], {}
+                    rt_params = {
+                        "route_short_name": short_name,
+                        "date_from": today,
+                        "date_to":   today,
+                        "limit":     20,
+                    }
+                    if op_id:
+                        rt_params["operator_ref"] = op_id
+                    try:
+                        rts = _rq.get(f"{STRIDE}/gtfs_routes/list",
+                                      params=rt_params, timeout=8).json()
+                    except Exception:
+                        rts = []
+                    if not isinstance(rts, list) or not rts:
+                        return [], {}
+
+                    # Pick route matching the requested direction if present,
+                    # else first route returned
+                    chosen = None
+                    if direction_filter is not None:
+                        for r in rts:
+                            if str(r.get("route_direction") or "") == str(direction_filter):
+                                chosen = r
+                                break
+                    chosen = chosen or rts[0]
+                    rid_route = chosen.get("id")
+                    if not rid_route:
+                        return [], chosen
+
+                    # Find a gtfs_ride for this route (any time today)
+                    try:
+                        rides = _rq.get(f"{STRIDE}/gtfs_rides/list", params={
+                            "gtfs_route_id":     rid_route,
+                            "start_time_from":   f"{today}T00:00:00Z",
+                            "start_time_to":     f"{today}T23:59:59Z",
+                            "limit":             1,
+                            "order_by":          "id asc",
+                        }, timeout=8).json()
+                    except Exception:
+                        rides = []
+                    if not isinstance(rides, list) or not rides:
+                        return [], chosen
+                    ride_id = rides[0].get("id")
+
+                    # Fetch ride stops in proper order
+                    try:
+                        rs = _rq.get(f"{STRIDE}/gtfs_ride_stops/list", params={
+                            "gtfs_ride_ids": ride_id,
+                            "limit":         120,
+                            "order_by":      "stop_sequence asc",
+                        }, timeout=10).json()
+                    except Exception:
+                        rs = []
                     if not isinstance(rs, list):
-                        return []
+                        return [], chosen
 
-                    # Collect codes that need lazy-fetch (not in cache and no direct name)
-                    missing = set()
-                    for s in rs:
-                        if not s.get("gtfs_stop__name"):
-                            code = str(s.get("siri_stop__code") or s.get("gtfs_stop__code") or "")
-                            if code:
-                                with _STOPCACHE_LOCK:
-                                    if code not in _STOPCACHE:
-                                        missing.add(code)
-
-                    # Parallel-fetch missing stop names (max 10 concurrent)
-                    if missing:
-                        def _fc(c): _resolve_stop_name(c)
-                        with _TPX(max_workers=10) as _tp2:
-                            list(_tp2.map(_fc, list(missing)[:40]))
-
-                    # Build output
+                    # Dedupe by stop_sequence (Stride sometimes returns duplicates)
+                    seen_seq = set()
                     out = []
-                    for i, s in enumerate(rs):
-                        gtfs_name = s.get("gtfs_stop__name") or ""
-                        city      = s.get("gtfs_stop__city") or ""
-                        code      = str(s.get("siri_stop__code") or s.get("gtfs_stop__code") or "")
-                        if gtfs_name:
-                            name = gtfs_name
-                        elif code:
-                            name = _resolve_stop_name(code, city)
-                            if not name:
-                                name = f"{city} ({code})" if city else f"תח. {code}"
-                        elif city:
-                            name = city
-                        else:
+                    for s in rs:
+                        seq = s.get("stop_sequence")
+                        if seq in seen_seq:
                             continue
+                        seen_seq.add(seq)
+                        nm = (s.get("gtfs_stop__name") or "").strip()
+                        ct = (s.get("gtfs_stop__city") or "").strip()
+                        if not nm and not ct:
+                            continue
+                        full_name = f"{nm}, {ct}" if nm and ct and ct not in nm else (nm or ct)
                         out.append({
-                            "name":    name,
-                            "stop_id": str(s.get("gtfs_stop__id") or ""),
+                            "name":    full_name,
+                            "stop_id": str(s.get("gtfs_stop_id") or ""),
                             "lat":     s.get("gtfs_stop__lat"),
                             "lon":     s.get("gtfs_stop__lon"),
-                            "order":   s.get("order", i),
+                            "order":   seq,
+                            "scheduled_dep": s.get("departure_time", "")[:19] if s.get("departure_time") else "",
                         })
-                    return out
+                    return out, chosen
 
-                # Parallel fetch — find up to 2 distinct directions
+                # Try direction 1 and 2 in parallel
                 dirs = []
-                if ride_ids:
-                    with _TPX(max_workers=4) as _pool:
-                        futs = {_pool.submit(_fetch_stops, rid): rid
-                                for rid in ride_ids}
-                        for fut in _fasc(futs, timeout=12):
-                            try:
-                                stops = fut.result(timeout=0.2)
-                            except Exception:
-                                continue
-                            if not stops:
-                                continue
-                            first = stops[0]["name"]
-                            if not dirs:
-                                dirs.append(stops)
-                            elif len(dirs) == 1 and first != dirs[0][0]["name"]:
-                                dirs.append(stops)
-                                break   # found 2 directions — done
+                gtfs_route_meta = {}
+                with _TPX(max_workers=2) as _pool:
+                    futs = {_pool.submit(_gtfs_route_stops, d): d for d in (1, 2)}
+                    results_by_dir = {}
+                    for fut in _fasc(futs, timeout=15):
+                        try:
+                            stops, route_meta = fut.result(timeout=0.2)
+                        except Exception:
+                            continue
+                        d = futs[fut]
+                        if stops:
+                            results_by_dir[d] = (stops, route_meta)
+                            if not gtfs_route_meta and route_meta:
+                                gtfs_route_meta = route_meta
 
-                # Also try GTFS as fallback when no active rides
-                gtfs_stops = []
+                # Order: dir 1 then dir 2
+                for d in (1, 2):
+                    if d in results_by_dir:
+                        dirs.append(results_by_dir[d][0])
+
+                # Fallback: try without direction filter if both attempts failed
                 if not dirs:
-                    try:
-                        from gtfs_query import get_route_stops_by_short_name
-                        rows = get_route_stops_by_short_name(line_ref)
-                        if rows:
-                            gtfs_stops = [{
-                                "name":    r.get("stop_name",""),
-                                "stop_id": str(r.get("stop_id","")),
-                                "lat":     r.get("stop_lat"),
-                                "lon":     r.get("stop_lon"),
-                                "order":   r.get("stop_sequence", i),
-                            } for i, r in enumerate(rows)]
-                            if gtfs_stops:
-                                dirs.append(gtfs_stops)
-                    except Exception:
-                        pass
+                    fallback_stops, fallback_meta = _gtfs_route_stops(None)
+                    if fallback_stops:
+                        dirs.append(fallback_stops)
+                        gtfs_route_meta = gtfs_route_meta or fallback_meta
 
                 directions = [
                     {
@@ -2003,15 +2405,262 @@ class BotHandler(BaseHTTPRequestHandler):
                     for d in dirs if d
                 ]
 
+                # Long name from GTFS route metadata (e.g. "Petach Tikva → Bat Yam")
+                long_name = gtfs_route_meta.get("route_long_name", "") if gtfs_route_meta else ""
+                # Strip trailing "-1#" / "-2#" direction suffix
+                if long_name:
+                    import re as _re
+                    long_name = _re.sub(r"-[12]#?$", "", long_name).replace("<->", " ↔ ")
+
                 self.send_json({
-                    "line_ref":   line_ref,
-                    "operator":   operator,
-                    "directions": directions,
-                    "vehicles":   vehicles[:12],
-                    "source":     "stride" if ride_ids else ("gtfs" if gtfs_stops else "none"),
+                    "line_ref":        line_ref,
+                    "short_name":      short_name or (gtfs_route_meta.get("route_short_name", "") if gtfs_route_meta else ""),
+                    "long_name":       long_name,
+                    "operator":        operator or (gtfs_route_meta.get("agency_name", "") if gtfs_route_meta else ""),
+                    "directions":      directions,
+                    "vehicles":        vehicles[:20],
+                    "active_count":    len(vehs_active),
+                    "total_count":     len(vehs),
+                    "source":          "gtfs" if dirs else "none",
+                    "has_schedule":    bool(dirs),
                 })
             except Exception as e:
                 self.send_json({"error": str(e), "directions": [], "vehicles": []}, status=500)
+
+        # ── Pipeline status — comprehensive health of all components ────────────
+        # GET /api/pipeline_status
+        elif path == "/api/pipeline_status":
+            try:
+                result = {}
+
+                # 1. ES — latest document timestamp per index
+                es_indices = {
+                    "bus": "transit-bus-positions",
+                    "train": "transit-train-positions",
+                    "traffic": "transit-traffic",
+                }
+                es_status = {}
+                for key, idx in es_indices.items():
+                    try:
+                        time_field = "fetched_at" if key == "bus" else "recorded_at"
+                        # Filter to reasonable date range to exclude bogus synthetic records (e.g. 2038)
+                        ts_filter = {"range": {time_field: {"gte": "2025-01-01", "lte": "2027-12-31"}}}
+                        req = urllib.request.Request(
+                            f"http://localhost:9200/{idx}/_search",
+                            data=json.dumps({
+                                "size": 1,
+                                "query": ts_filter,
+                                "sort": [{time_field: {"order": "desc"}}],
+                                "_source": [time_field, "operator_name", "route_short_name"],
+                            }).encode(),
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(req, timeout=5) as r:
+                            d = json.loads(r.read())
+                            hits = d.get("hits", {})
+                            total = hits.get("total", {}).get("value", 0)
+                            latest = None
+                            if hits.get("hits"):
+                                latest = hits["hits"][0]["_source"].get(time_field)
+                            es_status[key] = {"total_docs": total, "latest": latest, "index": idx}
+                    except Exception as ex:
+                        es_status[key] = {"error": str(ex), "index": idx}
+                result["elasticsearch"] = es_status
+
+                # 2. MinIO — latest file in bucket
+                try:
+                    import boto3
+                    # When running on VM host, MINIO_ENDPOINT may be "http://minio:9000" (Docker hostname).
+                    # Fall back to localhost if the Docker hostname doesn't resolve.
+                    _minio_ep = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
+                    if "minio:9000" in _minio_ep or "minio:9001" in _minio_ep:
+                        _minio_ep = "http://localhost:9000"  # VM host can reach MinIO at localhost
+                    s3 = boto3.client(
+                        "s3",
+                        endpoint_url=_minio_ep,
+                        aws_access_key_id=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+                        aws_secret_access_key=os.getenv("MINIO_SECRET_KEY", "minioadmin123"),
+                    )
+                    paginator = s3.get_paginator("list_objects_v2")
+                    newest = None
+                    newest_key = None
+                    total_objs = 0
+                    for page in paginator.paginate(Bucket="israel-transit-lake"):
+                        for obj in page.get("Contents", []):
+                            total_objs += 1
+                            if newest is None or obj["LastModified"] > newest:
+                                newest = obj["LastModified"]
+                                newest_key = obj["Key"]
+                    result["minio"] = {
+                        "total_objects": total_objs,
+                        "latest_file": newest_key,
+                        "latest_modified": newest.isoformat() if newest else None,
+                        "status": "ok" if total_objs > 0 else "empty",
+                    }
+                except Exception as ex:
+                    result["minio"] = {"error": str(ex)}
+
+                # 3. Airflow — latest DAG runs from Airflow REST API
+                try:
+                    req = urllib.request.Request(
+                        "http://localhost:8081/api/v1/dags?only_active=true",
+                        headers={"Authorization": "Basic YWRtaW46YWRtaW4="},  # admin:admin
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as r:
+                        dag_data = json.loads(r.read())
+                    dag_ids = [d["dag_id"] for d in dag_data.get("dags", [])]
+                    dag_runs = {}
+                    for dag_id in dag_ids[:8]:
+                        try:
+                            req2 = urllib.request.Request(
+                                f"http://localhost:8081/api/v1/dags/{dag_id}/dagRuns?limit=1&order_by=-start_date",
+                                headers={"Authorization": "Basic YWRtaW46YWRtaW4="},
+                            )
+                            with urllib.request.urlopen(req2, timeout=4) as r2:
+                                run_data = json.loads(r2.read())
+                                runs = run_data.get("dag_runs", [])
+                                if runs:
+                                    dag_runs[dag_id] = {
+                                        "state": runs[0].get("state"),
+                                        "start": runs[0].get("start_date"),
+                                        "end": runs[0].get("end_date"),
+                                    }
+                        except Exception:
+                            pass
+                    result["airflow"] = {"dags": dag_runs}
+                except Exception as ex:
+                    result["airflow"] = {"error": str(ex)}
+
+                # 4. Kafka — live vehicle count from Stride API
+                try:
+                    req = urllib.request.Request(
+                        f"{HASADNA_URL}/siri_vehicle_locations/list?"
+                        f"lat__greater_or_equal={GUSH_DAN['lat_min']}"
+                        f"&lat__lower_or_equal={GUSH_DAN['lat_max']}"
+                        f"&lon__greater_or_equal={GUSH_DAN['lon_min']}"
+                        f"&lon__lower_or_equal={GUSH_DAN['lon_max']}"
+                        f"&limit=1&order_by=id+desc",
+                        headers={"User-Agent": "IsraelTransitBot/1.0"},
+                    )
+                    with urllib.request.urlopen(req, timeout=8) as r:
+                        stride_data = json.loads(r.read())
+                    result["stride_api"] = {
+                        "reachable": True,
+                        "sample_count": len(stride_data) if isinstance(stride_data, list) else 0,
+                    }
+                except Exception as ex:
+                    result["stride_api"] = {"reachable": False, "error": str(ex)}
+
+                self.send_json(result)
+            except Exception as e:
+                self.send_json({"error": str(e)}, status=500)
+
+        # ── ES live summary — aggregated stats from Elasticsearch ────────────
+        # GET /api/es_summary?hours=6
+        elif path == "/api/es_summary":
+            hours = int((qs.get("hours") or ["6"])[0])
+            try:
+                since = f"now-{hours}h"
+                summary = {}
+
+                # Bus: vehicles by operator
+                req = urllib.request.Request(
+                    "http://localhost:9200/transit-bus-positions/_search",
+                    data=json.dumps({
+                        "size": 0,
+                        "query": {"range": {"fetched_at": {"gte": since}}},
+                        "aggs": {
+                            "by_operator": {
+                                "terms": {"field": "operator_name.keyword", "size": 15}
+                            },
+                            "unique_lines": {
+                                "cardinality": {"field": "route_short_name.keyword"}
+                            },
+                        },
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    d = json.loads(r.read())
+                    aggs = d.get("aggregations", {})
+                    summary["buses"] = {
+                        "total_records": d["hits"]["total"]["value"],
+                        "unique_lines": aggs.get("unique_lines", {}).get("value", 0),
+                        "by_operator": {
+                            b["key"]: b["doc_count"]
+                            for b in aggs.get("by_operator", {}).get("buckets", [])
+                        },
+                        "window_hours": hours,
+                    }
+            except Exception as ex:
+                summary["buses"] = {"error": str(ex)}
+
+            try:
+                # Traffic: congestion stats
+                req2 = urllib.request.Request(
+                    "http://localhost:9200/transit-traffic/_search",
+                    data=json.dumps({
+                        "size": 0,
+                        "query": {"range": {"recorded_at": {"gte": since}}},
+                        "aggs": {
+                            "avg_speed": {"avg": {"field": "speed_kmh"}},
+                            "avg_jam":   {"avg": {"field": "jam_factor"}},
+                            "congested": {
+                                "filter": {"term": {"is_congested": True}},
+                            },
+                            "top_roads": {
+                                "terms": {"field": "road_name.keyword", "size": 5,
+                                          "order": {"avg_jam": "desc"}},
+                                "aggs": {"avg_jam": {"avg": {"field": "jam_factor"}}},
+                            },
+                        },
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req2, timeout=8) as r2:
+                    d2 = json.loads(r2.read())
+                    aggs2 = d2.get("aggregations", {})
+                    summary["traffic"] = {
+                        "total_records": d2["hits"]["total"]["value"],
+                        "avg_speed_kmh": round(aggs2.get("avg_speed", {}).get("value") or 0, 1),
+                        "avg_jam_factor": round(aggs2.get("avg_jam", {}).get("value") or 0, 2),
+                        "congested_segments": aggs2.get("congested", {}).get("doc_count", 0),
+                        "worst_roads": [
+                            {"road": b["key"], "jam_factor": round(b["avg_jam"]["value"], 2)}
+                            for b in aggs2.get("top_roads", {}).get("buckets", [])
+                        ],
+                        "window_hours": hours,
+                    }
+            except Exception as ex2:
+                summary["traffic"] = {"error": str(ex2)}
+
+            try:
+                # Trains: delays
+                req3 = urllib.request.Request(
+                    "http://localhost:9200/transit-train-positions/_search",
+                    data=json.dumps({
+                        "size": 0,
+                        "query": {"range": {"recorded_at": {"gte": since}}},
+                        "aggs": {
+                            "delayed": {"filter": {"term": {"is_delayed": True}}},
+                            "avg_delay": {"avg": {"field": "delay_minutes"}},
+                        },
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req3, timeout=8) as r3:
+                    d3 = json.loads(r3.read())
+                    aggs3 = d3.get("aggregations", {})
+                    summary["trains"] = {
+                        "total_records": d3["hits"]["total"]["value"],
+                        "delayed_count": aggs3.get("delayed", {}).get("doc_count", 0),
+                        "avg_delay_minutes": round(aggs3.get("avg_delay", {}).get("value") or 0, 1),
+                        "window_hours": hours,
+                    }
+            except Exception as ex3:
+                summary["trains"] = {"error": str(ex3)}
+
+            self.send_json(summary)
 
         else:
             self.send_json({"error": "Not found", "path": self.path}, status=404)
@@ -2033,7 +2682,8 @@ def main():
     ).start()
     print("📚 GTFS LineRef cache loading in background...")
 
-    server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
+    # ── HTTP server on BOT_PORT (always on, for normal access) ─────────
+    http_server = ThreadingHTTPServer(("0.0.0.0", BOT_PORT), BotHandler)
     print(f"🤖 Transit Bot API → http://0.0.0.0:{BOT_PORT}")
     print(f"   /gushdan                  → 🚌 Gush Dan Transit App (Moovit-style)")
     print(f"   /                         → Transit Query Tool (index.html)")
@@ -2045,11 +2695,37 @@ def main():
     print(f"   /geocode?q=address        → address → GPS (Nominatim proxy)")
     print(f"   /proxy/stride/<path>?...  → Hasadna Open Bus Stride API proxy")
     print(f"   /proxy/rail?...           → Israel Railways API proxy")
+
+    # ── HTTPS server on BOT_PORT+443 (if cert.pem + key.pem exist) ──────
+    _cert = os.path.join(BASE_DIR, "cert.pem")
+    _key  = os.path.join(BASE_DIR, "key.pem")
+    https_server = None
+    HTTPS_PORT = int(os.getenv("HTTPS_PORT", BOT_PORT + 443))   # default 5443
+    if os.path.isfile(_cert) and os.path.isfile(_key):
+        try:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.load_cert_chain(_cert, _key)
+            https_server = ThreadingHTTPServer(("0.0.0.0", HTTPS_PORT), BotHandler)
+            https_server.socket = ctx.wrap_socket(https_server.socket, server_side=True)
+            https_server._is_https = True
+            print(f"🔒 HTTPS also on port {HTTPS_PORT} → https://0.0.0.0:{HTTPS_PORT}")
+            print(f"   /cert.pem                 → 📥 Download CA cert (install on Android)")
+            # Start HTTPS in a background thread
+            threading.Thread(
+                target=https_server.serve_forever,
+                daemon=True, name="https-server"
+            ).start()
+        except Exception as ssl_err:
+            print(f"⚠️  HTTPS setup failed: {ssl_err}")
+
     try:
-        server.serve_forever()
+        http_server.serve_forever()
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped.")
-        server.server_close()
+        http_server.server_close()
+        if https_server:
+            https_server.server_close()
 
 
 if __name__ == "__main__":

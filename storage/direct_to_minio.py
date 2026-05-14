@@ -98,17 +98,35 @@ def get_s3():
         endpoint_url=MINIO_ENDPOINT,
         aws_access_key_id=MINIO_ACCESS,
         aws_secret_access_key=MINIO_SECRET,
-        config=Config(signature_version="s3v4"),
+        config=Config(signature_version="s3v4", connect_timeout=8, read_timeout=25, retries={"max_attempts": 0}),
         region_name="us-east-1",
     )
 
 
 def ensure_bucket(s3):
+    import signal
+
+    class _BucketTimeout(Exception):
+        pass
+
+    def _timeout_handler(signum, frame):
+        raise _BucketTimeout("ensure_bucket timed out after 10s")
+
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(10)  # 10-second timeout
     try:
         s3.head_bucket(Bucket=MAIN_BUCKET)
+    except _BucketTimeout:
+        log.warning("ensure_bucket: head_bucket timed out after 10s — skipping bucket check")
     except Exception:
-        s3.create_bucket(Bucket=MAIN_BUCKET)
-        log.info(f"Created bucket '{MAIN_BUCKET}'")
+        try:
+            s3.create_bucket(Bucket=MAIN_BUCKET)
+            log.info(f"Created bucket '{MAIN_BUCKET}'")
+        except _BucketTimeout:
+            log.warning("ensure_bucket: create_bucket timed out after 10s")
+    finally:
+        signal.alarm(0)  # Cancel the alarm
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def upload(s3, records: list, prefix: str, label: str) -> str:
@@ -129,8 +147,13 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
     body = json.dumps(records, ensure_ascii=False).encode("utf-8")  # compact JSON saves ~30% RAM vs indent=2
     path = f"s3://{MAIN_BUCKET}/{key}"
 
+    # Skip retries if we already know MinIO is down — go straight to buffer
+    import storage.direct_to_minio as _mod
+    minio_up = getattr(_mod, '_MINIO_AVAILABLE', True)
+    
     last_err = None
-    for attempt in range(4):
+    max_attempts = 4 if minio_up else 1
+    for attempt in range(max_attempts):
         try:
             s3.put_object(
                 Bucket=MAIN_BUCKET,
@@ -141,17 +164,31 @@ def upload(s3, records: list, prefix: str, label: str) -> str:
             )
             log.info(f"  ✅ {len(records)} records → {path}")
             return path
+        except (SystemExit, KeyboardInterrupt) as e:
+            raise  # Never retry termination signals
         except Exception as e:
+            # Don't retry if this is a task timeout/termination
+            if 'SIGTERM' in str(e) or 'Timeout' in str(e) and 'PID' in str(e):
+                log.error(f"  Task termination detected, not retrying: {e}")
+                raise
             last_err = e
+            if not minio_up:
+                break  # Don't waste time retrying when MinIO is known-down
             wait = min(2 ** attempt, 30)
-            log.warning(f"  MinIO upload attempt {attempt+1}/4 failed: {e}. Retry in {wait}s")
+            log.warning(f"  MinIO upload attempt {attempt+1}/{max_attempts} failed: {e}. Retry in {wait}s")
             _time.sleep(wait)
 
     # All retries exhausted — save locally for background retry by ResilientMinioWriter
     log.error(f"  MinIO upload failed after 4 attempts: {last_err}")
     try:
-        from resilient_pipeline import BUFFER_DIR
-        pending = BUFFER_DIR / "minio_pending"
+        # Prefer env var; fall back to resilient_pipeline default
+        _buf_env = os.environ.get('BUFFER_DIR')
+        if _buf_env:
+            from pathlib import Path as _P
+            BUFFER_DIR_PATH = _P(_buf_env)
+        else:
+            from resilient_pipeline import BUFFER_DIR as BUFFER_DIR_PATH
+        pending = BUFFER_DIR_PATH / "minio_pending"
         pending.mkdir(parents=True, exist_ok=True)
         safe = key.replace("/", "_")
         (pending / f"{safe}.data").write_bytes(body)
@@ -190,6 +227,8 @@ _OPERATOR_NAMES = {
     "42": "Malam",
     "44": "GB Tours",
     "52": "Gush Dan Bus",
+    "40": "Kavim Hatichon",
+    "135": "Tnufa",
 }
 
 
@@ -220,7 +259,13 @@ def _get_last_stored_records(s3, prefix: str, now_ts: str) -> list:
         for rec in records:
             rec["fetched_at"] = now_ts
             rec["fallback"]   = True
-        log.info(f"  Fallback: re-using {len(records)} records from {latest_key}")
+        # Skip fallback if data is older than 4 hours — stale data is misleading
+        from datetime import timezone as _tz
+        age_hours = (datetime.now(_tz.utc) - latest["LastModified"].replace(tzinfo=_tz.utc)).total_seconds() / 3600
+        if age_hours > 4:
+            log.warning(f"  Fallback skipped: {latest_key} is {age_hours:.1f}h old (>4h limit)")
+            return []
+        log.info(f"  Fallback: re-using {len(records)} records from {latest_key} (age={age_hours:.1f}h)")
         return records
     except Exception as e:
         log.warning(f"  Fallback load failed for {prefix}: {e}")
@@ -451,7 +496,7 @@ def fetch_delays() -> list:
                 "limit": 500,
                 "order_by": "id desc",
             },
-            timeout=60,
+            timeout=15,  # FIX: was 60s — task timeout is 4min with 5 fetch calls; 60s risks timeout
         )
         r.raise_for_status()
         records = r.json()
@@ -706,60 +751,68 @@ def run(dry_run=False, only=None) -> dict:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         return {"buses": len(buses), "trains": len(trains), "traffic": len(traffic), "delays": len(delays), "alerts": len(alerts)}
 
-    # ── Connect ────────────────────────────────────────────────────────────────
+    # ── Connect (non-fatal — buffer to disk if down) ───────────────────────────
+    minio_available = True
     try:
         s3 = get_s3()
         ensure_bucket(s3)
     except Exception as e:
-        log.error(f"Cannot connect to MinIO at {MINIO_ENDPOINT}: {e}")
-        log.error("Make sure Docker is running: docker-compose up -d minio")
-        return {"error": str(e)}
+        log.warning(f"⚠️  MinIO unreachable at {MINIO_ENDPOINT}: {e}")
+        log.warning("   → continuing; data will be BUFFERED to disk and flushed when MinIO is back up")
+        s3 = get_s3()  # client object — may not work but upload() will catch & buffer
+        minio_available = False
+    
+    # Tell upload() to skip retries and go straight to buffer when MinIO is down
+    import storage.direct_to_minio as _self_mod
+    _self_mod._MINIO_AVAILABLE = minio_available
 
     uploaded = []
 
     # ── Bus positions ──────────────────────────────────────────────────────────
-    if not buses:
-        log.warning("No bus positions fetched — trying stored fallback")
-        buses = _get_last_stored_records(s3, "raw/bus-positions/", now.isoformat())
-    if buses:
-        uploaded.append(upload(s3, buses, "raw/bus-positions",       "buses_raw"))
-        try:
-            from etl.transformers import BusPositionTransformer
-            # Remap field names to what the transformer expects
-            remapped = [
-                {**b, "latitude": b.get("lat", 0), "longitude": b.get("lon", 0)}
-                for b in buses
-            ]
-            processed = transform_records(remapped, BusPositionTransformer)
-            if processed:
-                uploaded.append(upload(s3, processed, "processed/bus-positions", "buses_processed"))
-        except Exception as e:
-            log.warning(f"Bus ETL transform skipped: {e}")
-        results["buses"] = len(buses)
-    else:
-        log.warning("No bus positions fetched (API down, no stored fallback)")
-        results["buses"] = 0
+    if do_buses:
+        if not buses:
+            log.warning("No bus positions fetched — trying stored fallback")
+            buses = _get_last_stored_records(s3, "raw/bus-positions/", now.isoformat())
+        if buses:
+            uploaded.append(upload(s3, buses, "raw/bus-positions",       "buses_raw"))
+            try:
+                from etl.transformers import BusPositionTransformer
+                # Remap field names to what the transformer expects
+                remapped = [
+                    {**b, "latitude": b.get("lat", 0), "longitude": b.get("lon", 0)}
+                    for b in buses
+                ]
+                processed = transform_records(remapped, BusPositionTransformer)
+                if processed:
+                    uploaded.append(upload(s3, processed, "processed/bus-positions", "buses_processed"))
+            except Exception as e:
+                log.warning(f"Bus ETL transform skipped: {e}")
+            results["buses"] = len(buses)
+        else:
+            log.warning("No bus positions fetched (API down, no stored fallback)")
+            results["buses"] = 0
 
     # ── Train positions ────────────────────────────────────────────────────────
-    if not trains:
-        log.warning("No train positions fetched — trying stored fallback")
-        trains = _get_last_stored_records(s3, "raw/train-positions/", now.isoformat())
-    if trains:
-        uploaded.append(upload(s3, trains, "raw/train-positions",       "trains_raw"))
-        try:
-            from etl.transformers import TrainPositionTransformer
-            processed = transform_records(trains, TrainPositionTransformer)
-            if processed:
-                uploaded.append(upload(s3, processed, "processed/train-positions", "trains_processed"))
-        except Exception as e:
-            log.warning(f"Train ETL transform skipped: {e}")
-        results["trains"] = len(trains)
-    else:
-        log.warning("No train positions fetched (API down, no stored fallback)")
-        results["trains"] = 0
+    if do_trains:
+        if not trains:
+            log.warning("No train positions fetched — trying stored fallback")
+            trains = _get_last_stored_records(s3, "raw/train-positions/", now.isoformat())
+        if trains:
+            uploaded.append(upload(s3, trains, "raw/train-positions",       "trains_raw"))
+            try:
+                from etl.transformers import TrainPositionTransformer
+                processed = transform_records(trains, TrainPositionTransformer)
+                if processed:
+                    uploaded.append(upload(s3, processed, "processed/train-positions", "trains_processed"))
+            except Exception as e:
+                log.warning(f"Train ETL transform skipped: {e}")
+            results["trains"] = len(trains)
+        else:
+            log.warning("No train positions fetched (API down, no stored fallback)")
+            results["trains"] = 0
 
     # ── Traffic ────────────────────────────────────────────────────────────────
-    if traffic:
+    if do_traffic and traffic:
         uploaded.append(upload(s3, traffic, "raw/traffic-data",       "traffic_raw"))
         try:
             from etl.traffic_transformer import TrafficTransformer
@@ -773,30 +826,31 @@ def run(dry_run=False, only=None) -> dict:
         results["traffic"] = 0
 
     # ── Trip updates / delays ──────────────────────────────────────────────────
-    if delays:
-        uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
-        # Processed layer: enrich with computed flags; keep all records
-        processed_delays = []
-        for d in delays:
-            delay_sec = d.get("delay_seconds")
-            processed_delays.append({
-                **d,
-                "is_delayed":   delay_sec is not None and delay_sec > 180,
-                "is_very_late": delay_sec is not None and delay_sec > 600,
-                "is_early":     delay_sec is not None and delay_sec < -60,
-            })
-        uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
-        results["delays"] = len(delays)
-    else:
-        log.warning("No delay records fetched — trying stored fallback")
-        fallback_delays = _get_last_stored_records(s3, "raw/trip-updates/", now.isoformat())
-        if fallback_delays:
-            uploaded.append(upload(s3, fallback_delays, "raw/trip-updates",       "delays_raw"))
-            uploaded.append(upload(s3, fallback_delays, "processed/trip-updates", "delays_processed"))
-        results["delays"] = len(fallback_delays)
+    if do_delays:
+        if delays:
+            uploaded.append(upload(s3, delays, "raw/trip-updates", "delays_raw"))
+            # Processed layer: enrich with computed flags; keep all records
+            processed_delays = []
+            for d in delays:
+                delay_sec = d.get("delay_seconds")
+                processed_delays.append({
+                    **d,
+                    "is_delayed":   delay_sec is not None and delay_sec > 180,
+                    "is_very_late": delay_sec is not None and delay_sec > 600,
+                    "is_early":     delay_sec is not None and delay_sec < -60,
+                })
+            uploaded.append(upload(s3, processed_delays, "processed/trip-updates", "delays_processed"))
+            results["delays"] = len(delays)
+        else:
+            log.warning("No delay records fetched — trying stored fallback")
+            fallback_delays = _get_last_stored_records(s3, "raw/trip-updates/", now.isoformat())
+            if fallback_delays:
+                uploaded.append(upload(s3, fallback_delays, "raw/trip-updates",       "delays_raw"))
+                uploaded.append(upload(s3, fallback_delays, "processed/trip-updates", "delays_processed"))
+            results["delays"] = len(fallback_delays)
 
     # ── Service alerts ─────────────────────────────────────────────────────────
-    if alerts:
+    if do_alerts and alerts:
         uploaded.append(upload(s3, alerts, "raw/service-alerts", "alerts_raw"))
         # Processed layer: enrich with a severity score; keep all records
         processed_alerts = []

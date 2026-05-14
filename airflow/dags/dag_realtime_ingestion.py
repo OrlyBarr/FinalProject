@@ -37,9 +37,10 @@ except ImportError:
 default_args = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),  # חובה — Airflow לא יטען DAG בלי זה
-    "email_on_failure":  True,
+    "email_on_failure":  False,   # OPT: אין SMTP מוגדר → שגיאה בכל כשלון; השתמש בlogs
+    "retries":           1,       # OPT: real-time 2min window → retry 5x = 10min delay, useless
     "execution_timeout": timedelta(seconds=55),  # חייב להיכנס בחלון של 2 דקות
-    "max_retry_delay":   timedelta(minutes=5),   # real-time — מקסימום 5 דקות, לא 30
+    "max_retry_delay":   timedelta(minutes=2),   # OPT: max = interval → no pile-up
 }
 
 

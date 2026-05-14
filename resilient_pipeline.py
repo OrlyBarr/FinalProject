@@ -179,6 +179,7 @@ RESILIENT_DEFAULT_ARGS = {
     "owner":                     "transit-team",
     "depends_on_past":           False,
     "start_date":                datetime(2026, 4, 13),
+    "email_on_failure":          False,   # OPT: no SMTP configured — errors would cascade
     "retries":                   5,
     "retry_delay":               timedelta(minutes=2),
     "retry_exponential_backoff": True,

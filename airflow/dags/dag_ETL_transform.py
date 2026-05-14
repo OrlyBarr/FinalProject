@@ -1,5 +1,5 @@
 """
-airflow/dags/dag_etl_transform.py
+airflow/dags/dag_ETL_transform.py
 DAG 2: Consume all Kafka topics → Transform → S3 + Redshift
 Schedule: every 10 minutes
 
@@ -36,7 +36,7 @@ except ImportError:
 default_args = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),
-    "email_on_failure":  True,
+    "email_on_failure":  False,  # OPT: no SMTP configured — errors would cascade
     "execution_timeout": timedelta(minutes=9),
 }
 
@@ -63,6 +63,11 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
       3. Transform (with optional filter)
       4. Save processed records to S3 processed/
       5. Load to Redshift via bulk_insert or batch_upsert (if configured)
+
+    FIX: RedshiftWriter is now created once per _consume_topic call (outside _flush_chunk)
+         instead of once per 500-record chunk. Each instantiation opens a TCP+SSL+auth
+         connection to Redshift — creating it inside the flush loop was opening/closing
+         up to 6 connections per topic per ETL run (2000 records / 500 chunk = 4 flushes).
     """
     from kafka import KafkaConsumer
     from storage.s3_writer import S3Writer
@@ -88,6 +93,18 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
     s3_raw           = S3Writer(prefix=raw_prefix)
     s3_processed     = S3Writer(prefix=processed_prefix)
 
+    # FIX #1: Create RedshiftWriter ONCE here, outside _flush_chunk.
+    # Previously it was instantiated inside _flush_chunk, opening a new Redshift
+    # TCP+SSL connection every 500 records — expensive and unnecessary.
+    rw = None
+    _redshift_host = os.getenv("REDSHIFT_HOST", "")
+    if _redshift_host and "your-cluster" not in _redshift_host:
+        try:
+            from warehouse.redshift_writer import RedshiftWriter
+            rw = RedshiftWriter()
+        except Exception as _e:
+            print(f"[WARN] Redshift unavailable, skipping: {_e}")
+
     raw_records       = []
     processed_records = []
     count             = 0
@@ -102,51 +119,54 @@ def _consume_topic(topic_key: str, group_id: str, transformer_cls, s3_prefix: st
         if processed_records:
             s3_processed.write_batch(processed_records)
             total_processed += len(processed_records)
-            if os.getenv("REDSHIFT_HOST"):
-                from warehouse.redshift_writer import RedshiftWriter
-                rw = RedshiftWriter()
+            if rw is not None:
                 if upsert_key:
                     rw.batch_upsert(redshift_table, processed_records, upsert_key)
                 else:
                     rw.bulk_insert(redshift_table, processed_records)
-                rw.close()
             processed_records.clear()
 
-    for msg in consumer:
-        if count >= max_msgs:
-            break
-        raw = msg.value.get("data", {})
-        if not raw:
-            continue
+    try:
+        for msg in consumer:
+            if count >= max_msgs:
+                break
+            raw = msg.value.get("data", {})
+            if not raw:
+                continue
 
-        # Apply optional record filter (e.g. require alert_id)
-        if filter_fn and not filter_fn(raw):
-            continue
+            # Apply optional record filter (e.g. require alert_id)
+            if filter_fn and not filter_fn(raw):
+                continue
 
-        raw_record = dict(raw)
-        raw_record["_fetched_at"]   = msg.value.get("fetched_at")
-        raw_record["_source"]       = msg.value.get("source")
-        raw_record["_kafka_offset"] = msg.offset
-        raw_records.append(raw_record)
+            raw_record = dict(raw)
+            raw_record["_fetched_at"]   = msg.value.get("fetched_at")
+            raw_record["_source"]       = msg.value.get("source")
+            raw_record["_kafka_offset"] = msg.offset
+            raw_records.append(raw_record)
 
-        try:
-            transformed = transformer.transform(raw)
-            transformed["ingested_at"] = msg.value.get("fetched_at")
-            processed_records.append(transformed)
-        except Exception as e:
-            print(f"Transform error on record {count}: {e}")
+            try:
+                transformed = transformer.transform(raw)
+                transformed["ingested_at"] = msg.value.get("fetched_at")
+                processed_records.append(transformed)
+            except Exception as e:
+                print(f"Transform error on record {count}: {e}")
 
-        count += 1
+            count += 1
 
-        # Flush every CHUNK_SIZE records to prevent OOM
-        if count % CHUNK_SIZE == 0:
-            _flush_chunk()
+            # Flush every CHUNK_SIZE records to prevent OOM
+            if count % CHUNK_SIZE == 0:
+                _flush_chunk()
 
-    consumer.commit()
-    consumer.close()
+        consumer.commit()
+        consumer.close()
 
-    # Final flush for remaining records
-    _flush_chunk()
+        # Final flush for remaining records
+        _flush_chunk()
+    finally:
+        # FIX #1 (cont): Always close the single shared Redshift connection
+        if rw is not None:
+            rw.close()
+
     print(f"Raw: flushed via chunks → s3://{raw_prefix}")
     print(f"Processed: {total_processed} records → s3://{processed_prefix}")
 

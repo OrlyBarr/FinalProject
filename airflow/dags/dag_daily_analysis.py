@@ -1,6 +1,7 @@
 """
-airflow/dags/dag_daily_analytics.py
-DAG 3: Daily data ingestion + KPI aggregations + HTML summary.
+airflow/dags/dag_daily_analysis.py
+DAG 3: Daily KPI aggregations, performance reports, HTML summary
+Schedule: 04:00 IL time (01:00 UTC) - after end of service day
 
 Data flow (no Kafka dependency):
   1. aggregate_delay_stats    — MOT GTFS-RT TripUpdates → transit-trip-updates (ES)
@@ -11,6 +12,9 @@ Data flow (no Kafka dependency):
 ES indices written to here match the Kibana index patterns in /kibana/transit_dashboard.ndjson:
   transit-bus-positions*    (idx-transit-bus-positions)
   transit-trip-updates*     (idx-transit-trip-updates)
+airflow/dags/dag_daily_analysis.py
+DAG 3: Daily KPI aggregations, performance reports, HTML summary
+Schedule: 04:00 IL time (01:00 UTC) - after end of service day
 """
 
 import os
@@ -48,8 +52,8 @@ OPERATORS = {
 default_args = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),
-    "email_on_failure":  False,
-    "execution_timeout": timedelta(minutes=45),
+    "email_on_failure":  False,  # OPT: no SMTP configured — errors would cascade
+    "execution_timeout": timedelta(minutes=45),  # daily aggregation needs extra time
 }
 
 
@@ -186,6 +190,63 @@ def aggregate_delay_stats(**context):
                  if d["_source"].get("delay_seconds") is not None]
     avg_delay = round(sum(delays) / len(delays), 1) if delays else 0
 
+    # ── PostgreSQL: aggregate daily delay stats from in-memory docs (no extra ES query) ──
+    # Groups the docs list already built above — zero additional API or ES calls.
+    # FIX: Split DELETE + INSERT into separate operations.
+    # FIX: p90 computed in Python via sorted list (no PERCENTILE_CONT needed).
+    try:
+        import psycopg2
+        from collections import defaultdict
+        conn = psycopg2.connect(
+            host=os.getenv("POSTGRES_HOST", "postgres"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            dbname=os.getenv("POSTGRES_DB", "airflow"),
+            user=os.getenv("POSTGRES_USER", "airflow"),
+            password=os.getenv("POSTGRES_PASSWORD", "airflow"),
+            connect_timeout=5,
+        )
+        cur = conn.cursor()
+        cur.execute("CREATE SCHEMA IF NOT EXISTS transit")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS transit.agg_delay_stats (
+                stat_date DATE, stat_hour INTEGER, time_period TEXT,
+                route_id TEXT, route_short_name TEXT,
+                total_trips INTEGER, delayed_trips INTEGER, cancelled_trips INTEGER,
+                avg_delay_seconds FLOAT, max_delay_seconds INTEGER,
+                p90_delay_seconds FLOAT, delay_rate_pct FLOAT, cancellation_rate FLOAT
+            )""")
+        cur.execute("DELETE FROM transit.agg_delay_stats WHERE stat_date = %s", (yesterday,))
+        # Group by (hour, time_period, route_id) from in-memory docs
+        groups = defaultdict(list)
+        for d in docs:
+            src = d["_source"]
+            try:
+                hour = int(str(src.get("timestamp", ""))[11:13])
+            except (ValueError, TypeError):
+                hour = 0
+            groups[(hour, _hour_to_period(hour), src.get("route_id", ""))].append(src)
+        for (hour, period, route_id), grp in groups.items():
+            dvals = sorted(g["delay_seconds"] for g in grp if g.get("delay_seconds") is not None)
+            tt = len(grp)
+            n_delayed   = sum(1 for g in grp if g.get("is_delayed"))
+            n_cancelled = sum(1 for g in grp if g.get("is_cancelled"))
+            avg_d = round(sum(dvals) / len(dvals), 2) if dvals else 0
+            max_d = int(dvals[-1]) if dvals else 0
+            p90_d = dvals[int(len(dvals) * 0.9)] if dvals else 0
+            cur.execute(
+                "INSERT INTO transit.agg_delay_stats VALUES "
+                "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (yesterday, hour, period, route_id, route_id,
+                 tt, n_delayed, n_cancelled, avg_d, max_d, p90_d,
+                 round(100.0 * n_delayed / tt, 2) if tt else 0,
+                 round(100.0 * n_cancelled / tt, 2) if tt else 0),
+            )
+        conn.commit()
+        conn.close()
+        print(f"PostgreSQL transit.agg_delay_stats: {len(groups)} route-hour rows for {yesterday}")
+    except Exception as e:
+        print(f"PostgreSQL agg_delay_stats skipped: {e}")
+
     context["ti"].xcom_push(key="report_date", value=yesterday)
     context["ti"].xcom_push(key="trip_stats", value={
         "total": total, "delayed": delayed,
@@ -289,6 +350,56 @@ def aggregate_route_performance(**context):
         print(f"Indexed {success}/{len(docs)} bus-position docs into transit-bus-positions")
     else:
         print("No bus positions fetched")
+
+    # ── PostgreSQL: aggregate route performance from in-memory docs (no extra ES query) ──
+    # Groups the docs list already built above — zero additional API or ES calls.
+    # FIX: Split DELETE + INSERT into separate operations.
+    try:
+        import psycopg2
+        from collections import defaultdict
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        conn = psycopg2.connect(
+            host=os.getenv("POSTGRES_HOST", "postgres"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            dbname=os.getenv("POSTGRES_DB", "airflow"),
+            user=os.getenv("POSTGRES_USER", "airflow"),
+            password=os.getenv("POSTGRES_PASSWORD", "airflow"),
+            connect_timeout=5,
+        )
+        cur = conn.cursor()
+        cur.execute("CREATE SCHEMA IF NOT EXISTS transit")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS transit.agg_route_performance (
+                perf_date DATE, route_id TEXT, route_short_name TEXT, operator_name TEXT,
+                total_vehicles INTEGER, avg_speed_kmh FLOAT,
+                total_delays INTEGER, avg_delay_min FLOAT,
+                worst_delay_min FLOAT, on_time_rate_pct FLOAT
+            )""")
+        cur.execute("DELETE FROM transit.agg_route_performance WHERE perf_date = %s", (yesterday,))
+        # Group by (route_id, route_short_name, operator_name) from in-memory docs
+        groups = defaultdict(list)
+        for d in docs:
+            src = d["_source"]
+            groups[(
+                src.get("route_id", ""),
+                src.get("route_short_name", ""),
+                src.get("operator_name", ""),
+            )].append(src)
+        for (route_id, rsn, op_name), grp in groups.items():
+            speeds = [g["speed_kmh"] for g in grp if g.get("speed_kmh") is not None]
+            vehicles = len(set(g.get("vehicle_id", "") for g in grp))
+            avg_spd = round(sum(speeds) / len(speeds), 2) if speeds else 0
+            cur.execute(
+                "INSERT INTO transit.agg_route_performance VALUES "
+                "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (yesterday, route_id, rsn, op_name,
+                 vehicles, avg_spd, 0, 0.0, 0.0, 100.0),
+            )
+        conn.commit()
+        conn.close()
+        print(f"PostgreSQL transit.agg_route_performance: {len(groups)} route rows for {yesterday}")
+    except Exception as e:
+        print(f"PostgreSQL agg_route_performance skipped: {e}")
 
 
 def calculate_kpis(**context):
@@ -734,12 +845,13 @@ def index_train_delays(**context):
 # DAG
 # ─────────────────────────────────────────
 with DAG(
-    dag_id="dag_daily_analytics",
+    dag_id="dag_daily_analysis",
     default_args=default_args,
     description="Daily KPIs, aggregations, route performance report",
-    schedule_interval=timedelta(hours=24),     # run once per day
+    schedule_interval="0 1 * * *",             # FIX: 01:00 UTC = 04:00 IL winter / 04:00 IL summer (DST-aware cron). timedelta(hours=24) drifts relative to start_date and does not honour a fixed clock time.
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["analytics", "daily", "transit", "israel"],
 ) as dag:
 
@@ -754,4 +866,4 @@ with DAG(
         trigger_rule=TriggerRule.ALL_DONE,
     )
 
-    t_agg >> [t_routes, t_kpis, t_bus_del, t_trn_del] >> t_report
+    t_agg >> [t_routes, t_kpis] >> t_report

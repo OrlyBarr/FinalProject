@@ -114,6 +114,41 @@ docker-compose exec airflow-webserver python -c \
 
 ---
 
+
+---
+
+## 📦 Data Population (After First Setup)
+
+After starting the services, MinIO will be **empty** — the data lake starts fresh.
+You have two options to populate it with historical transit data:
+
+### Option A: Full Historical Backfill (Recommended)
+
+Pull historical data from the [Open Bus Stride API](https://open-bus-stride-api.hasadna.org.il/) (free, no API key needed):
+
+```bash
+# Activate the virtual environment
+source venv/bin/activate
+
+# Run full backfill — fetches data for all missing days (takes ~15-20 min)
+python3 scripts/full_backfill.py
+```
+
+This will scan all days since March 14, 2026, identify gaps, and backfill bus positions and ride data from the public Stride API into MinIO.
+
+### Option B: Let It Collect Organically
+
+Once the pipeline is running (`bash run.sh`), new data will be collected automatically every 2 minutes via Airflow DAGs. After a few hours, you'll have meaningful data to work with.
+
+### Automatic Gap Recovery
+
+A `wake_backfill.py` cron job runs every 15 minutes and automatically detects + fills data gaps caused by laptop sleep mode or VM downtime. No manual intervention needed.
+
+```
+# Crontab entry (already configured):
+*/15 * * * * cd /home/local_admin/finalproject && flock -n /tmp/wake_backfill.lock venv/bin/python3 scripts/wake_backfill.py >> /tmp/wake_backfill.log 2>&1
+```
+
 ## 🔧 Services
 
 | Service | URL | Description |

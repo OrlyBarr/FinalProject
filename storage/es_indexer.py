@@ -111,11 +111,21 @@ def get_es_client() -> Elasticsearch:
     return Elasticsearch(ES_HOST, request_timeout=10)
 
 
+# FIX #5: Cache index names that have already been verified this process lifetime.
+# ensure_index() was calling es.indices.exists() on every index_topic() invocation:
+# 6 topics × every 3 min = 120 extra ES round-trips/hour that returned the same answer.
+_verified_indices: set = set()
+
+
 def ensure_index(es: Elasticsearch, index_name: str) -> None:
-    """Create the index with mappings if it doesn't exist yet."""
+    """Create the index with mappings if it doesn't exist yet.
+    Uses a module-level set so the exists() check is only made once per process."""
+    if index_name in _verified_indices:
+        return
     if not es.indices.exists(index=index_name):
         es.indices.create(index=index_name, body=INDEX_SETTINGS)
         log.info(f"Created Elasticsearch index: {index_name}")
+    _verified_indices.add(index_name)
 
 
 def _add_geo_point(doc: dict) -> dict:
@@ -135,9 +145,18 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
     Consume up to `max_msgs` messages from a Kafka topic and bulk-index
     them into the matching Elasticsearch index.
 
+    FIX: Now flushes to ES every BULK_CHUNK records instead of accumulating
+    all max_msgs into a single list. Previously, with max_msgs=1000 and
+    ~1-2 KB per document, a single call could hold 1-2 MB in the actions
+    list before the first bulk call. With 6 topics running concurrently
+    in dag_es_indexer, that was 6-12 MB of buffered documents at once.
+    Chunking caps peak memory to BULK_CHUNK × doc_size ≈ 500-1000 KB total.
+
     Returns the number of documents indexed.
     """
     from config.settings import KAFKA_TOPICS
+
+    BULK_CHUNK = 500   # flush to ES every N records to cap in-memory footprint
 
     kafka_topic  = KAFKA_TOPICS[topic_key]
     index_name   = TOPIC_INDEX_MAP[topic_key]
@@ -157,8 +176,18 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
         max_poll_records=500,
     )
 
-    actions = []
-    count   = 0
+    def _flush(actions: list) -> int:
+        if not actions:
+            return 0
+        success, errors = helpers.bulk(es, actions, raise_on_error=False)
+        if errors:
+            log.warning(f"ES bulk errors for {index_name}: {errors[:3]}")
+        return success
+
+    actions       = []
+    count         = 0
+    total_success = 0
+
     for msg in consumer:
         if count >= max_msgs:
             break
@@ -173,18 +202,22 @@ def index_topic(topic_key: str, max_msgs: int = 2000, consumer_timeout_ms: int =
         })
         count += 1
 
+        # FIX: flush every BULK_CHUNK records instead of accumulating everything
+        if len(actions) >= BULK_CHUNK:
+            total_success += _flush(actions)
+            actions = []
+
     consumer.commit()
     consumer.close()
 
-    if actions:
-        success, errors = helpers.bulk(es, actions, raise_on_error=False)
-        if errors:
-            log.warning(f"ES bulk errors for {index_name}: {errors[:3]}")
-        log.info(f"Indexed {success} docs into {index_name}")
-        return success
+    # Final flush for remaining records
+    total_success += _flush(actions)
 
-    log.info(f"No messages to index from {kafka_topic}")
-    return 0
+    if total_success:
+        log.info(f"Indexed {total_success} docs into {index_name}")
+    else:
+        log.info(f"No messages to index from {kafka_topic}")
+    return total_success
 
 
 def index_all_topics(max_msgs: int = 2000) -> dict:
@@ -226,6 +259,7 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
         "train_positions": "raw/train-positions",
         "service_alerts":  "raw/service-alerts",
         "delay_events":    "raw/delay-events",
+        "traffic_data":   "raw/traffic-data",
     }
     prefix     = slug_map.get(topic_key, f"raw/{topic_key}")
     index_name = TOPIC_INDEX_MAP[topic_key]
@@ -247,6 +281,8 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
     total_docs = 0
     files_done = 0
 
+    MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB guard — prevent OOM on large MinIO files
+
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             if files_done >= max_files:
@@ -254,11 +290,27 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
             key = obj["Key"]
             if not key.endswith(".json"):
                 continue
+            if obj.get("Size", 0) > MAX_FILE_BYTES:
+                log.warning(f"MinIO→ES: skipping {key} ({obj['Size']//1024//1024}MB > 10MB limit)")
+                files_done += 1
+                continue
             try:
                 body    = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
-                records = json.loads(body)
-                if isinstance(records, dict):
-                    records = [records]
+                # Support both JSON array/object AND NDJSON (one JSON per line)
+                try:
+                    records = json.loads(body)
+                    if isinstance(records, dict):
+                        records = [records]
+                except json.JSONDecodeError:
+                    # Fallback: try NDJSON (newline-delimited JSON)
+                    records = []
+                    for line in body.splitlines():
+                        line = line.strip()
+                        if line:
+                            try:
+                                records.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
                 actions = []
                 for doc in records:
                     doc = _add_geo_point(doc)
@@ -266,9 +318,24 @@ def index_from_minio(topic_key: str, date_prefix: str = None,
                     doc["_indexed_at"]   = datetime.now(IL_TZ).isoformat()
                     actions.append({"_index": index_name, "_source": doc})
                 if actions:
-                    success, _ = helpers.bulk(es, actions, raise_on_error=False)
-                    total_docs += success
-                    log.info(f"MinIO→ES: {key} → {success} docs → {index_name}")
+                    # Index in chunks to avoid ES bulk timeout under high load
+                    chunk_size = 50
+                    file_success = 0
+                    for i in range(0, len(actions), chunk_size):
+                        chunk = actions[i:i+chunk_size]
+                        for attempt in range(3):
+                            try:
+                                ok, _ = helpers.bulk(es, chunk, raise_on_error=False, request_timeout=45)
+                                file_success += ok
+                                break
+                            except Exception as chunk_err:
+                                if attempt < 2:
+                                    import time as _t; _t.sleep(5 * (attempt + 1))
+                                else:
+                                    log.warning(f"MinIO→ES chunk {i//chunk_size} failed after 3 attempts: {chunk_err}")
+                        import time as _t; _t.sleep(0.3)
+                    total_docs += file_success
+                    log.info(f"MinIO→ES: {key} → {file_success} docs → {index_name}")
                 files_done += 1
             except Exception as e:
                 log.error(f"MinIO→ES error on {key}: {e}")
@@ -301,7 +368,10 @@ def set_last_indexed_key(topic_key: str, date_prefix: str, last_key: str = "done
     es  = get_es_client()
     doc_id = f"{topic_key}_{date_prefix.replace('/', '_')}"
     try:
-        es.index(index=_TRACKER_INDEX, id=doc_id, document={"last_key": last_key, "updated_at": datetime.now(IL_TZ).isoformat()})
+        es.index(index=_TRACKER_INDEX, id=doc_id, document={
+            "last_key":   last_key,
+            "updated_at": datetime.now(IL_TZ).isoformat(),
+        })
     except Exception as e:
         log.warning(f"Could not save indexer state: {e}")
 

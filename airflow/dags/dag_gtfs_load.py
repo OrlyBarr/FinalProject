@@ -31,7 +31,7 @@ except ImportError:
 default_args = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 20),
-    "email_on_failure":  True,
+    "email_on_failure":  False,  # OPT: no SMTP configured — errors would cascade
     "execution_timeout": timedelta(minutes=30),  # הורדה + פירוק עד 30 דקות
     "max_retry_delay":   timedelta(minutes=30),
 }
@@ -158,6 +158,7 @@ with DAG(
     schedule_interval="0 3 * * *",   # 03:00 כל יום
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["gtfs", "static", "postgres", "transit"],
 ) as dag:
 

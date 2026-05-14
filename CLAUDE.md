@@ -100,10 +100,14 @@ finalproject-main/
 ## Stride API — פרמטרים חשובים
 
 ```
-# פרמטרי סינון נכונים לsiri_vehicle_locations/list:
-siri_route__operator_ref=2        # רכבת ישראל
-siri_route__line_ref=89           # מספר קו (יחיד! לא line_refs)
-siri_route__operator_ref=3        # דן (יחיד! לא operator_refs)
+# פרמטרי סינון QUERY ל-siri_vehicle_locations/list — שימי לב לרבים:
+siri_routes__operator_ref=2       # רכבת ישראל   ← רבים "routes"!
+siri_routes__line_ref=89          # מספר קו        ← רבים "routes"!
+siri_routes__operator_ref=3       # דן             ← רבים "routes"!
+
+# ⚠️  חשוב: השדות בתשובה (RESPONSE) הם ביחיד —
+# v["siri_route__operator_ref"], v["siri_route__line_ref"]
+# אם משתמשים ב-singular בשאילתה — Stride מתעלמת בשקט ומחזירה את כל המפעילים.
 
 # פרמטרי bbox נכונים:
 lat__greater_or_equal=31.97       # ✅ נכון
@@ -549,4 +553,250 @@ branch: main
 commits:
   28aeb57 — run.sh Step 4 portable fix (_kafka() helper + 90s readiness loop)
   1caea02 — bot.py /gushdan + /api/dankal + gushdan_app.html (947 lines)
+```
+
+
+---
+
+## ⛔ אסור לשנות — Critical Configuration
+
+הדברים הבאים הוגדרו בקפידה. שינוי שלהם ישבור את המערכת:
+
+### MinIO Credentials & Endpoints
+```
+# על ה-VM (host) — תמיד localhost:
+MINIO_ENDPOINT = "http://localhost:9000"
+
+# בתוך Docker containers — תמיד minio:9000:
+MINIO_ENDPOINT = "http://minio:9000"
+
+# Credentials (זהים בכל מקום):
+MINIO_ACCESS_KEY = minioadmin
+MINIO_SECRET_KEY = minioadmin123
+BUCKET = israel-transit-lake
+```
+> wake_backfill.py ו-full_backfill.py רצים על ה-host (לא Docker), אז חייבים localhost:9000.
+> ה-.env מכיל minio:9000 (DNS של Docker) — לא לקרוא מ-.env בסקריפטים שרצים על ה-host!
+
+### Stride API — פרמטרים שחייבים להיות PLURAL בשאילתה
+```python
+# נכון (QUERY parameters — רבים):
+"siri_routes__operator_ref": 2      # רכבת
+"siri_routes__line_ref": 89         # מספר קו
+
+# שגוי — Stride מתעלם בשקט:
+"siri_route__operator_ref": 2       # יחיד — לא עובד!
+"operator_ref": 2                    # חסר prefix — לא עובד!
+
+# נכון (RESPONSE fields — יחיד):
+v["siri_route__operator_ref"]       # בתשובה = יחיד
+v["siri_route__line_ref"]           # בתשובה = יחיד
+```
+
+### Stride API — endpoints נכונים
+```
+# מיקומי רכבים (אוטובוסים + רכבות):
+GET /siri_vehicle_locations/list
+
+# נסיעות (לזיהוי איחורים):
+GET /siri_rides/list
+
+# לא קיים — יחזיר 404:
+GET /siri_vm_snapshots/list
+```
+
+### Docker — restart policies
+```yaml
+# Elasticsearch — restart: no (נעצר בכוונה לחסוך RAM)
+# לא לשנות ל-unless-stopped עד שיש מספיק RAM!
+elasticsearch:
+  restart: no
+  mem_limit: 700m
+  ES_JAVA_OPTS: "-Xms256m -Xmx512m"
+```
+
+### bot.py — S3 client חייב להיות module-level singleton
+```python
+# נכון — module-level lazy singleton (נטען פעם אחת):
+_status_s3 = None
+def _get_status_s3():
+    global _status_s3
+    if _status_s3 is None:
+        _status_s3 = boto3.client("s3", ...)
+    return _status_s3
+
+# שגוי — יוצר client חדש בכל request (7-10 שניות!):
+def handle_status():
+    s3 = boto3.client("s3", ...)  # SLOW!
+```
+
+### Crontab — כניסות קריטיות (לא לשנות!)
+```cron
+*/5 * * * * /home/local_admin/finalproject/scripts/resilient_pipeline_run.sh
+* * * * * /home/local_admin/finalproject/scripts/watchdog.sh
+*/15 * * * * cd /home/local_admin/finalproject && flock -n /tmp/wake_backfill.lock venv/bin/python3 scripts/wake_backfill.py >> /tmp/wake_backfill.log 2>&1
+@reboot sleep 45 && cd /home/local_admin/finalproject && source venv/bin/activate && nohup python3 bot.py > /tmp/bot.log 2>&1 &
+@reboot sleep 90 && nohup ~/bin/ngrok http 5000 --log /tmp/ngrok.log > /dev/null 2>&1 &
+```
+
+### PWA — service-worker.js
+```javascript
+// גרסת cache — חייב לעדכן כשמשנים קבצי frontend:
+const CACHE_VERSION = 'transit-v2';
+// אם לא מעדכנים — המובייל יציג גרסה ישנה!
+```
+
+---
+
+## חייב להיות — Required Configuration
+
+### מבנה נתונים ב-MinIO (israel-transit-lake)
+```
+raw/
+  bus-positions/year=YYYY/month=MM/day=DD/hour=HH/*.json
+  train-positions/year=YYYY/month=MM/day=DD/hour=HH/*.json
+  service-alerts/year=YYYY/month=MM/day=DD/hour=HH/*.json
+  traffic-data/year=YYYY/month=MM/day=DD/hour=HH/*.json
+
+processed/
+  bus-positions/year=YYYY/month=MM/day=DD/hour=HH/*.json
+  train-positions/year=YYYY/month=MM/day=DD/hour=HH/*.json
+  traffic-data/year=YYYY/month=MM/day=DD/hour=HH/*.json
+```
+> Partition scheme: year=YYYY/month=MM/day=DD/hour=HH/ — Hive-compatible
+
+### Operator names ב-direct_to_minio.py
+```python
+OPERATORS = {
+    "3": "Dan", "5": "Egged", "15": "Egged Taavura",
+    "18": "Superbus", "14": "Metropoline", "25": "Nateev Express",
+    "6": "NTA Metropolitan", "21": "Kavim", "2": "Israel Railways",
+    "32": "Electra Afikim", "42": "Afikim", "52": "Gush Dan Bus",
+    "40": "Kavim Hatichon", "135": "Tnufa",
+}
+```
+
+### Auto-start on boot
+הדברים הבאים חייבים להתחיל אוטומטית כשה-VM עולה:
+1. Docker containers — restart: unless-stopped ב-docker-compose (חוץ מ-ES)
+2. bot.py — @reboot crontab entry (port 5000)
+3. ngrok — @reboot crontab entry (tunnel to port 5000)
+4. wake_backfill — */15 crontab entry (זיהוי פערים)
+5. watchdog — * * * * * crontab entry (מוודא שהפייפליין רץ)
+6. resilient_pipeline — */5 crontab entry
+
+### VM Resources
+```
+Hyper-V VM: linub-vm
+RAM: 7.6 GB (dynamic memory disabled — must be static!)
+CPU: i7-10610U (4 cores allocated)
+Swap: 6 GB (2GB system + 4GB /home/local_admin/swap2.img)
+IP: 192.168.1.110 (static DHCP reservation on router)
+SSH: local_admin@192.168.1.110
+```
+
+---
+
+## סקריפטי Backfill
+
+### wake_backfill.py (אוטומטי — כל 15 דקות)
+- סורק את 24 השעות האחרונות שעה-שעה
+- מזהה פערים (שעות ללא נתונים ב-raw/bus-positions/)
+- ממלא פערים מ-Stride API (siri_vehicle_locations/list + siri_rides/list)
+- מוגן ב-flock למניעת הרצה כפולה
+- לוג: /tmp/wake_backfill.log
+- הסיבה ל-*/15 ולא @reboot: כשהלפטופ ישן ומתעורר ה-VM עושה pause/resume, לא reboot!
+
+### full_backfill.py (חד-פעמי — הרצה ידנית)
+- סורק את כל הימים מ-14/03/2026 ועד היום
+- מזהה ימים ללא נתונים ב-raw/bus-positions/
+- ממלא כל יום חסר בקטעים של שעה (24 API calls per day)
+- Retry logic: 3 ניסיונות עם exponential backoff
+- זמן ריצה: ~1-1.5 דקות ליום, ~20 דקות ל-13 ימים
+- הרצה: source venv/bin/activate && python3 scripts/full_backfill.py
+
+### נתונים שמולאו (מאי 2026)
+- 13 ימים חסרים מולאו: 29/03, 14/04, 17/04, 26-30/04, 01/05, 03-05/05, 07/05
+- 156,000 רשומות אוטובוסים + 58,804 רשומות נסיעות
+- פער של 13/05 02:00-11:00 מולא (18,000 אוטובוסים + 5,261 נסיעות)
+- סך הכל ב-MinIO: ~4,600+ קבצים ב-processed/train-positions/year=2026/
+
+---
+
+## גישה מרחוק — ngrok
+
+```bash
+# ngrok מותקן ב: ~/bin/ngrok
+# authtoken מוגדר (לא לפרסם!)
+# מתחיל אוטומטית ב-@reboot
+
+# לקבלת URL הנוכחי:
+curl -s http://localhost:4040/api/tunnels | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])"
+
+# URL משתנה כל הפעלה (חשבון חינמי)
+# צריך ליצור QR חדש אחרי כל reboot
+```
+
+### PWA — אפליקציית מובייל
+- נגישה דרך: https://<ngrok-url>/gushdan או https://192.168.1.110:5443/gushdan
+- service-worker.js מנהל cache — לעדכן CACHE_VERSION אחרי שינויי frontend
+- manifest.json מוגדר ל-standalone display
+
+---
+
+## גל 9 — תיקוני מאי 2026
+
+38. **bot.py — אופטימיזציית /status endpoint**:
+    - הוספת _es_ok flag — אם ES query ראשון נכשל, מדלג על השאר
+    - MinIO fallback: module-level lazy singleton _get_status_s3() במקום client per-request
+    - MinIO query: MaxKeys=50 עם today-only prefix במקום MaxKeys=5000
+    - תוצאה: /status ירד מ-30+ שניות ל-~3 שניות
+
+39. **storage/direct_to_minio.py — הוספת מפעילים**:
+    - נוספו: "40": "Kavim Hatichon", "135": "Tnufa"
+
+40. **docker-compose.yml — הורדת ES heap**:
+    - mem_limit: 1100m -> 700m
+    - ES_JAVA_OPTS: "-Xms512m -Xmx900m" -> "-Xms256m -Xmx512m"
+    - restart: unless-stopped -> no (ES נעצר בכוונה)
+    - שחרר ~1.2GB RAM
+
+41. **scripts/wake_backfill.py — שכתוב מלא**:
+    - גרסה ישנה: בדק רק זמן העלאה אחרונה (לא מצא חורים באמצע)
+    - גרסה חדשה: סורק 24 שעות שעה-שעה, מוצא חורים גם אם הפייפליין רץ
+    - crontab: @reboot -> */15 * * * * (כי sleep/resume לא reboot!)
+    - הוספת flock למניעת ריצות מקבילות
+
+42. **scripts/full_backfill.py — סקריפט חדש**:
+    - מילוי כל הימים החסרים מאז תחילת הפרויקט
+    - 13 ימים מולאו: 156,000 bus records + 58,804 ride records
+
+43. **service-worker.js — עדכון cache**:
+    - CACHE_VERSION: transit-v1 -> transit-v2
+
+44. **run.sh — הוספת wake backfill**:
+    - שלב חדש בסוף: python3 scripts/wake_backfill.py ברקע
+
+45. **crontab — auto-start on boot**:
+    - @reboot bot.py (sleep 45, port 5000)
+    - @reboot ngrok (sleep 90, tunnel to 5000)
+    - */15 wake_backfill.py (gap detection)
+
+46. **README.md — סקשן Data Population**:
+    - הוראות ל-full_backfill.py (Option A)
+    - הסבר על איסוף אורגני (Option B)
+    - תיעוד wake_backfill אוטומטי
+
+47. **ngrok — גישה מרחוק**:
+    - מותקן ב-~/bin/ngrok, authtoken מוגדר, auto-start via @reboot
+
+---
+
+## GitHub Commits (סשן מאי 2026)
+```
+497cf17 — fix: optimize /status MinIO fallback, add operator names, fix geocode
+ccbce86 — fix: ES heap 256-512MB, operator names 40+135
+71cf6a0 — feat: wake backfill script for sleep recovery
+a1fe8b9 — feat: PWA cache v2 + auto-start on boot
+c9b13c7 — Add data backfill scripts and README instructions
 ```

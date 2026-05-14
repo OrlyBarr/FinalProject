@@ -1,0 +1,21 @@
+# .airflowignore — files/dirs the Airflow Scheduler should NOT parse as DAGs
+# Syntax: one pattern per line (Python regex), applied to the full path under the dags folder
+# Reference: https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html#airflowignore
+
+# Compiled Python bytecode — never contains DAGs, slow to scan
+__pycache__
+.*\.pyc$
+
+# Temp / swap files left by editors or failed writes
+.*\.tmp$
+.*\.swp$
+.*\.bak$
+.*~$
+
+# IDE project files
+\.idea
+\.vscode
+
+# Test files (not DAGs)
+test_.*\.py$
+.*_test\.py$

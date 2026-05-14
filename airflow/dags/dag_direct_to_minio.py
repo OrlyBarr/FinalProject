@@ -23,7 +23,7 @@ except ImportError:
     RESILIENT_DEFAULT_ARGS = {
         "owner": "transit-team",
         "depends_on_past": False,
-        "retries": 5,
+        "retries": 1,
         "retry_delay": timedelta(minutes=2),
         "retry_exponential_backoff": True,
         "max_retry_delay": timedelta(minutes=5),
@@ -34,6 +34,7 @@ except ImportError:
 _default = {
     **RESILIENT_DEFAULT_ARGS,
     "start_date":        datetime(2026, 4, 13),
+    "email_on_failure":  False,  # OPT: no SMTP configured — errors would cascade
     "execution_timeout": timedelta(minutes=4),
 }
 
@@ -54,6 +55,7 @@ with DAG(
     schedule_interval=timedelta(minutes=2),   # FIX: 1 min was too aggressive for 6 GB VM
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["minio", "transit", "direct"],
 ) as dag_transit:
 
@@ -82,6 +84,7 @@ with DAG(
     schedule_interval=timedelta(minutes=5),
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["minio", "traffic", "here", "direct"],
 ) as dag_traffic:
 
@@ -99,6 +102,7 @@ with DAG(
     schedule_interval=timedelta(minutes=5),
     catchup=False,
     max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=45),
     tags=["minio", "delays", "alerts", "direct"],
 ) as dag_alerts:
 

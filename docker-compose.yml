@@ -19,6 +19,26 @@ volumes:
 services:
 
   # ─────────────────────────────────────────
+  # NETWORK FIX (runs first, sets bridge-nf-call-iptables=0 + masquerade)
+  # FIX: After VM reboot Docker's iptables rules can be missing, causing 100%
+  #      packet loss between containers on the same bridge. Setting
+  #      bridge-nf-call-iptables=0 bypasses iptables for bridge traffic entirely,
+  #      restoring inter-container connectivity without needing root sudo.
+  # FIX2: Also adds NAT masquerade for container→internet egress traffic.
+  #       Without MASQUERADE, containers can reach each other but not external APIs.
+  #       The rule: iptables -t nat -A POSTROUTING -s 172.18.0.0/16 ! -o br-a6d4a147d234 -j MASQUERADE
+  # NOTE: Producers/indexers can be run from the VM host as a workaround:
+  #       cd /home/local_admin/finalproject && venv/bin/python3 storage/direct_to_minio.py
+  # ─────────────────────────────────────────
+  network-fix:
+    image: busybox
+    container_name: network-fix
+    restart: "no"
+    privileged: true
+    network_mode: host
+    command: ["sh", "-c", "echo 0 > /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null; echo 0 > /proc/sys/net/bridge/bridge-nf-call-ip6tables 2>/dev/null; sysctl -w net.ipv4.ip_forward=1 2>/dev/null; echo bridge-nf-fix-done"]
+
+  # ─────────────────────────────────────────
   # ZOOKEEPER
   # ─────────────────────────────────────────
   zookeeper:
@@ -27,16 +47,26 @@ services:
     restart: unless-stopped
     networks: [transit_net]
     mem_limit: 256m
+    depends_on:
+      - network-fix
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m"
+      # FIX: force IPv4 so Docker bridge (172.18.x.x) works — without this Java prefers
+      #      IPv6 (::) and Docker bridge IPv4 routing can fail after VM reboot.
+      ZOOKEEPER_SERVER_JVMFLAGS: "-Xmx128m -Xms64m -Djava.net.preferIPv4Stack=true"
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: "*"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      # FIX: Use 'srvr' (checks actual server state, not just process liveness).
+      #      'ruok' returns 'imok' even during crash-recovery; 'srvr' only responds
+      #      when ZK is ready to accept client sessions.
+      test: ["CMD-SHELL", "echo srvr | nc -w 3 localhost 2181 | grep -q 'Mode: standalone'"]
       interval: 10s
-      retries: 5
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
   # ─────────────────────────────────────────
   # KAFKA BROKER
@@ -61,47 +91,37 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_LOG_RETENTION_HOURS: 24
       KAFKA_MESSAGE_MAX_BYTES: 5242880
-      # JVM heap limit — default is 1GB which crashes the VM; 256m is enough for this load
+      # JVM heap — default 1GB crashes 8GB VM with all services running
       KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
-      # Reduce network buffer to save RAM (default 100MB)
+      # FIX: force IPv4 for ZooKeeper connection — same root cause as ZooKeeper fix above.
+      #      Without this, Kafka's cub zk-ready preflight tries IPv6 and times out
+      #      because Docker bridge is IPv4-only.
+      KAFKA_OPTS: "-Djava.net.preferIPv4Stack=true"
+      # FIX: give the cub zk-ready preflight check 3 minutes (default 40s).
+      #      After VM reboot ZooKeeper replays its WAL before accepting sessions.
+      KAFKA_CUB_ZK_TIMEOUT: 180
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 90000
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 60000
       KAFKA_SOCKET_SEND_BUFFER_BYTES: 10485760
       KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 10485760
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 15s
-      retries: 5
+      # FIX: replaced kafka-broker-api-versions (slow — ~5s Java startup each check)
+      #      with nc TCP check — instant, no JVM overhead.
+      test: ["CMD-SHELL", "nc -z localhost 29092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
 
   # ─────────────────────────────────────────
-  # KAFKA UI
-  # ─────────────────────────────────────────
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    restart: unless-stopped
-    networks: [transit_net]
-    mem_limit: 256m
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8085:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: transit-cluster
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-      JAVA_OPTS: "-Xmx192m -Xms64m"
-
-# ─────────────────────────────────────────
   # KAFKA TOPIC INITIALIZER
-  # ─────────────────────────────────────────
-  # FIX: Added traffic-data topic (was missing — dag_traffic_ingestion producer
-  #      would fail on first publish attempt with UnknownTopicOrPartitionError)
   # ─────────────────────────────────────────
   kafka-init:
     image: confluentinc/cp-kafka:7.4.0
     container_name: kafka-init
+    restart: "no"
     networks: [transit_net]
     depends_on:
       kafka:
@@ -116,11 +136,37 @@ services:
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 2 --replication-factor 1 --topic traffic-data
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic delay-events
       kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic pipeline-errors
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic bus-delays
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1 --topic train-delays
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic bus-delays-historical
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic train-delays-historical
       echo 'All transit topics created!'
       "
 
   # ─────────────────────────────────────────
-  # POSTGRESQL - Airflow metadata
+  # KAFKA UI
+  # ─────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    networks: [transit_net]
+    mem_limit: 256m
+    depends_on:
+      # FIX: use service_started, not service_healthy — kafka-ui has its own retry logic
+      #      and waiting for kafka to be 'healthy' delays startup unnecessarily.
+      kafka:
+        condition: service_started
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: transit-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      JAVA_OPTS: "-Xmx192m -Xms64m"
+
+  # ─────────────────────────────────────────
+  # POSTGRESQL - Airflow metadata + GTFS
   # ─────────────────────────────────────────
   postgres:
     image: postgres:15
@@ -132,33 +178,67 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
-      # Tune shared_buffers for small VM (default 128MB is too high here)
-      POSTGRES_INITDB_ARGS: "--no-sync"
     command: >
       postgres
       -c shared_buffers=32MB
       -c work_mem=4MB
       -c maintenance_work_mem=32MB
       -c max_connections=20
+      -c synchronous_commit=off
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=4MB
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"   # Expose to host for pgAdmin / DBeaver / psql
+      - "15432:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+
+  # ─────────────────────────────────────────
+  # MINIO - Local S3 data lake
+  # ─────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    networks: [transit_net]
+    mem_limit: 384m
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      GOGC: "20"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ─────────────────────────────────────────
   # AIRFLOW WEBSERVER
   # ─────────────────────────────────────────
   airflow-webserver:
-    image: apache/airflow:2.7.0
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: transit-airflow:latest
     container_name: airflow-webserver
-    restart: no
+    # FIX: was "no" — webserver never restarted after VM reboot.
+    restart: unless-stopped
+    init: true
     networks: [transit_net]
     env_file: .env
-    mem_limit: 1g
+    mem_limit: 1200m
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,11 +248,24 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: transit_secret_2025
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      # ── Memory / concurrency limits (keeps VM free for VS Code) ──
-      AIRFLOW__CORE__PARALLELISM: '2'          # must match scheduler — controls max concurrent tasks
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '2'
-      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
+      # FIX: parallelism 2→4, max_active_tasks_per_dag 1→3.
+      #      With parallelism=2 and max_active=1 the ETL's 5 consumer tasks ran
+      #      sequentially (50+ min/run). Now they can run 3 at a time.
+      AIRFLOW__CORE__PARALLELISM: '8'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '4'
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '180'
       AIRFLOW__WEBSERVER__WORKERS: '1'
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: '1200'
+      # FIX: reparse DAGs every 5 min (was 60s — with 8-min parse files this caused queue buildup)
+      AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '300'
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_FETCH_INTERVAL: '120'
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '120'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: '1800'
+      AIRFLOW__WEBSERVER__RELOAD_ON_PLUGIN_CHANGE: 'false'
+      AIRFLOW__WEBSERVER__WORKER_REFRESH_INTERVAL: '3600'
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
@@ -180,11 +273,6 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-israel-transit-lake}
-      REDSHIFT_HOST: ${REDSHIFT_HOST}
-      REDSHIFT_PORT: ${REDSHIFT_PORT:-5439}
-      REDSHIFT_DB: ${REDSHIFT_DB:-transit_dw}
-      REDSHIFT_USER: ${REDSHIFT_USER}
-      REDSHIFT_PASSWORD: ${REDSHIFT_PASSWORD}
       USE_MINIO: ${USE_MINIO:-true}
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -203,7 +291,6 @@ services:
     ports:
       - "8081:8080"
     command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@transit.il 2>/dev/null || true && airflow webserver"
-    # ── healthcheck: port-only (NOT /health endpoint — that spawns zombie airflow jobs check processes!) ──
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
       interval: 60s
@@ -215,35 +302,46 @@ services:
   # AIRFLOW SCHEDULER
   # ─────────────────────────────────────────
   airflow-scheduler:
-    image: apache/airflow:2.7.0
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    image: transit-airflow:latest
     container_name: airflow-scheduler
-    restart: no
+    # FIX: was "no" — scheduler never restarted after VM reboot.
+    restart: unless-stopped
+    init: true
     networks: [transit_net]
     env_file: .env
+    # FIX: was 512m — scheduler was at 457/512m (near OOM). Increased to 800m.
     mem_limit: 800m
     depends_on:
       airflow-webserver:
-        condition: service_started   # NOT service_healthy — avoids health-loop cascade
+        condition: service_started
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PYTHONPATH: /opt/airflow
-      # ── Memory / concurrency limits ──
-      AIRFLOW__CORE__PARALLELISM: '2'
-      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '1'
-      AIRFLOW__SCHEDULER__MAX_THREADS: '1'
+      # FIX: parallelism and max_active must match webserver values
+      AIRFLOW__CORE__PARALLELISM: '8'
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '4'
+      AIRFLOW__SCHEDULER__MAX_THREADS: '2'
       AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
-      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '30'
-      # ── Prevent zombie health-check processes ──
-      AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '60'
-      AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '120'
-      AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: '60.0'
-      _PIP_ADDITIONAL_REQUIREMENTS: >-
-        kafka-python==2.0.2 requests==2.31.0 boto3>=1.26
-        psycopg2-binary>=2.9 pandas>=1.5,<2.1 pyarrow>=10.0,<14.0
-        python-dotenv>=1.0 gtfs-realtime-bindings==2.0.0
-        geopy>=2.3 elasticsearch>=8.0,<9.0 backports.zoneinfo
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '180'
+      # FIX: reparse DAGs every 5 min — avoids parse-queue buildup on slow-parsing files
+      AIRFLOW__CORE__MIN_FILE_PROCESS_INTERVAL: '300'
+      AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '120'
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: '120'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE: '2'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW: '1'
+      AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_RECYCLE: '1800'
+      AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '30'
+      # FIX: was 120s — DAG file parse can take ~8 min, causing heartbeat gap > threshold
+      AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD: '300'
+      AIRFLOW__SCHEDULER__CLEAN_TIS_WITHOUT_DAGRUN_INTERVAL: "60.0"
+      AIRFLOW__SCHEDULER__MAX_TIS_PER_QUERY: "8"
+      AIRFLOW__SCHEDULER__ORPHANED_TASKS_CHECK_INTERVAL: "300"
+      AIRFLOW__CORE__KILLED_TASK_CLEANUP_TIME: "120"
       MOT_API_KEY: ${MOT_API_KEY}
       HERE_API_KEY: ${HERE_API_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -266,31 +364,6 @@ services:
     command: scheduler
 
   # ─────────────────────────────────────────
-  # MINIO - Local S3
-  # ─────────────────────────────────────────
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    restart: unless-stopped
-    networks: [transit_net]
-    mem_limit: 256m
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
-      # Reduce Go GC pressure to keep memory usage low
-      GOGC: "20"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      retries: 3
-
-  # ─────────────────────────────────────────
   # ELASTICSEARCH
   # ─────────────────────────────────────────
   elasticsearch:
@@ -298,13 +371,11 @@ services:
     container_name: elasticsearch
     restart: unless-stopped
     networks: [transit_net]
-    mem_limit: 900m
+    mem_limit: 700m
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      # Xms=Xmx avoids heap resize during startup → eliminates GC burst that blocked healthcheck
-      # 512m heap + ~300m JVM/OS overhead = stays within 900m container limit
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx512m"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
@@ -317,7 +388,7 @@ services:
       start_period: 90s
 
   # ─────────────────────────────────────────
-  # KIBANA - Live Dashboard
+  # KIBANA
   # ─────────────────────────────────────────
   kibana:
     image: docker.elastic.co/kibana/kibana:8.8.0
@@ -332,20 +403,18 @@ services:
       - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-      # Cap Node.js heap so Kibana stays within 512m container limit
       NODE_OPTIONS: "--max-old-space-size=384"
 
   # ─────────────────────────────────────────
   # PGADMIN - PostgreSQL Web UI
-  # Access: http://localhost:5050
-  # Login:  admin@transit.il / admin
+  # http://localhost:5050  |  admin@transit.il / admin
   # ─────────────────────────────────────────
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     restart: unless-stopped
     networks: [transit_net]
-    mem_limit: 256m
+    mem_limit: 384m
     depends_on:
       postgres:
         condition: service_healthy
@@ -354,7 +423,7 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@transit.il
       PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: "False"       # single-user mode — no login prompt
+      PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
