@@ -2,13 +2,13 @@
   {
     "segment_id": "",
     "description": "",
-    "lat": 32.14153,
-    "lon": 34.80733,
-    "speed_kmh": 16.666668,
-    "free_flow_kmh": 23.611113,
+    "lat": 32.12629,
+    "lon": 34.85873,
+    "speed_kmh": 16.944445,
+    "free_flow_kmh": 29.722223,
     "jam_factor": 5.0,
     "congestion": "free",
-    "collected_at": "2026-05-15T22:09:50.087190+00:00",
+    "collected_at": "2026-05-15T22:35:58.065969+00:00",
     "source": "github-actions"
   }
 ]
