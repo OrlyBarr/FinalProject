@@ -161,6 +161,9 @@ def main():
                     help="Override: re-index this MinIO prefix only")
     ap.add_argument("--index",  type=str, default=None,
                     help="Override: target ES index when --prefix is set")
+    ap.add_argument("--all", action="store_true",
+                    help="Re-index ALL data: scan each base prefix fully, "
+                         "no date filtering (catches every file in MinIO)")
     ap.add_argument("--batch-size", type=int, default=1000)
     args = ap.parse_args()
 
@@ -178,6 +181,18 @@ def main():
             log.error("--index is required when --prefix is set")
             sys.exit(1)
         reindex_prefix(es, s3, args.prefix, args.index, args.batch_size)
+        return
+
+    # ALL mode — scan each base prefix completely, no date filtering.
+    # This is the most thorough: it picks up EVERY file in MinIO under
+    # each known prefix regardless of its partition date.
+    if args.all:
+        log.info("ALL mode: scanning every file under each base prefix")
+        grand_total = 0
+        for base, index in PREFIX_TO_INDEX.items():
+            grand_total += reindex_prefix(es, s3, base, index, args.batch_size)
+        log.info("=" * 60)
+        log.info("DONE (ALL): %d total docs indexed", grand_total)
         return
 
     # Date range mode
