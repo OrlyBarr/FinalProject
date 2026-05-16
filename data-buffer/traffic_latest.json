@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "segment_id": "",
+    "description": "",
+    "lat": 32.08115,
+    "lon": 34.79749,
+    "speed_kmh": 19.722223,
+    "free_flow_kmh": 28.611113,
+    "jam_factor": 5.0,
+    "congestion": "free",
+    "collected_at": "2026-05-16T04:20:00.418784+00:00",
+    "source": "github-actions"
+  }
+]
