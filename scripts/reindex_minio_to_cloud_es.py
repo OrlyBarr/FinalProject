@@ -15,6 +15,7 @@ Usage:
 Performance: ~5K docs/sec on Elastic Cloud t3.small.search
 """
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -117,7 +118,12 @@ def reindex_prefix(es, s3, prefix: str, index: str, batch_size: int = 1000) -> i
     for key in iter_keys(s3, prefix):
         file_count += 1
         for rec in fetch_records(s3, key):
-            actions.append({"_index": index, "_source": rec})
+            # Deterministic _id → re-indexing the same record is idempotent
+            # (no duplicates if Tue + Wed catch-up ranges overlap).
+            _id = hashlib.md5(
+                json.dumps(rec, sort_keys=True, default=str).encode()
+            ).hexdigest()
+            actions.append({"_index": index, "_id": _id, "_source": rec})
             if len(actions) >= batch_size:
                 _flush(es, actions)
                 total += len(actions)
@@ -164,6 +170,14 @@ def main():
     ap.add_argument("--all", action="store_true",
                     help="Re-index ALL data: scan each base prefix fully, "
                          "no date filtering (catches every file in MinIO)")
+    ap.add_argument("--since-last", action="store_true",
+                    help="Catch-up mode: index from the last successful sync "
+                         "(state file) to now, then record now. Idempotent "
+                         "(deterministic _id) so overlapping runs are safe. "
+                         "Use this Tue evening AND Wed — it just works.")
+    ap.add_argument("--state-file", type=str,
+                    default="/tmp/reindex_last_sync.txt",
+                    help="Where --since-last stores the last sync timestamp")
     ap.add_argument("--batch-size", type=int, default=1000)
     args = ap.parse_args()
 
@@ -197,7 +211,26 @@ def main():
 
     # Date range mode
     now = datetime.now(timezone.utc)
-    if args.start:
+    if args.since_last:
+        # Read last sync; default to 14 days back if no state yet.
+        last = None
+        try:
+            with open(args.state_file) as f:
+                last = datetime.fromisoformat(f.read().strip())
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+        except (FileNotFoundError, ValueError):
+            pass
+        if last is None:
+            start = now - timedelta(days=14)
+            log.info("since-last: no state file, defaulting to last 14 days")
+        else:
+            # 1-day overlap buffer; safe because _id is deterministic.
+            start = last - timedelta(days=1)
+            log.info("since-last: last sync was %s → indexing from %s",
+                     last.date(), start.date())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif args.start:
         start = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     elif args.days:
         start = now - timedelta(days=args.days)
@@ -212,6 +245,11 @@ def main():
     for base, index in PREFIX_TO_INDEX.items():
         for prefix in build_date_prefixes(base, start, end):
             grand_total += reindex_prefix(es, s3, prefix, index, args.batch_size)
+
+    if args.since_last:
+        with open(args.state_file, "w") as f:
+            f.write(now.isoformat())
+        log.info("since-last: recorded sync time %s", now.isoformat())
 
     log.info("=" * 60)
     log.info("DONE: %d total docs indexed", grand_total)
