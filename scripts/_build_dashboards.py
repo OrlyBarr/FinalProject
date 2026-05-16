@@ -64,14 +64,21 @@ ALT = ids.get("transit-service-alerts")
 def col(cid): return cid
 
 def lens_metric(title, dv, agg, field=None, time=None):
-    cId, c2 = "m1", "m2"
-    cols = {cId: {"label": title, "dataType": "number", "operationType": agg,
-                  "isBucketed": False,
-                  **({"sourceField": field} if field else {"sourceField":"___records___"})}}
-    order = [cId]
-    return _lens(title, dv, "lnsMetric",
-        {"layerId":"l1","layerType":"data","metricAccessor":cId},
-        {"l1":{"columns":cols,"columnOrder":order,"incompleteColumns":{}}})
+    cId = "m1"
+    if agg == "count":
+        col = {"label": title, "dataType": "number",
+               "operationType": "count", "sourceField": "___records___",
+               "isBucketed": False}
+    else:
+        col = {"label": title, "dataType": "number",
+               "operationType": agg, "sourceField": field,
+               "isBucketed": False}
+    cols = {cId: col}
+    # lnsLegacyMetric has a stable, well-supported state (uses "accessor")
+    return _lens(title, dv, "lnsLegacyMetric",
+        {"layerId": "l1", "accessor": cId, "layerType": "data"},
+        {"l1": {"columns": cols, "columnOrder": [cId],
+                "incompleteColumns": {}}})
 
 def lens_xy(title, dv, time_field, split=None):
     cols = {
@@ -163,7 +170,7 @@ def make_dashboard(did, title, desc, panels):
 p=[]
 p.append(panel(lens_metric("סה\"כ רשומות אוטובוסים","Total Buses",BUS,"count"),0,0,12,7,"b1"))
 p.append(panel(lens_xy("אוטובוסים לאורך זמן",BUS,"timestamp"),12,0,36,7,"b2"))
-p.append(panel(lens_bar("Top 15 קווי אוטובוס",BUS,"route_short_name",15),0,7,24,15,"b3"))
+p.append(panel(lens_bar("Top 15 קווי אוטובוס (line_ref)",BUS,"line_ref",15),0,7,24,15,"b3"))
 p.append(panel(lens_bar("אוטובוסים לפי מפעיל",BUS,"operator_name",12),24,7,24,15,"b4"))
 p.append(panel(lens_xy("אוטובוסים לאורך זמן לפי מפעיל",BUS,"timestamp","operator_name"),0,22,48,12,"b5"))
 make_dashboard("transit-buses","🚌 אוטובוסים — Buses",
@@ -185,7 +192,7 @@ p.append(panel(lens_metric("סה\"כ התראות/נסיעות","Total Alerts",A
 p.append(panel(lens_metric("עיכוב ממוצע (דק')","Avg Delay min",ALT,"average","extra_delay_min"),12,0,12,7,"a2"))
 p.append(panel(lens_xy("התראות לאורך זמן",ALT,"fetched_at"),24,0,24,7,"a3"))
 p.append(panel(lens_bar("לפי חומרה (severity)",ALT,"severity",10),0,7,24,15,"a4"))
-p.append(panel(lens_bar("לפי סוג התראה (alert_type)",ALT,"alert_type",10),24,7,24,15,"a5"))
+p.append(panel(lens_bar("לפי סוג התראה (alert_type)",ALT,"alert_type.keyword",10),24,7,24,15,"a5"))
 p.append(panel(lens_xy("התראות לאורך זמן לפי חומרה",ALT,"fetched_at","severity"),0,22,48,12,"a6"))
 make_dashboard("transit-delays","⚠️ עיכובים והתראות — Delays & Alerts",
    "Service alerts: חומרה, סוג, עיכוב ממוצע לאורך זמן",p)
