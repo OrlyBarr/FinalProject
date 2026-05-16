@@ -36,7 +36,11 @@ DV = [
       geo_runtime("latitude","longitude")),
   ("transit-train-positions","Train Positions","recorded_at",
       geo_runtime("lat","lon")),
-  ("transit-service-alerts", "Service Alerts", "fetched_at", {}),
+  ("transit-service-alerts", "Service Alerts", "fetched_at",
+      {"hour_of_day": {"type": "long", "script": {"source":
+        "if (doc['scheduled_start'].size()!=0) {"
+        "emit(doc['scheduled_start'].value"
+        ".withZoneSameInstant(ZoneId.of('Asia/Jerusalem')).getHour());}"}}}),
   ("transit-traffic",        "Traffic",        "timestamp", {}),
 ]
 ids = {}
@@ -128,6 +132,24 @@ def lens_bar(title, dv, term_field, size=15, metric="count", metric_field=None):
          "layers":[{"layerId":"l1","layerType":"data","accessors":["y"],
                     "xAccessor":"b","seriesType":"bar_horizontal"}]},
         {"l1":{"columns":cols,"columnOrder":["b","y"],"incompleteColumns":{}}})
+
+def lens_hourbar(title, dv, hour_field):
+    """Vertical bar: count per hour-of-day (0-23), ordered by hour."""
+    cols={
+      "h":{"label":"שעה ביום","dataType":"number","operationType":"terms",
+           "sourceField":hour_field,"isBucketed":True,
+           "params":{"size":24,
+                     "orderBy":{"type":"alphabetical","fallback":False},
+                     "orderDirection":"asc"}},
+      "y":{"label":"מספר התראות","dataType":"number","operationType":"count",
+           "sourceField":"___records___","isBucketed":False},
+    }
+    return _lens(title, dv, "lnsXY",
+        {"legend":{"isVisible":False,"position":"right"},
+         "valueLabels":"show","preferredSeriesType":"bar",
+         "layers":[{"layerId":"l1","layerType":"data","accessors":["y"],
+                    "xAccessor":"h","seriesType":"bar"}]},
+        {"l1":{"columns":cols,"columnOrder":["h","y"],"incompleteColumns":{}}})
 
 def _lens(title, dv, vis_type, vis_state, datasource_layers):
     return {
@@ -248,11 +270,12 @@ make_metric_viz("viz-alt-delay","קווים מושפעים (ייחודי)",ALT,"
 pj,rf=ref_panel("viz-alt-delay",12,0,12,7,"a2","קווים מושפעים (ייחודי)")
 p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("התראות לאורך זמן",ALT,"fetched_at"),24,0,24,7,"a3"))
-p.append(panel(lens_bar("לפי חומרה (severity)",ALT,"severity",10),0,7,24,15,"a4"))
-p.append(panel(lens_bar("לפי סוג התראה (alert_type)",ALT,"alert_type.keyword",10),24,7,24,15,"a5"))
-p.append(panel(lens_xy("התראות לאורך זמן לפי חומרה",ALT,"fetched_at","severity"),0,22,48,12,"a6"))
+# Replaced the severity / alert_type bars (each had a single value -> useless)
+# with the distribution of alerts across the hours of the day.
+p.append(panel(lens_hourbar("התפלגות התראות לפי שעת היום",ALT,"hour_of_day"),
+               0,7,48,16,"a4"))
 make_dashboard("transit-delays","⚠️ עיכובים והתראות — Delays & Alerts",
-   "Service alerts: חומרה, סוג, עיכוב ממוצע לאורך זמן",p,refs)
+   "Service alerts: נפח לאורך זמן, התפלגות לפי שעת היום, קווים מושפעים",p,refs)
 
 # ---------- Maps for bus & train locations ----------
 def make_map(mid, title, dv_id, dv_title):
