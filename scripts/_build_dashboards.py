@@ -255,7 +255,7 @@ p.append(panel(lens_xy("אוטובוסים לאורך זמן",BUS,"timestamp"),1
 p.append(panel(lens_bar("Top 15 קווי אוטובוס (line_ref)",BUS,"line_ref",15),0,7,24,15,"b3"))
 p.append(panel(lens_bar("אוטובוסים לפי מפעיל",BUS,"operator_name",12),24,7,24,15,"b4"))
 p.append(panel(lens_xy("אוטובוסים לאורך זמן לפי מפעיל",BUS,"timestamp","operator_name"),0,22,48,12,"b5"))
-make_dashboard("transit-buses","🚌 אוטובוסים — Buses",
+make_dashboard("transit-buses-v2","🚌 אוטובוסים — Buses",
    "פעילות אוטובוסים: לאורך זמן, top קווים, מפעילים (אפר׳–מאי 2026)",p,refs)
 
 # ---------- Dashboard 2: TRAINS ----------
@@ -269,7 +269,7 @@ p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("רכבות לאורך זמן",TRN,"recorded_at"),24,0,24,7,"t3"))
 p.append(panel(lens_bar("Top 15 קווי רכבת",TRN,"line_ref",15),0,7,24,15,"t4"))
 p.append(panel(lens_bar("מהירות ממוצעת לפי קו",TRN,"line_ref",15,"average","velocity"),24,7,24,15,"t5"))
-make_dashboard("transit-trains","🚆 רכבות — Trains",
+make_dashboard("transit-trains-v2","🚆 רכבות — Trains",
    "פעילות רכבות: התפלגות לאורך זמן, מהירות ממוצעת, כמות כוללת",p,refs)
 
 # ---------- Dashboard 3: DELAYS + SERVICE ALERTS ----------
@@ -286,7 +286,7 @@ p.append(panel(lens_xy("התראות לאורך זמן",ALT,"fetched_at"),24,0,2
 # with the distribution of alerts across the hours of the day.
 p.append(panel(lens_hourbar("התפלגות התראות לפי שעת היום",ALT,"hour_of_day"),
                0,7,48,16,"a4"))
-make_dashboard("transit-delays","⚠️ עיכובים והתראות — Delays & Alerts",
+make_dashboard("transit-delays-v2","⚠️ עיכובים והתראות — Delays & Alerts",
    "Service alerts: נפח לאורך זמן, התפלגות לפי שעת היום, קווים מושפעים",p,refs)
 
 # ---------- Maps for bus & train locations ----------
