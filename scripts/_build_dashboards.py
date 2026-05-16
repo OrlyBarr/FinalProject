@@ -100,7 +100,7 @@ def lens_metric(title, name, dv, agg, field=None):
         {"l1": {"columns": cols, "columnOrder": [cId],
                 "incompleteColumns": {}}})
 
-def lens_xy(title, dv, time_field, split=None):
+def lens_xy(title, dv, time_field, split=None, query=""):
     cols = {
       "x": {"label": time_field, "dataType":"date","operationType":"date_histogram",
             "sourceField": time_field, "isBucketed": True,
@@ -123,9 +123,10 @@ def lens_xy(title, dv, time_field, split=None):
         {"legend":{"isVisible":True,"position":"right"},
          "valueLabels":"hide","preferredSeriesType":"line",
          "layers":[layer]},
-        {"l1":{"columns":cols,"columnOrder":order,"incompleteColumns":{}}})
+        {"l1":{"columns":cols,"columnOrder":order,"incompleteColumns":{}}},
+        query=query)
 
-def lens_bar(title, dv, term_field, size=15, metric="count", metric_field=None):
+def lens_bar(title, dv, term_field, size=15, metric="count", metric_field=None, query=""):
     y = {"label":"Count","dataType":"number","operationType":"count",
          "sourceField":"___records___","isBucketed":False}
     if metric=="average":
@@ -143,7 +144,8 @@ def lens_bar(title, dv, term_field, size=15, metric="count", metric_field=None):
          "valueLabels":"hide","preferredSeriesType":"bar_horizontal",
          "layers":[{"layerId":"l1","layerType":"data","accessors":["y"],
                     "xAccessor":"b","seriesType":"bar_horizontal"}]},
-        {"l1":{"columns":cols,"columnOrder":["b","y"],"incompleteColumns":{}}})
+        {"l1":{"columns":cols,"columnOrder":["b","y"],"incompleteColumns":{}}},
+        query=query)
 
 def lens_hourbar(title, dv, hour_field):
     """Vertical bar: count per hour-of-day (0-23), ordered by hour."""
@@ -163,7 +165,7 @@ def lens_hourbar(title, dv, hour_field):
                     "xAccessor":"h","seriesType":"bar"}]},
         {"l1":{"columns":cols,"columnOrder":["h","y"],"incompleteColumns":{}}})
 
-def _lens(title, dv, vis_type, vis_state, datasource_layers):
+def _lens(title, dv, vis_type, vis_state, datasource_layers, query=""):
     return {
       "title": title,
       "visualizationType": vis_type,
@@ -173,7 +175,7 @@ def _lens(title, dv, vis_type, vis_state, datasource_layers):
          "name":"indexpattern-datasource-layer-l1"}],
       "state": {
         "visualization": vis_state,
-        "query": {"query":"","language":"kuery"},
+        "query": {"query":query,"language":"kuery"},
         "filters": [],
         "datasourceStates": {"formBased": {"layers": datasource_layers}},
       },
@@ -253,8 +255,12 @@ pj,rf=ref_panel("viz-bus-total",0,0,12,7,"b1","סה\"כ רשומות אוטוב�
 p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("אוטובוסים לאורך זמן",BUS,"timestamp"),12,0,36,7,"b2"))
 p.append(panel(lens_bar("Top 15 קווי אוטובוס (line_ref)",BUS,"line_ref",15),0,7,24,15,"b3"))
-p.append(panel(lens_bar("אוטובוסים לפי מפעיל",BUS,"operator_name",12),24,7,24,15,"b4"))
-p.append(panel(lens_xy("אוטובוסים לאורך זמן לפי מפעיל",BUS,"timestamp","operator_name"),0,22,48,12,"b5"))
+# Filter out the unattributable "Unknown" bucket from the operator
+# breakdown panels (the source genuinely lacks an operator id for those
+# ~1.8M historical backfill records). Total metric + time series stay full.
+_NOUNK='NOT operator_name:"Unknown"'
+p.append(panel(lens_bar("אוטובוסים לפי מפעיל",BUS,"operator_name",12,query=_NOUNK),24,7,24,15,"b4"))
+p.append(panel(lens_xy("אוטובוסים לאורך זמן לפי מפעיל",BUS,"timestamp","operator_name",query=_NOUNK),0,22,48,12,"b5"))
 make_dashboard("transit-buses-v2","🚌 אוטובוסים — Buses",
    "פעילות אוטובוסים: לאורך זמן, top קווים, מפעילים (אפר׳–מאי 2026)",p,refs)
 
