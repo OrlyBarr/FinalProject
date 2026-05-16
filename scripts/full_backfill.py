@@ -136,9 +136,10 @@ def main():
 
     s3 = get_s3()
 
-    # Build list of all days from March 14 to May 7
-    start_date = datetime(2026, 3, 15, tzinfo=IL_TZ)
-    end_date = datetime(2026, 5, 8, tzinfo=IL_TZ)
+    # Build list of all days: last 30 days up to today
+    now = datetime.now(IL_TZ)
+    end_date = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    start_date = end_date - timedelta(days=30)
 
     # Find missing days
     missing = []
