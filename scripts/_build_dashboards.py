@@ -155,7 +155,46 @@ def panel(lens_attrs, x, y, w, h, pid):
       "title":lens_attrs["title"],
     }
 
-def make_dashboard(did, title, desc, panels):
+def make_metric_viz(vid, title, dv_id, agg, field=None):
+    """Classic agg-based 'metric' visualization — rock-stable schema that
+    renders on every Kibana 7/8/9 (Lens metric kept rendering blank)."""
+    if agg == "count":
+        aggs=[{"id":"1","enabled":True,"type":"count",
+               "schema":"metric","params":{}}]
+    else:
+        aggs=[{"id":"1","enabled":True,"type":agg,
+               "schema":"metric","params":{"field":field}}]
+    visState={"title":title,"type":"metric","aggs":aggs,
+      "params":{"addTooltip":True,"addLegend":False,"type":"metric",
+        "metric":{"percentageMode":False,"useRanges":False,
+          "colorSchema":"Green to Red","metricColorMode":"None",
+          "colorsRange":[{"from":0,"to":10000}],"labels":{"show":True},
+          "invertColors":False,
+          "style":{"bgFill":"#000","bgColor":False,"labelColor":False,
+                   "subText":"","fontSize":48}}}}
+    body={"attributes":{
+        "title":title,
+        "visState":json.dumps(visState,ensure_ascii=False),
+        "uiStateJSON":"{}","description":"",
+        "kibanaSavedObjectMeta":{"searchSourceJSON":json.dumps({
+            "query":{"query":"","language":"kuery"},"filter":[],
+            "indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"})}},
+      "references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index",
+                     "type":"index-pattern","id":dv_id}]}
+    r=api("POST", f"/api/saved_objects/visualization/{vid}?overwrite=true", body)
+    print(f"VIZ  {title:30s} -> {r.status_code}")
+    return r.status_code in (200,201)
+
+def ref_panel(vid, x, y, w, h, pid, title):
+    """A dashboard panel that references a saved visualization by name."""
+    pj={"version":"9.0.0","type":"visualization",
+        "gridData":{"x":x,"y":y,"w":w,"h":h,"i":pid},
+        "panelIndex":pid,"embeddableConfig":{"enhancements":{}},
+        "panelRefName":f"panel_{pid}","title":title}
+    ref={"name":f"panel_{pid}","type":"visualization","id":vid}
+    return pj, ref
+
+def make_dashboard(did, title, desc, panels, refs=None):
     body={"attributes":{
         "title":title,"description":desc,
         "panelsJSON":json.dumps(panels),
@@ -166,40 +205,54 @@ def make_dashboard(did, title, desc, panels):
         "kibanaSavedObjectMeta":{"searchSourceJSON":
             json.dumps({"query":{"query":"","language":"kuery"},"filter":[]})},
     }}
+    if refs:
+        body["references"]=refs
     r=api("POST", f"/api/saved_objects/dashboard/{did}?overwrite=true", body)
-    print(f"DASH {title:34s} -> {r.status_code}")
+    print(f"DASH {title:34s} -> {r.status_code}"
+          + ("" if r.status_code in (200,201) else f" {r.text[:160]}"))
     return r.status_code in (200,201)
 
 # ---------- Dashboard 1: BUSES ----------
-p=[]
-p.append(panel(lens_metric("סה\"כ רשומות אוטובוסים","Total Buses",BUS,"count"),0,0,12,7,"b1"))
+p=[]; refs=[]
+make_metric_viz("viz-bus-total","סה\"כ רשומות אוטובוסים",BUS,"count")
+pj,rf=ref_panel("viz-bus-total",0,0,12,7,"b1","סה\"כ רשומות אוטובוסים")
+p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("אוטובוסים לאורך זמן",BUS,"timestamp"),12,0,36,7,"b2"))
 p.append(panel(lens_bar("Top 15 קווי אוטובוס (line_ref)",BUS,"line_ref",15),0,7,24,15,"b3"))
 p.append(panel(lens_bar("אוטובוסים לפי מפעיל",BUS,"operator_name",12),24,7,24,15,"b4"))
 p.append(panel(lens_xy("אוטובוסים לאורך זמן לפי מפעיל",BUS,"timestamp","operator_name"),0,22,48,12,"b5"))
 make_dashboard("transit-buses","🚌 אוטובוסים — Buses",
-   "פעילות אוטובוסים: לאורך זמן, top קווים, מפעילים (אפר׳–מאי 2026)",p)
+   "פעילות אוטובוסים: לאורך זמן, top קווים, מפעילים (אפר׳–מאי 2026)",p,refs)
 
 # ---------- Dashboard 2: TRAINS ----------
-p=[]
-p.append(panel(lens_metric("סה\"כ רשומות רכבות","Total Trains",TRN,"count"),0,0,12,7,"t1"))
-p.append(panel(lens_metric("מהירות ממוצעת (velocity)","Avg Velocity",TRN,"average","velocity"),12,0,12,7,"t2"))
+p=[]; refs=[]
+make_metric_viz("viz-trn-total","סה\"כ רשומות רכבות",TRN,"count")
+pj,rf=ref_panel("viz-trn-total",0,0,12,7,"t1","סה\"כ רשומות רכבות")
+p.append(pj); refs.append(rf)
+make_metric_viz("viz-trn-vel","מהירות ממוצעת (velocity)",TRN,"avg","velocity")
+pj,rf=ref_panel("viz-trn-vel",12,0,12,7,"t2","מהירות ממוצעת (velocity)")
+p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("רכבות לאורך זמן",TRN,"recorded_at"),24,0,24,7,"t3"))
 p.append(panel(lens_bar("Top 15 קווי רכבת",TRN,"line_ref",15),0,7,24,15,"t4"))
 p.append(panel(lens_bar("מהירות ממוצעת לפי קו",TRN,"line_ref",15,"average","velocity"),24,7,24,15,"t5"))
 make_dashboard("transit-trains","🚆 רכבות — Trains",
-   "פעילות רכבות: התפלגות לאורך זמן, מהירות ממוצעת, כמות כוללת",p)
+   "פעילות רכבות: התפלגות לאורך זמן, מהירות ממוצעת, כמות כוללת",p,refs)
 
 # ---------- Dashboard 3: DELAYS + SERVICE ALERTS ----------
-p=[]
-p.append(panel(lens_metric("סה\"כ התראות/נסיעות","Total Alerts",ALT,"count"),0,0,12,7,"a1"))
-p.append(panel(lens_metric("עיכוב ממוצע (דק')","Avg Delay min",ALT,"average","extra_delay_min"),12,0,12,7,"a2"))
+p=[]; refs=[]
+make_metric_viz("viz-alt-total","סה\"כ התראות/נסיעות",ALT,"count")
+pj,rf=ref_panel("viz-alt-total",0,0,12,7,"a1","סה\"כ התראות/נסיעות")
+p.append(pj); refs.append(rf)
+# extra_delay_min is always null in the source — use a metric that has data
+make_metric_viz("viz-alt-delay","קווים מושפעים (ייחודי)",ALT,"cardinality","line_ref")
+pj,rf=ref_panel("viz-alt-delay",12,0,12,7,"a2","קווים מושפעים (ייחודי)")
+p.append(pj); refs.append(rf)
 p.append(panel(lens_xy("התראות לאורך זמן",ALT,"fetched_at"),24,0,24,7,"a3"))
 p.append(panel(lens_bar("לפי חומרה (severity)",ALT,"severity",10),0,7,24,15,"a4"))
 p.append(panel(lens_bar("לפי סוג התראה (alert_type)",ALT,"alert_type.keyword",10),24,7,24,15,"a5"))
 p.append(panel(lens_xy("התראות לאורך זמן לפי חומרה",ALT,"fetched_at","severity"),0,22,48,12,"a6"))
 make_dashboard("transit-delays","⚠️ עיכובים והתראות — Delays & Alerts",
-   "Service alerts: חומרה, סוג, עיכוב ממוצע לאורך זמן",p)
+   "Service alerts: חומרה, סוג, עיכוב ממוצע לאורך זמן",p,refs)
 
 # ---------- Maps for bus & train locations ----------
 def make_map(mid, title, dv_id, dv_title):
