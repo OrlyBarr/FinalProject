@@ -63,14 +63,18 @@ ALT = ids.get("transit-service-alerts")
 # ---- Lens by-value panel builders ----
 def col(cid): return cid
 
-def lens_metric(title, dv, agg, field=None, time=None):
+def lens_metric(title, name, dv, agg, field=None):
+    # NOTE: signature is (title, name, dv, agg, field). The callers pass an
+    # English label as 2nd arg; previously the function omitted it which
+    # shifted dv→agg and put the data-view id in the wrong slot, so every
+    # metric panel referenced a bogus index and rendered blank.
     cId = "m1"
     if agg == "count":
-        col = {"label": title, "dataType": "number",
+        col = {"label": name, "dataType": "number",
                "operationType": "count", "sourceField": "___records___",
                "isBucketed": False}
     else:
-        col = {"label": title, "dataType": "number",
+        col = {"label": name, "dataType": "number",
                "operationType": agg, "sourceField": field,
                "isBucketed": False}
     cols = {cId: col}
