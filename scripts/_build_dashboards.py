@@ -30,27 +30,39 @@ def geo_runtime(lat_f, lon_f):
             f"if(doc['{lat_f}'].size()!=0 && doc['{lon_f}'].size()!=0)"
             f"{{emit(doc['{lat_f}'].value, doc['{lon_f}'].value);}}"}}}
 
-# ---- 1. (Re)create data views with correct time field + geo runtime ----
+# ---- 1. (Re)create data views with FIXED, STABLE ids ----
+# CRITICAL: ids must be deterministic. Earlier this script let Kibana
+# assign random UUIDs and deleted/recreated views every run, so any
+# dashboard from a previous run pointed at a now-deleted data view
+# ("Could not find the data view: <uuid>"). Fixed ids survive re-runs
+# and browser cache.
 DV = [
-  ("transit-bus-positions",  "Bus Positions",  "timestamp",
-      geo_runtime("latitude","longitude")),
-  ("transit-train-positions","Train Positions","recorded_at",
-      geo_runtime("lat","lon")),
-  ("transit-service-alerts", "Service Alerts", "fetched_at",
+  ("dv-transit-bus",    "transit-bus-positions",  "Bus Positions",
+      "timestamp",   geo_runtime("latitude","longitude")),
+  ("dv-transit-train",  "transit-train-positions","Train Positions",
+      "recorded_at", geo_runtime("lat","lon")),
+  ("dv-transit-alerts", "transit-service-alerts", "Service Alerts",
+      "fetched_at",
       {"hour_of_day": {"type": "long", "script": {"source":
         "if (doc['scheduled_start'].size()!=0) {"
         "emit(doc['scheduled_start'].value"
         ".withZoneSameInstant(ZoneId.of('Asia/Jerusalem')).getHour());}"}}}),
-  ("transit-traffic",        "Traffic",        "timestamp", {}),
+  ("dv-transit-traffic","transit-traffic",        "Traffic",
+      "timestamp",   {}),
 ]
 ids = {}
-# delete old (wrong-time-field) views first
-ex = api("GET", "/api/data_views").json().get("data_view", [])
-byt = {v["title"]: v["id"] for v in ex}
-for title, name, tf, rt in DV:
-    if title in byt:
-        api("DELETE", f"/api/data_views/data_view/{byt[title]}")
-    body = {"data_view": {"title": title, "name": name, "timeFieldName": tf}}
+# Purge ALL existing data views that match our titles (any id, incl. the
+# random-UUID orphans from earlier runs) so the fixed-id create won't hit
+# a duplicate-title error.
+_existing = api("GET", "/api/data_views").json().get("data_view", [])
+_our_titles = {t for _, t, _, _, _ in DV}
+for v in _existing:
+    if v.get("title") in _our_titles or v.get("name") in {n for _,_,n,_,_ in DV}:
+        api("DELETE", f"/api/data_views/data_view/{v['id']}")
+for fixed_id, title, name, tf, rt in DV:
+    api("DELETE", f"/api/data_views/data_view/{fixed_id}")
+    body = {"data_view": {"id": fixed_id, "title": title,
+                          "name": name, "timeFieldName": tf}}
     if rt:
         body["data_view"]["runtimeFieldMap"] = rt
     r = api("POST", "/api/data_views/data_view", body)
@@ -58,7 +70,7 @@ for title, name, tf, rt in DV:
         ids[title] = r.json()["data_view"]["id"]
         print(f"DV  {title:26s} time={tf:12s} id={ids[title]}")
     else:
-        print(f"DV FAIL {title}: {r.status_code} {r.text[:140]}")
+        print(f"DV FAIL {title}: {r.status_code} {r.text[:160]}")
 
 BUS = ids.get("transit-bus-positions")
 TRN = ids.get("transit-train-positions")
