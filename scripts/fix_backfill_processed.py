@@ -21,6 +21,16 @@ MINIO_ENDPOINT = "http://localhost:9000"
 BUCKET = "israel-transit-lake"
 STRIDE_URL = "https://open-bus-stride-api.hasadna.org.il"
 
+# operator_ref → operator_name (kept in sync with storage/direct_to_minio.py)
+_OPERATOR_NAMES = {
+    "3": "Dan", "4": "Egged", "5": "Egged", "6": "Egged Taavura",
+    "7": "Metropoline", "14": "Nateev Express", "15": "Nateev Express",
+    "16": "Kavim", "18": "Galim", "23": "Superbus", "25": "Egged",
+    "31": "Nadan", "32": "KBS", "34": "Afikim", "37": "Electra Afikim",
+    "42": "Malam", "44": "GB Tours", "52": "Gush Dan Bus",
+    "40": "Kavim Hatichon", "135": "Tnufa",
+}
+
 import boto3
 from botocore.config import Config as BotoConfig
 import urllib.request, urllib.parse
@@ -86,15 +96,21 @@ def backfill_day_processed(s3, day_dt, day_num, total):
             "order_by": "recorded_at_time desc",
         })
         if buses:
-            processed_buses = [{
-                "vehicle_id": r.get("siri_ride__vehicle_ref", ""),
-                "lat": r.get("lat"), "lon": r.get("lon"),
-                "bearing": r.get("bearing"), "velocity": r.get("velocity"),
-                "line_ref": r.get("siri_route__line_ref"),
-                "operator_ref": r.get("siri_route__operator_ref"),
-                "recorded_at": r.get("recorded_at_time"),
-                "source": "stride_backfill",
-            } for r in buses]
+            processed_buses = []
+            for r in buses:
+                op_ref = r.get("siri_route__operator_ref")
+                op_id = str(op_ref).strip() if op_ref not in (None, "") else ""
+                processed_buses.append({
+                    "vehicle_id": r.get("siri_ride__vehicle_ref", ""),
+                    "lat": r.get("lat"), "lon": r.get("lon"),
+                    "bearing": r.get("bearing"), "velocity": r.get("velocity"),
+                    "line_ref": r.get("siri_route__line_ref"),
+                    "operator_ref": op_ref,
+                    "operator_id": op_id,
+                    "operator_name": _OPERATOR_NAMES.get(op_id, "Unknown"),
+                    "recorded_at": r.get("recorded_at_time"),
+                    "source": "stride_backfill",
+                })
             key = f"processed/bus-positions/{base_path}/buses_{ts_str}_backfill.json"
             upload_json(s3, processed_buses, key)
             buses_total += len(processed_buses)

@@ -27,6 +27,13 @@ from kafka import KafkaConsumer
 from elasticsearch import Elasticsearch, helpers
 from typing import Optional
 
+# Unified ES client factory — supports local + Elastic Cloud
+try:
+    from storage.es_client import get_es_client as _es_client_factory
+except ImportError:
+    # Fallback when running from inside storage/
+    from es_client import get_es_client as _es_client_factory
+
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -108,7 +115,8 @@ INDEX_SETTINGS = {
 
 
 def get_es_client() -> Elasticsearch:
-    return Elasticsearch(ES_HOST, request_timeout=10)
+    # Uses unified factory — auto-detects Elastic Cloud or local based on env
+    return _es_client_factory(request_timeout=10)
 
 
 # FIX #5: Cache index names that have already been verified this process lifetime.

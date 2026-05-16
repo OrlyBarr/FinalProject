@@ -29,6 +29,18 @@ MINIO_SECRET   = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
 BUCKET         = os.getenv("S3_BUCKET_NAME", "israel-transit-lake")
 STRIDE_URL     = "https://open-bus-stride-api.hasadna.org.il"
 
+# operator_ref → operator_name (kept in sync with storage/direct_to_minio.py).
+# Without this, backfilled bus records had no operator_name → ~78% of
+# historical docs showed blank / "operator_" in dashboards.
+_OPERATOR_NAMES = {
+    "3": "Dan", "4": "Egged", "5": "Egged", "6": "Egged Taavura",
+    "7": "Metropoline", "14": "Nateev Express", "15": "Nateev Express",
+    "16": "Kavim", "18": "Galim", "23": "Superbus", "25": "Egged",
+    "31": "Nadan", "32": "KBS", "34": "Afikim", "37": "Electra Afikim",
+    "42": "Malam", "44": "GB Tours", "52": "Gush Dan Bus",
+    "40": "Kavim Hatichon", "135": "Tnufa",
+}
+
 import boto3
 from botocore.config import Config as BotoConfig
 import urllib.request
@@ -100,6 +112,8 @@ def fetch_bus_positions(from_dt, to_dt):
     })
     buses = []
     for r in records:
+        op_ref = r.get("siri_route__operator_ref")
+        op_id = str(op_ref).strip() if op_ref not in (None, "") else ""
         buses.append({
             "vehicle_id": r.get("siri_ride__vehicle_ref", ""),
             "lat": r.get("lat"),
@@ -107,7 +121,9 @@ def fetch_bus_positions(from_dt, to_dt):
             "bearing": r.get("bearing"),
             "velocity": r.get("velocity"),
             "line_ref": r.get("siri_route__line_ref"),
-            "operator_ref": r.get("siri_route__operator_ref"),
+            "operator_ref": op_ref,
+            "operator_id": op_id,
+            "operator_name": _OPERATOR_NAMES.get(op_id, "Unknown"),
             "route_id": r.get("siri_route__id"),
             "recorded_at": r.get("recorded_at_time"),
             "source": "stride_backfill",
